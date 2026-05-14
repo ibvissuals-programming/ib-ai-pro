@@ -3,6 +3,34 @@ import { motion } from 'framer-motion';
 import { Copy, Check, Cpu, User, Square, CheckSquare, Image as ImageIcon } from 'lucide-react';
 import { ImageAnalysisCard } from './ImageAnalysisCard';
 
+// ─── Reliable clipboard helper ────────────────────────────────────────────────
+
+async function copyToClipboard(text) {
+  // Primary: async Clipboard API (requires secure context + user gesture)
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Fall through to execCommand fallback
+    }
+  }
+  // Fallback: document.execCommand — works on iOS Safari & older browsers
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none;';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 // ─── Code block with per-block copy ──────────────────────────────────────────
 
 function CodeBlock({ lang, code }) {
@@ -10,12 +38,10 @@ function CodeBlock({ lang, code }) {
 
   const handleCopy = async (e) => {
     e.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(code);
+    const ok = await copyToClipboard(code);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // clipboard unavailable — silently skip
     }
   };
 
@@ -127,7 +153,6 @@ function renderContent(text) {
 // ─── Message content branching ────────────────────────────────────────────────
 
 function MessageContent({ message }) {
-  // Image user message — shows filename + icon
   if (message.type === 'image') {
     return (
       <div className="flex items-center gap-2 py-0.5">
@@ -138,18 +163,16 @@ function MessageContent({ message }) {
     );
   }
 
-  // Image analysis result — renders the full structured card
   if (message.type === 'image-analysis') {
     let data = null;
     try {
       data = JSON.parse(message.content);
     } catch {
-      // parsing failed — fall through to text render below
+      // fall through to text render
     }
     if (data) return <ImageAnalysisCard data={data} />;
   }
 
-  // Default: markdown text content
   return <div className="space-y-1">{renderContent(message.content)}</div>;
 }
 
@@ -175,13 +198,11 @@ export function MessageBubble({
   const isAnalysis = message.type === 'image-analysis';
   const isImageMsg = message.type === 'image';
 
-  // Analysis cards need full width to show all sections comfortably
   const bubbleMaxWidth = isAnalysis ? 'max-w-full w-full' : 'max-w-[78%]';
 
-  // ── Single-message copy ────────────────────────────────────────────────────
+  // ── Reliable copy handler ──────────────────────────────────────────────────
   const handleCopy = useCallback(async (e) => {
     e.stopPropagation();
-    // For analysis messages, copy the raw prompts as text
     const textToCopy = isAnalysis
       ? (() => {
           try {
@@ -199,12 +220,10 @@ export function MessageBubble({
         })()
       : message.content;
 
-    try {
-      await navigator.clipboard.writeText(textToCopy);
+    const ok = await copyToClipboard(textToCopy);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // silently skip
     }
   }, [message.content, isAnalysis]);
 
@@ -223,7 +242,6 @@ export function MessageBubble({
     clearTimeout(longPressTimer.current);
   }, []);
 
-  // ── Click / tap handler ────────────────────────────────────────────────────
   const handleClick = useCallback(() => {
     if (didLongPress.current) return;
     if (selectionMode && onToggleSelect) {
@@ -269,7 +287,6 @@ export function MessageBubble({
           {isUser ? <User size={13} /> : <Cpu size={13} />}
         </div>
 
-        {/* Checkbox visible in selection mode */}
         <div
           className={`absolute inset-0 flex items-center justify-center transition-all ${
             selectionMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'
@@ -308,7 +325,7 @@ export function MessageBubble({
           <MessageContent message={message} />
         </div>
 
-        {/* Single-message copy — hidden in selection mode and while streaming */}
+        {/* Single-message copy */}
         {!selectionMode && !isTyping && !isImageMsg && (
           <button
             onClick={handleCopy}

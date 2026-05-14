@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Cpu, Copy, Check, Download, X, CheckSquare, Square, ImagePlus } from 'lucide-react';
+import { Cpu, Copy, Check, Download, X, CheckSquare, Square, ImagePlus, ChevronDown } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
 import { useSelection } from '../hooks/useSelection';
 
@@ -146,8 +146,13 @@ function SelectionBar({
 
 // ─── Chat window ──────────────────────────────────────────────────────────────
 
+const NEAR_BOTTOM_PX = 120;
+
 export function ChatWindow({ messages, isTyping }) {
+  const scrollRef = useRef(null);
   const bottomRef = useRef(null);
+  const isNearBottomRef = useRef(true);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   const {
     selectionMode,
@@ -164,11 +169,26 @@ export function ChatWindow({ messages, isTyping }) {
     exportSelected,
   } = useSelection(messages);
 
+  // Track whether the user is near the bottom
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const near = distFromBottom < NEAR_BOTTOM_PX;
+    isNearBottomRef.current = near;
+    setShowScrollBtn(!near);
+  }, []);
+
+  const scrollToBottom = useCallback((behavior = 'smooth') => {
+    bottomRef.current?.scrollIntoView({ behavior });
+  }, []);
+
+  // Auto-scroll: only if user is already near the bottom
   useEffect(() => {
-    if (!selectionMode) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!selectionMode && isNearBottomRef.current) {
+      scrollToBottom('smooth');
     }
-  }, [messages, isTyping, selectionMode]);
+  }, [messages, isTyping, selectionMode, scrollToBottom]);
 
   useEffect(() => {
     if (messages.length === 0) exitSelectionMode();
@@ -199,29 +219,50 @@ export function ChatWindow({ messages, isTyping }) {
         )}
       </AnimatePresence>
 
-      <div
-        className="flex-1 overflow-y-auto px-4 py-6 space-y-5 scroll-smooth"
-        style={{ scrollbarWidth: 'thin', scrollbarColor: 'hsl(217 33% 20%) transparent' }}
-        data-testid="chat-window"
-      >
-        {messages.map((message, index) => (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            index={index}
-            isTyping={isTyping && index === messages.length - 1}
-            selectionMode={selectionMode}
-            isSelected={selectedIds.has(message.id)}
-            onToggleSelect={toggleSelect}
-            onEnterSelection={enterSelectionMode}
-          />
-        ))}
+      <div className="relative flex-1 min-h-0">
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="h-full overflow-y-auto px-4 py-6 space-y-5 scroll-smooth"
+          style={{ scrollbarWidth: 'thin', scrollbarColor: 'hsl(217 33% 20%) transparent' }}
+          data-testid="chat-window"
+        >
+          {messages.map((message, index) => (
+            <MessageBubble
+              key={message.id}
+              message={message}
+              index={index}
+              isTyping={isTyping && index === messages.length - 1}
+              selectionMode={selectionMode}
+              isSelected={selectedIds.has(message.id)}
+              onToggleSelect={toggleSelect}
+              onEnterSelection={enterSelectionMode}
+            />
+          ))}
 
+          <AnimatePresence>
+            {isTyping && <TypingIndicator />}
+          </AnimatePresence>
+
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Scroll-to-bottom floating button */}
         <AnimatePresence>
-          {isTyping && <TypingIndicator />}
+          {showScrollBtn && !selectionMode && (
+            <motion.button
+              initial={{ opacity: 0, scale: 0.8, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.8, y: 8 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+              onClick={() => scrollToBottom('smooth')}
+              aria-label="Scroll to bottom"
+              className="absolute bottom-4 right-4 z-10 w-8 h-8 rounded-full glass-card flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors shadow-lg hover:shadow-xl"
+            >
+              <ChevronDown size={16} />
+            </motion.button>
+          )}
         </AnimatePresence>
-
-        <div ref={bottomRef} />
       </div>
     </div>
   );
