@@ -159,9 +159,9 @@ export function Sidebar({ chats, activeChatId, onSwitch, onNew, onDelete, onRena
     : allIds;
 
   return (
-    <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border w-64 shrink-0">
+    <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border/60 w-64 shrink-0 glass-subtle">
       {/* Brand */}
-      <div className="flex items-center gap-2 px-4 py-4 border-b border-sidebar-border">
+      <div className="flex items-center gap-2 px-4 py-4 border-b border-sidebar-border/60">
         <div className="w-6 h-6 rounded-md bg-primary flex items-center justify-center shrink-0">
           <Cpu size={12} className="text-primary-foreground" />
         </div>

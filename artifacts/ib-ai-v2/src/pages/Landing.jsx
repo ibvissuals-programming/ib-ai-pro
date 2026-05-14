@@ -189,7 +189,7 @@ function DemoFlow() {
             const Icon = step.icon;
             return (
               <FadeIn key={step.title} delay={i * 0.1}>
-                <div className={`relative flex flex-col items-center text-center p-6 rounded-2xl border ${step.bg}`}>
+                <div className={`relative flex flex-col items-center text-center p-6 rounded-2xl glass-card ${step.bg}`}>
                   <div className={`w-12 h-12 rounded-xl border ${step.bg} flex items-center justify-center mb-4 ${step.color}`}>
                     <Icon size={22} />
                   </div>
@@ -249,7 +249,7 @@ function Features() {
             const Icon = f.icon;
             return (
               <FadeIn key={f.title} delay={i * 0.08}>
-                <div className="flex gap-4 p-5 rounded-xl border border-border bg-card hover:border-primary/30 transition-colors">
+                <div className="flex gap-4 p-5 rounded-xl glass-card hover:border-primary/30 transition-all hover:shadow-lg hover:shadow-primary/5">
                   <div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
                     <Icon size={18} className="text-primary" />
                   </div>
@@ -315,10 +315,10 @@ function Pricing() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           {plans.map((plan, i) => (
             <FadeIn key={plan.name} delay={i * 0.08}>
-              <div className={`relative flex flex-col rounded-2xl border p-6 h-full ${
+              <div className={`relative flex flex-col rounded-2xl p-6 h-full glass-card transition-all ${
                 plan.featured
-                  ? 'border-primary/50 bg-primary/5'
-                  : 'border-border bg-card'
+                  ? 'border-primary/50 bg-primary/5 shadow-lg shadow-primary/10'
+                  : ''
               }`}>
                 {plan.featured && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-primary text-primary-foreground text-xs font-medium whitespace-nowrap">
@@ -367,7 +367,7 @@ function FinalCta() {
     <section className="py-20 px-6">
       <FadeIn>
         <div className="max-w-2xl mx-auto text-center">
-          <div className="relative p-10 rounded-2xl border border-primary/20 bg-primary/5 overflow-hidden">
+          <div className="relative p-10 rounded-2xl glass-panel border-primary/20 bg-primary/5 overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-purple-500/5 pointer-events-none" />
             <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-3">
               Start Creating With IB AI Pro

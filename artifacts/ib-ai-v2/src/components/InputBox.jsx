@@ -216,11 +216,11 @@ export function InputBox({ onSend, onSendImage, onClear, disabled }) {
         <motion.div
           animate={{
             boxShadow: focused
-              ? '0 0 0 1px hsl(217 91% 60% / 0.4)'
-              : '0 0 0 1px transparent',
+              ? '0 0 0 1px hsl(217 91% 60% / 0.4), 0 4px 20px rgba(0,0,0,0.2)'
+              : '0 4px 20px rgba(0,0,0,0.14)',
           }}
           transition={{ duration: 0.15 }}
-          className="relative rounded-2xl bg-card border border-border overflow-hidden"
+          className="relative rounded-2xl glass-input overflow-hidden"
         >
           <textarea
             ref={textareaRef}

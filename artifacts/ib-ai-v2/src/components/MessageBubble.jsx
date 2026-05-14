@@ -20,7 +20,7 @@ function CodeBlock({ lang, code }) {
   };
 
   return (
-    <div className="relative my-2 rounded-lg bg-black/50 border border-border overflow-hidden">
+    <div className="relative my-2 rounded-lg glass-card bg-black/30 overflow-hidden">
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/40">
         <span className="text-[10px] text-muted-foreground font-mono tracking-wide uppercase">
           {lang || 'code'}
@@ -235,9 +235,9 @@ export function MessageBubble({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, delay: Math.min(index * 0.03, 0.18) }}
+      transition={{ duration: 0.2, ease: 'easeOut', delay: Math.min(index * 0.025, 0.12) }}
       className={`flex gap-3 group relative ${isUser ? 'flex-row-reverse' : 'flex-row'} ${
         selectionMode ? 'cursor-pointer select-none' : ''
       }`}
@@ -292,12 +292,12 @@ export function MessageBubble({
         <div
           className={`px-4 py-3 rounded-2xl text-sm leading-relaxed transition-colors ${
             isAnalysis
-              ? 'bg-card border border-border/50 text-foreground rounded-tl-sm w-full'
+              ? 'glass-card text-foreground rounded-tl-sm w-full'
               : isUser
-              ? `bg-primary text-primary-foreground rounded-tr-sm ${isSelected ? 'ring-1 ring-primary/40' : ''}`
+              ? `bg-primary text-primary-foreground rounded-tr-sm shadow-lg shadow-primary/10 ${isSelected ? 'ring-1 ring-primary/40' : ''}`
               : isPromptEngineering
-              ? 'bg-card border border-purple-500/30 text-foreground rounded-tl-sm'
-              : `bg-card border border-border text-foreground rounded-tl-sm ${isSelected ? 'ring-1 ring-primary/30' : ''}`
+              ? 'glass-card border-purple-500/30 text-foreground rounded-tl-sm'
+              : `glass-card text-foreground rounded-tl-sm ${isSelected ? 'ring-1 ring-primary/30' : ''}`
           }`}
         >
           {isPromptEngineering && !isUser && !isAnalysis && (

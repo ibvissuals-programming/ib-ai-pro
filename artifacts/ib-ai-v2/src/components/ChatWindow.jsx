@@ -17,7 +17,7 @@ function TypingIndicator() {
       <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center bg-secondary border border-border text-muted-foreground">
         <Cpu size={13} />
       </div>
-      <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-card border border-border">
+      <div className="px-4 py-3 rounded-2xl rounded-tl-sm glass-card">
         <div className="flex gap-1.5 items-center h-4">
           {[0, 1, 2].map((i) => (
             <motion.div
@@ -93,7 +93,7 @@ function SelectionBar({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.18 }}
-      className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-secondary/60 backdrop-blur-sm shrink-0"
+      className="flex items-center gap-2 px-4 py-2.5 border-b border-border/50 glass-panel shrink-0"
     >
       <span className="text-xs font-medium text-foreground tabular-nums min-w-[72px]">
         {selectedCount} selected

@@ -1,0 +1,82 @@
+You are a senior full-stack production engineer responsible for stabilizing and improving an AI SaaS application called IB AI.
+This is NOT a redesign or rebuild.
+You must prioritize:
+system stability
+zero breaking changes
+minimal safe patches
+preserving working architecture
+reducing bugs and overload issues
+🎯 PRIMARY OBJECTIVES (IN ORDER)
+1. SYSTEM STABILITY PASS (CRITICAL)
+First ensure the app is fully stable:
+Fix any broken imports, routes, or API handlers
+Ensure /api/chat works consistently
+Prevent duplicate server instances
+Fix any build/startup issues in Replit
+Ensure frontend loads without blank screen
+Remove any runtime crashes or undefined errors
+Ensure streaming (SSE/chat response) does NOT break
+⚠️ DO NOT rewrite architecture — only patch what is broken.
+2. UI RESTORATION + IMPROVEMENT (IMPORTANT)
+Restore original IB AI UI theme (DO NOT replace it).
+Then enhance it with glassmorphism layering only:
+Apply:
+subtle glass effect on cards and panels
+background blur (10–20px max)
+soft transparency overlays
+thin border (white @ 8–12% opacity)
+smooth shadow elevation
+preserve original color scheme exactly (do NOT switch to black/white redesign)
+Goal: 👉 “Premium AI dashboard feel (modern SaaS glass UI)”
+Do NOT redesign layout.
+3. INFORMATION OVERLOAD FIX (VERY IMPORTANT UX FIX)
+Fix AI response behavior to prevent overload:
+Implement:
+default responses must be concise (max 6–10 lines)
+AI must answer first, explain later only if needed
+avoid long dumps in first response
+introduce “progressive disclosure” behavior:
+short answer first
+deeper explanation only if user asks
+Do NOT over-engineer. Simple rule-based fix only.
+4. PERFORMANCE + BUG PREVENTION PASS
+Remove duplicate API calls if any
+Ensure no infinite loops in chat rendering
+Prevent repeated re-renders or event stacking
+Ensure state management is clean and minimal
+Add defensive checks for undefined/null responses
+Ensure streaming responses do not double-render
+Focus on: 👉 stability over optimization
+5. LIGHT FEATURE ENHANCEMENTS (ONLY IF SAFE)
+Only after stability is confirmed:
+Add small safe improvements:
+smoother chat animations (fade/slide only)
+improved loading states
+better error messages (user-friendly)
+optional “response mode: short / detailed” toggle (if easy)
+Do NOT add new systems or large modules.
+⚠️ STRICT CONSTRAINTS
+NO full rewrites
+NO framework changes
+NO database redesign
+NO UI overhaul
+NO new backend architecture
+NO experimental features
+NO multi-agent systems
+Only: 👉 safe patches + minimal enhancements
+🧠 SUCCESS CRITERIA
+The app is considered fixed when:
+Replit preview loads reliably
+Chat works end-to-end
+No blank screen
+No console errors blocking UI
+UI theme preserved + improved with glass effect
+AI responses are concise by default
+No duplicate requests or crashes
+🚀 OUTPUT FORMAT
+First:
+list all detected issues
+Then:
+apply fixes in minimal patches
+Then:
+confirm stability status

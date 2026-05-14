@@ -47,7 +47,7 @@ export function Header({ user, onLogout, currentMode, onMenuToggle, mobileSideba
   };
 
   return (
-    <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10 gap-3">
+    <header className="flex items-center justify-between px-4 py-3 border-b border-border/50 glass-panel sticky top-0 z-10 gap-3">
       {/* Mobile menu toggle */}
       <button
         onClick={onMenuToggle}
@@ -105,7 +105,7 @@ export function Header({ user, onLogout, currentMode, onMenuToggle, mobileSideba
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: -4 }}
                 transition={{ duration: 0.12 }}
-                className="absolute right-0 top-full mt-1.5 w-40 rounded-xl border border-border bg-card shadow-lg overflow-hidden z-50"
+                className="absolute right-0 top-full mt-1.5 w-40 rounded-xl glass-panel shadow-xl overflow-hidden z-50"
               >
                 <button
                   onClick={() => handleExport('txt')}
