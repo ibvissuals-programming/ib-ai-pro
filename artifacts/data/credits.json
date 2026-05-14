@@ -1,0 +1,23 @@
+[
+  {
+    "username": "testuser",
+    "plan": "free",
+    "dailyCreditsUsed": 0,
+    "lastResetDate": "2026-05-13",
+    "totalUsage": 0
+  },
+  {
+    "username": "testuser2",
+    "plan": "free",
+    "dailyCreditsUsed": 0,
+    "lastResetDate": "2026-05-13",
+    "totalUsage": 0
+  },
+  {
+    "username": "lowuser",
+    "plan": "free",
+    "dailyCreditsUsed": 0,
+    "lastResetDate": "2026-05-13",
+    "totalUsage": 0
+  }
+]
