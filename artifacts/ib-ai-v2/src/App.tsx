@@ -8,12 +8,11 @@ import Landing from "@/pages/Landing";
 import NotFound from "@/pages/not-found";
 import { ProtectedRoute } from "@/auth/ProtectedRoute";
 import { isAuthenticated } from "@/auth/authService";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 
 function Router() {
   return (
     <Switch>
-      {/* Root: show marketing landing for unauthenticated users,
-          redirect authenticated users directly to /chat */}
       <Route path="/">
         {isAuthenticated() ? <Redirect to="/chat" /> : <Landing />}
       </Route>
@@ -31,12 +30,14 @@ function Router() {
 
 function App() {
   return (
-    <TooltipProvider>
-      <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-        <Router />
-      </WouterRouter>
-      <Toaster />
-    </TooltipProvider>
+    <ThemeProvider>
+      <TooltipProvider>
+        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+          <Router />
+        </WouterRouter>
+        <Toaster />
+      </TooltipProvider>
+    </ThemeProvider>
   );
 }
 

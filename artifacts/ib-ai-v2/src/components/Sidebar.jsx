@@ -162,10 +162,10 @@ export function Sidebar({ chats, activeChatId, onSwitch, onNew, onDelete, onRena
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border/60 w-64 shrink-0 glass-subtle">
       {/* Brand */}
       <div className="flex items-center gap-2 px-4 py-4 border-b border-sidebar-border/60">
-        <div className="w-6 h-6 rounded-md bg-primary flex items-center justify-center shrink-0">
+        <div className="w-7 h-7 rounded-xl bg-primary flex items-center justify-center shrink-0 shadow-md shadow-primary/25">
           <Cpu size={12} className="text-primary-foreground" />
         </div>
-        <span className="font-semibold text-sm tracking-tight text-sidebar-foreground">
+        <span className="font-semibold text-sm tracking-tight text-sidebar-foreground font-heading">
           IB AI <span className="text-primary">Pro</span>
         </span>
       </div>
@@ -175,7 +175,7 @@ export function Sidebar({ chats, activeChatId, onSwitch, onNew, onDelete, onRena
         <button
           onClick={onNew}
           data-testid="button-new-chat"
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-border text-muted-foreground hover:border-primary/40 hover:text-foreground hover:bg-primary/5 transition-all text-xs font-medium"
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-dashed border-border/60 text-muted-foreground hover:border-primary/50 hover:text-foreground hover:bg-primary/6 transition-all text-xs font-medium hover-lift-sm"
         >
           <Plus size={13} />
           New Chat

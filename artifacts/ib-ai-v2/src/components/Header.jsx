@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { LogOut, Menu, X, Download, FileText } from 'lucide-react';
+import { LogOut, Menu, X, Download, FileText, Sun, Moon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTheme } from '../contexts/ThemeContext';
 
 function exportChat(messages, title, format) {
   if (!messages || messages.length === 0) return;
@@ -29,6 +30,7 @@ export function Header({ user, onLogout, currentMode, onMenuToggle, mobileSideba
   const [exportOpen, setExportOpen] = useState(false);
   const dropdownRef = useRef(null);
   const hasMessages = messages && messages.length > 0;
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     if (!exportOpen) return;
@@ -47,12 +49,12 @@ export function Header({ user, onLogout, currentMode, onMenuToggle, mobileSideba
   };
 
   return (
-    <header className="flex items-center justify-between px-4 py-3 border-b border-border/50 glass-panel sticky top-0 z-10 gap-3">
+    <header className="flex items-center justify-between px-4 py-3 border-b border-border/50 glass-panel sticky top-0 z-10 gap-3" style={{ borderRadius: 0 }}>
       {/* Mobile menu toggle */}
       <button
         onClick={onMenuToggle}
         data-testid="button-mobile-menu"
-        className="md:hidden p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors shrink-0"
+        className="md:hidden p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors shrink-0 hover-lift-sm"
       >
         {mobileSidebarOpen ? <X size={16} /> : <Menu size={16} />}
       </button>
@@ -80,17 +82,38 @@ export function Header({ user, onLogout, currentMode, onMenuToggle, mobileSideba
         </AnimatePresence>
       </div>
 
-      {/* Export + User + Logout */}
+      {/* Controls */}
       <div className="flex items-center gap-1 shrink-0">
+        {/* Theme toggle */}
+        <button
+          onClick={toggleTheme}
+          data-testid="button-theme-toggle"
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors hover-lift-sm"
+          aria-label="Toggle theme"
+        >
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={theme}
+              initial={{ opacity: 0, rotate: -20, scale: 0.8 }}
+              animate={{ opacity: 1, rotate: 0, scale: 1 }}
+              exit={{ opacity: 0, rotate: 20, scale: 0.8 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+            >
+              {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+            </motion.div>
+          </AnimatePresence>
+        </button>
+
         {/* Export dropdown */}
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => hasMessages && setExportOpen(o => !o)}
             data-testid="button-export"
             title={hasMessages ? 'Export chat' : 'No messages to export'}
-            className={`flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-md transition-colors ${
+            className={`flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg transition-colors ${
               hasMessages
-                ? 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+                ? 'text-muted-foreground hover:text-foreground hover:bg-secondary hover-lift-sm'
                 : 'text-muted-foreground/30 cursor-not-allowed'
             }`}
           >
@@ -104,22 +127,22 @@ export function Header({ user, onLogout, currentMode, onMenuToggle, mobileSideba
                 initial={{ opacity: 0, scale: 0.95, y: -4 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: -4 }}
-                transition={{ duration: 0.12 }}
-                className="absolute right-0 top-full mt-1.5 w-40 rounded-xl glass-panel shadow-xl overflow-hidden z-50"
+                transition={{ duration: 0.14, ease: 'easeOut' }}
+                className="absolute right-0 top-full mt-1.5 w-44 glass-panel shadow-xl overflow-hidden z-50"
               >
                 <button
                   onClick={() => handleExport('txt')}
                   data-testid="button-export-txt"
-                  className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs text-foreground hover:bg-secondary transition-colors text-left"
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs text-foreground hover:bg-white/5 transition-colors text-left"
                 >
                   <FileText size={12} className="text-muted-foreground shrink-0" />
                   Download as .txt
                 </button>
-                <div className="h-px bg-border mx-2" />
+                <div className="h-px bg-border/40 mx-2" />
                 <button
                   onClick={() => handleExport('md')}
                   data-testid="button-export-md"
-                  className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs text-foreground hover:bg-secondary transition-colors text-left"
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs text-foreground hover:bg-white/5 transition-colors text-left"
                 >
                   <FileText size={12} className="text-primary shrink-0" />
                   Download as .md
@@ -134,7 +157,7 @@ export function Header({ user, onLogout, currentMode, onMenuToggle, mobileSideba
         <button
           onClick={onLogout}
           data-testid="button-logout"
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1.5 rounded-md hover:bg-secondary"
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1.5 rounded-lg hover:bg-secondary hover-lift-sm"
         >
           <LogOut size={13} />
           <span className="hidden sm:block">Sign out</span>

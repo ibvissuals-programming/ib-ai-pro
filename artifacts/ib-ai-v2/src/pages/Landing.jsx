@@ -28,12 +28,12 @@ function FadeIn({ children, delay = 0, className = '' }) {
 
 function Navbar() {
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 bg-background/80 backdrop-blur-md border-b border-border/50">
+    <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 glass-panel border-b border-border/40" style={{ borderRadius: 0 }}>
       <div className="flex items-center gap-2">
-        <div className="w-6 h-6 rounded-md bg-primary flex items-center justify-center">
+        <div className="w-7 h-7 rounded-xl bg-primary flex items-center justify-center shadow-md shadow-primary/25">
           <Cpu size={13} className="text-primary-foreground" />
         </div>
-        <span className="font-semibold text-sm tracking-tight text-foreground">
+        <span className="font-semibold text-sm tracking-tight text-foreground font-heading">
           IB AI <span className="text-primary">Pro</span>
         </span>
       </div>
@@ -87,8 +87,8 @@ function Hero() {
       <motion.h1
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.1 }}
-        className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground max-w-4xl leading-tight tracking-tight"
+        transition={{ duration: 0.55, delay: 0.1, ease: 'easeOut' }}
+        className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground max-w-4xl leading-tight font-heading"
       >
         Turn Any Image Into{' '}
         <span className="bg-gradient-to-r from-primary via-purple-400 to-primary bg-clip-text text-transparent">
@@ -175,8 +175,8 @@ function DemoFlow() {
     <section id="demo" className="py-20 px-6">
       <div className="max-w-5xl mx-auto">
         <FadeIn className="text-center mb-12">
-          <h2 className="text-2xl sm:text-3xl font-bold text-foreground">How It Works</h2>
-          <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
+          <h2 className="text-2xl sm:text-3xl font-bold text-foreground font-heading">How It Works</h2>
+          <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto font-light leading-relaxed">
             From upload to professional creative brief in under 10 seconds.
           </p>
         </FadeIn>
@@ -189,7 +189,7 @@ function DemoFlow() {
             const Icon = step.icon;
             return (
               <FadeIn key={step.title} delay={i * 0.1}>
-                <div className={`relative flex flex-col items-center text-center p-6 rounded-2xl glass-card ${step.bg}`}>
+                <div className={`relative flex flex-col items-center text-center p-6 rounded-2xl glass-card hover-lift ${step.bg}`}>
                   <div className={`w-12 h-12 rounded-xl border ${step.bg} flex items-center justify-center mb-4 ${step.color}`}>
                     <Icon size={22} />
                   </div>
@@ -238,8 +238,8 @@ function Features() {
     <section id="features" className="py-20 px-6 bg-secondary/30">
       <div className="max-w-5xl mx-auto">
         <FadeIn className="text-center mb-12">
-          <h2 className="text-2xl sm:text-3xl font-bold text-foreground">The Full Creative Suite</h2>
-          <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
+          <h2 className="text-2xl sm:text-3xl font-bold text-foreground font-heading">The Full Creative Suite</h2>
+          <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto font-light leading-relaxed">
             IB AI Pro is not a chatbot. It's a professional creative engine.
           </p>
         </FadeIn>
@@ -249,7 +249,7 @@ function Features() {
             const Icon = f.icon;
             return (
               <FadeIn key={f.title} delay={i * 0.08}>
-                <div className="flex gap-4 p-5 rounded-xl glass-card hover:border-primary/30 transition-all hover:shadow-lg hover:shadow-primary/5">
+                <div className="flex gap-4 p-5 rounded-xl glass-card hover-lift">
                   <div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
                     <Icon size={18} className="text-primary" />
                   </div>
@@ -308,8 +308,8 @@ function Pricing() {
     <section id="pricing" className="py-20 px-6">
       <div className="max-w-5xl mx-auto">
         <FadeIn className="text-center mb-12">
-          <h2 className="text-2xl sm:text-3xl font-bold text-foreground">Simple, Transparent Pricing</h2>
-          <p className="text-sm text-muted-foreground mt-2">Start free. Upgrade when you're ready.</p>
+          <h2 className="text-2xl sm:text-3xl font-bold text-foreground font-heading">Simple, Transparent Pricing</h2>
+          <p className="text-sm text-muted-foreground mt-2 font-light">Start free. Upgrade when you're ready.</p>
         </FadeIn>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
@@ -369,7 +369,7 @@ function FinalCta() {
         <div className="max-w-2xl mx-auto text-center">
           <div className="relative p-10 rounded-2xl glass-panel border-primary/20 bg-primary/5 overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-purple-500/5 pointer-events-none" />
-            <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-3">
+            <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-3 font-heading">
               Start Creating With IB AI Pro
             </h2>
             <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
