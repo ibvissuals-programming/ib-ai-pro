@@ -22,6 +22,12 @@
  *   Error messages: all raw provider errors are sanitized before propagation.
  */
 import { logger } from "../lib/logger";
+import {
+  classifyImageIntent,
+  buildEditInstruction,
+  getIntentLabel,
+  type ImageIntent,
+} from "./imageIntentClassifier";
 
 const REQUEST_TIMEOUT_MS = 35_000;
 const GEMINI_TIMEOUT_MS = 25_000;
@@ -73,37 +79,95 @@ function sanitizeProviderError(err: unknown, context: "generate" | "edit"): stri
   return `Image ${context} failed. Please try again.`;
 }
 
-// ── Prompt enhancer ────────────────────────────────────────────────────────────
+// ── LAYER 3: Prompt Expansion Engine ──────────────────────────────────────────
+// Converts short user prompts into structured professional prompts.
+// Style library auto-applies when a known aesthetic is detected.
 
 const QUALITY_SUFFIX =
-  ", high quality, sharp focus, detailed, professional photography";
+  ", ultra realistic, sharp focus, highly detailed, professional quality, 8k";
 
+/**
+ * Style library — auto-applied when detected in the prompt.
+ * Each entry maps a keyword to a full professional prompt expansion.
+ */
 const STYLE_MAP: Record<string, string> = {
-  portrait: "studio portrait, cinematic lighting, bokeh, DSLR photography",
-  landscape: "scenic landscape, golden hour, vivid colors, wide angle lens",
-  product: "professional product photography, clean background, studio lighting",
-  art: "digital art, highly detailed, concept art, artstation trending",
-  anime: "anime style, vibrant colors, studio ghibli aesthetic, illustration",
-  logo: "clean vector logo, minimalist, professional branding, white background",
-  interior: "interior design photography, natural lighting, architectural digest",
-  food: "food photography, natural light, shallow depth of field, appetizing",
-  cinematic: "cinematic shot, anamorphic lens, film grain, dramatic lighting",
-  luxury: "luxury aesthetic, high-end, polished, editorial photography",
+  // Photography styles
+  portrait: "studio portrait photography, professional lighting, shallow depth of field, bokeh, DSLR, sharp eyes, clean backdrop",
+  landscape: "scenic landscape photography, golden hour, vivid colors, wide angle lens, epic scale, dramatic sky",
+  product: "professional product photography, clean white background, studio lighting, sharp details, commercial grade",
+  food: "food photography, natural light, shallow depth of field, appetizing, editorial, recipe magazine quality",
+  interior: "interior design photography, natural lighting, architectural digest style, warm tones, inviting atmosphere",
+
+  // Artistic styles
+  art: "digital art, highly detailed, concept art, artstation trending, professional illustration",
+  anime: "anime style illustration, clean line art, vibrant colors, studio quality, detailed background, cinematic composition, cel shaded",
+  manga: "manga style illustration, black and white ink, dynamic line weight, expressive characters, screen tone shading",
+  cartoon: "cartoon illustration style, bold outlines, flat colors, exaggerated proportions, clean and playful",
+  sketch: "pencil sketch illustration, fine line art, cross-hatching, artistic detail, hand-drawn quality",
+  watercolor: "watercolor illustration, soft washes, painterly texture, artistic brushwork, delicate color bleeding",
+  "oil painting": "classical oil painting style, rich textures, impasto technique, museum quality, old masters technique",
+  illustration: "professional illustration, detailed artwork, polished digital art, vibrant palette, editorial quality",
+  "pixel art": "pixel art style, 16-bit aesthetic, clean pixels, retro game art, detailed sprite work",
+  "3d render": "3D CGI render, photorealistic materials, global illumination, ray tracing, studio quality render",
+  "studio ghibli": "Studio Ghibli animation style, painterly backgrounds, soft color palette, whimsical atmosphere, hand-drawn aesthetic",
+  impressionist: "impressionist painting style, loose brushwork, light and color play, Monet-inspired, painterly texture",
+  "film noir": "film noir black and white, dramatic shadows, high contrast, moody atmosphere, 1940s cinematic style",
+
+  // Cinematic & premium aesthetics
+  cinematic: "cinematic portrait, dramatic lighting, shallow depth of field, anamorphic lens flares, teal-orange color grading, ultra realistic, film grain, 8k detail",
+  luxury: "luxury editorial photography, high-end fashion lighting, soft shadows, premium aesthetic, studio grade, elegant composition, immaculate detail",
+  "afro luxury": "afro luxury portrait, warm golden tones, cultural elegance, premium styling, rich textures, regal composition, editorial quality, high-end lighting",
+
+  // Digital / Pop culture styles
+  cyberpunk: "cyberpunk aesthetic, neon lights, futuristic cityscape glow, electric blues and magentas, rain-slicked reflections, high-tech dystopia",
+  gta: "GTA V loading screen art style, hyper-detailed illustration, dramatic pose, sharp lines, bold colors, action composition",
+  pixar: "Pixar animation style, 3D CGI, expressive character, warm lighting, vibrant colors, movie quality render, emotional depth",
+  disney: "Disney animation style, classic character design, expressive features, magical atmosphere, rich color palette, storybook quality",
+  vintage: "vintage film photography, warm grain, faded highlights, desaturated shadows, nostalgic 35mm aesthetic, soft vignette",
+  retro: "retro aesthetic, warm tones, analog grain, vintage color palette, nostalgic atmosphere, classic style",
+
+  // Mood / lighting styles
+  moody: "moody low-light photography, dramatic contrast, deep shadows, rich midtones, emotional atmosphere, cinematic tension",
+  dramatic: "dramatic lighting photography, strong directional light, deep shadows, powerful contrast, theatrical atmosphere",
+  hdr: "HDR realism, ultra detail, high dynamic range, every texture visible, professional photography, extreme clarity",
+  neon: "neon-lit photography, vivid electric colors, night scene, reflective surfaces, urban nightlife atmosphere, glow effects",
+  "dark mode": "dark moody aesthetic, near-black backgrounds, selective illumination, dramatic shadows, premium dark tone",
+
+  // Social media styles
+  tiktok: "viral TikTok visual style, sharp contrast, bright attention-focused colors, bold composition, high energy, trending aesthetic",
+  viral: "viral social media content style, eye-catching composition, bold colors, high contrast, maximum visual impact",
+  instagram: "Instagram editorial style, perfect lighting, aesthetically curated, aspirational composition, premium lifestyle feel",
+
+  // Logo / branding
+  logo: "clean vector logo design, minimalist, professional branding, crisp edges, white background, scalable design",
 };
 
+/**
+ * LAYER 3 — Expand a short user prompt into a structured professional prompt.
+ * Detects style keywords and prepends the matching expansion.
+ * Appends quality suffix unless the prompt already specifies quality.
+ */
 export function enhancePrompt(raw: string): string {
   const lower = raw.toLowerCase().trim();
-  const styleKey = Object.keys(STYLE_MAP).find((k) => lower.includes(k));
-  const stylePrefix = styleKey ? `${STYLE_MAP[styleKey]}, ` : "";
+
+  // Find the most specific style match (prefer longer keyword matches)
+  const matchedKey = Object.keys(STYLE_MAP)
+    .filter((k) => lower.includes(k))
+    .sort((a, b) => b.length - a.length)[0];
+
+  const styleExpansion = matchedKey ? `${STYLE_MAP[matchedKey]}, ` : "";
+
   const alreadyHasQuality =
     lower.includes("quality") ||
     lower.includes("detailed") ||
     lower.includes("professional") ||
     lower.includes(" hd") ||
     lower.includes("8k") ||
-    lower.includes("4k");
+    lower.includes("4k") ||
+    lower.includes("ultra");
+
   const suffix = alreadyHasQuality ? "" : QUALITY_SUFFIX;
-  return `${stylePrefix}${raw.trim()}${suffix}`;
+  return `${styleExpansion}${raw.trim()}${suffix}`;
 }
 
 // ── Response validation ────────────────────────────────────────────────────────
@@ -261,14 +325,19 @@ function parseAndValidateImage(imageDataUrl: string): ParsedImage {
 
 // ── TIER 1: True img2img via Gemini image model ────────────────────────────────
 // Sends the uploaded image as input and requests an image output from Gemini.
+// Uses intent-aware instructions from LAYER 1 classifier.
 // Returns the result as a data URL, or null if this path is unavailable.
 
 async function tryGeminiImg2Img(
   parsed: ParsedImage,
   prompt: string,
+  intent: ImageIntent,
 ): Promise<string | null> {
   try {
     const { ai } = await import("@workspace/integrations-gemini-ai");
+
+    // LAYER 1 + LAYER 2: Use intent-scoped instruction for precise editing
+    const editInstruction = buildEditInstruction(intent, prompt);
 
     const result = await Promise.race([
       ai.models.generateContent({
@@ -278,9 +347,7 @@ async function tryGeminiImg2Img(
             role: "user",
             parts: [
               { inlineData: { mimeType: parsed.mimeType, data: parsed.base64 } },
-              {
-                text: `Edit this image: ${prompt.trim()}. Preserve the same person, face, identity, and overall composition. Apply only the requested visual change.`,
-              },
+              { text: editInstruction },
             ],
           },
         ],
@@ -409,6 +476,7 @@ async function regenerateWithFlux(editPrompt: string): Promise<string> {
 }
 
 // ── editImage: main entry point ────────────────────────────────────────────────
+// LAYER 1 (classify) → LAYER 2 (execute) → LAYER 3 (expand) pipeline.
 
 export async function editImage(
   imageBase64: string,
@@ -423,13 +491,25 @@ export async function editImage(
   // Parse + validate MIME type and size
   const parsed = parseAndValidateImage(imageBase64);
 
+  // ── LAYER 1: Classify intent ──────────────────────────────────────────────
+  // Image is present, so generation mode won't be returned.
+  const intent = classifyImageIntent(prompt, true);
+  logger.info(
+    { intent: getIntentLabel(intent), prompt: prompt.slice(0, 80) },
+    "[imageEdit] intent classified",
+  );
+
+  // ── LAYER 3: Expand prompt for FLUX fallback ──────────────────────────────
+  const expandedPrompt = enhancePrompt(prompt);
+
   // ── Tier 1: Attempt true img2img via Gemini image model ──────────────────
-  const img2imgResult = await tryGeminiImg2Img(parsed, prompt);
+  // Passes the classified intent so Gemini receives a precise, scoped instruction.
+  const img2imgResult = await tryGeminiImg2Img(parsed, prompt, intent);
   if (img2imgResult) {
     return img2imgResult;
   }
 
-  // ── Tier 2: Gemini description + FLUX regeneration ────────────────────────
+  // ── Tier 2: Gemini vision description + FLUX regeneration ─────────────────
   // Hard failure if Gemini description fails — no silent prompt-only fallback.
   let description: string;
   try {
@@ -442,6 +522,7 @@ export async function editImage(
     throw new Error("Image analysis failed. Please retry.");
   }
 
-  const editPrompt = `${description}. Apply this edit: ${prompt.trim()}, highly detailed, sharp focus, professional quality`;
+  // Combine: image description + expanded user prompt (LAYER 3 expansion applied)
+  const editPrompt = `${description}. Apply this edit: ${expandedPrompt}`;
   return regenerateWithFlux(editPrompt);
 }
