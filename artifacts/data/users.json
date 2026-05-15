@@ -1,0 +1,20 @@
+[
+  {
+    "id": "e6cb15e2-158d-4087-866d-9987b4617951",
+    "username": "testuser99",
+    "passwordHash": "7ebddb5213d332553068d110181690af:fbb376b4b45a25630a6375f1cc0f203261a30173d51beca7f6edaf98d96cf981832d9e4b706428d09734489bb26a1db3276bd2a52190c1f5759d5d2810f51d9a",
+    "role": "free",
+    "credits": 40,
+    "lastReset": 1778822768115,
+    "createdAt": 1778822768115
+  },
+  {
+    "id": "e66361c6-3db4-4309-af86-dd009485add3",
+    "username": "ibaiceo",
+    "passwordHash": "5b250af9efcd68f12ae504eebdc74722:29d7389b8835c6ab6bedf49e8bfa70a9a726fa20286effb2064c02b304ab3eb1baace458c4656e2ea4f0abf786c86ee8f4d6841dca3229172a0d4c17884ceaa3",
+    "role": "ceo",
+    "credits": 40,
+    "lastReset": 1778822777673,
+    "createdAt": 1778822777673
+  }
+]

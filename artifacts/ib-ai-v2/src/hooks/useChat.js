@@ -272,8 +272,8 @@ export function useChat(username, { onCreditExhausted } = {}) {
       ];
     } catch (err) {
       console.error('[IB AI Assistant] Image edit failed:', err.message);
-      const userFacingError = err.message.includes('HUGGINGFACE_API_KEY')
-        ? 'Image editing requires a free HuggingFace token. Add HUGGINGFACE_API_KEY to Replit Secrets — get one free at huggingface.co/settings/tokens.'
+      const userFacingError = err.code === 'CREDITS_EXHAUSTED'
+        ? "You've used all your image editing credits. Your balance resets every 24 hours."
         : `Image editing failed: ${err.message}`;
       finalMessages = [
         ...updatedMessages,
@@ -339,8 +339,8 @@ export function useChat(username, { onCreditExhausted } = {}) {
     let finalMessages = updatedMessages;
 
     try {
-      // Pass username so the backend can track credits for this user
-      const result = await analyzeImage(base64, mimeType, username);
+      // Auth token is sent via header in analyzeImage — no username needed
+      const result = await analyzeImage(base64, mimeType);
 
       const aiMsg = {
         id: aiMsgId,

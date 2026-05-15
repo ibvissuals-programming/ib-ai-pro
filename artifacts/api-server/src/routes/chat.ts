@@ -11,6 +11,9 @@ import { z } from "zod";
 import { createChatStream, type ChatMessage } from "../services/llm";
 import { SYSTEM_PROMPT } from "../prompts/system";
 import { logger } from "../lib/logger";
+import { requireAuth } from "../middleware/requireAuth";
+import { creditGuard, deductRequestCredits } from "../middleware/creditGuard";
+import { CREDIT_COSTS } from "../lib/userStore";
 
 const router = Router();
 
@@ -60,11 +63,6 @@ function detectMode(messages: Array<{ role: string; content: string }>): Convers
 }
 
 // ─── Date injection ───────────────────────────────────────────────────────────
-// Builds a safe UTC date/time string injected into the system prompt at request
-// time. Uses only UTC math — no locale-sensitive calls (toLocaleDateString,
-// toLocaleTimeString) that could throw in constrained Node.js ICU environments.
-// This ensures date/time utility queries ("what's today's date?") always return
-// accurate information without depending on Gemini's training data cutoff.
 
 function buildDatedSystemPrompt(): string {
   const d = new Date();
@@ -106,32 +104,16 @@ function sseEvent(data: Record<string, unknown>): string {
   return `data: ${JSON.stringify(data)}\n\n`;
 }
 
-// ─── Context builder (single authority) ──────────────────────────────────────
+// ─── Context builder ──────────────────────────────────────────────────────────
 
 type RawMessage = { role: "user" | "assistant"; content: string };
 
-/**
- * The ONLY function that assembles messages sent to Gemini.
- *
- * Pipeline:
- *   1. Trim whitespace from every message's content.
- *   2. Cap content at MAX_CONTENT_LENGTH characters.
- *   3. Drop messages empty after trimming.
- *   4. Remove consecutive duplicates (same role + same content).
- *   5. Detect conversation mode from cleaned messages.
- *   6. Apply the adaptive context window for that mode.
- *   7. Prepend the system prompt with current UTC date/time injected.
- */
 function buildContext(raw: RawMessage[]): ChatMessage[] {
-  // Runtime array guard — Zod validates before this is called, but defend
-  // against any edge case where a non-array value reaches this function.
   const safeRaw = Array.isArray(raw) ? raw : [];
 
   const cleaned = safeRaw
     .map((m) => ({
       ...m,
-      // typeof guard: ensure content is a string before calling .trim(),
-      // preventing a crash if null/undefined slips through at JS runtime.
       content: (typeof m.content === "string" ? m.content : "")
         .trim()
         .slice(0, MAX_CONTENT_LENGTH),
@@ -156,50 +138,59 @@ function buildContext(raw: RawMessage[]): ChatMessage[] {
 
 // ─── Route ────────────────────────────────────────────────────────────────────
 
-router.post("/chat", async (req: Request, res: Response) => {
-  const parsed = ChatRequestSchema.safeParse(req.body);
+router.post(
+  "/chat",
+  requireAuth,
+  creditGuard(CREDIT_COSTS.chat),
+  async (req: Request, res: Response) => {
+    const parsed = ChatRequestSchema.safeParse(req.body);
 
-  if (!parsed.success) {
-    res.status(400).json({
-      error: "Invalid request",
-      details: parsed.error.flatten(),
-    });
-    return;
-  }
-
-  const messages = buildContext(parsed.data.messages);
-
-  // Set SSE headers before any async work so the client gets a 200 immediately
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.flushHeaders();
-
-  // Write an SSE comment immediately so the proxy and browser know the stream is alive.
-  // This prevents any upstream timeout before the LLM returns the first token.
-  res.write(": connected\n\n");
-
-  try {
-    const stream = await createChatStream(messages);
-
-    for await (const chunk of stream) {
-      res.write(sseEvent({ content: chunk }));
+    if (!parsed.success) {
+      res.status(400).json({
+        error: "Invalid request",
+        details: parsed.error.flatten(),
+      });
+      return;
     }
 
-    res.write("data: [DONE]\n\n");
-  } catch (err: unknown) {
-    logger.error({ err }, "LLM stream error");
+    const messages = buildContext(parsed.data.messages);
 
-    const code =
-      err instanceof Error && "code" in err
-        ? (err as { code?: string }).code
-        : "unknown";
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
 
-    res.write(sseEvent({ error: true, code }));
-  } finally {
-    res.end();
-  }
-});
+    res.write(": connected\n\n");
+
+    let streamSucceeded = false;
+
+    try {
+      const stream = await createChatStream(messages);
+
+      for await (const chunk of stream) {
+        res.write(sseEvent({ content: chunk }));
+      }
+
+      res.write("data: [DONE]\n\n");
+      streamSucceeded = true;
+    } catch (err: unknown) {
+      logger.error({ err }, "LLM stream error");
+
+      const code =
+        err instanceof Error && "code" in err
+          ? (err as { code?: string }).code
+          : "unknown";
+
+      res.write(sseEvent({ error: true, code }));
+    } finally {
+      // Deduct 1 credit only on successful stream completion
+      if (streamSucceeded) {
+        deductRequestCredits(req);
+      }
+      res.end();
+    }
+  },
+);
 
 export default router;

@@ -1,19 +1,45 @@
+import { getAuthHeaders } from '../auth/authService';
+
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 
 /**
- * Fetch the current credit status for a user.
+ * Fetch the current credit status for the authenticated user.
+ * Uses /api/auth/me (token-based) for accurate server-side data.
  *
- * @param {string} username
+ * Falls back to /api/credits/:username for backward compatibility
+ * when username is provided and token is unavailable.
+ *
+ * @param {string} [username] — kept for API compat, token takes priority
  * @returns {Promise<{
  *   username: string,
- *   plan: 'free'|'pro'|'max',
- *   dailyCreditsUsed: number,
- *   dailyLimit: number|null,
+ *   plan: string,
  *   creditsRemaining: number|null,
- *   lastResetDate: string
+ *   dailyLimit: number|null,
+ *   nextResetAt: number|null
  * }>}
  */
 export async function fetchCredits(username) {
+  const authHeaders = getAuthHeaders();
+
+  // Prefer token-based endpoint
+  if (authHeaders.Authorization) {
+    const res = await fetch(`${BASE}/api/auth/me`, {
+      headers: authHeaders,
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const { user, credits } = data;
+      return {
+        username: user.username,
+        plan: user.role,
+        creditsRemaining: credits.remaining,
+        dailyLimit: credits.limit,
+        nextResetAt: credits.nextResetAt,
+      };
+    }
+  }
+
+  // Fallback: username-based endpoint
   if (!username) throw new Error('Username required');
 
   const res = await fetch(`${BASE}/api/credits/${encodeURIComponent(username)}`, {
@@ -30,16 +56,17 @@ export async function fetchCredits(username) {
 
 /**
  * Upgrade a user's plan.
- * NOTE: In production, this call would be preceded by payment verification
- * (Stripe webhook or similar). For now it updates the plan directly for demo.
  *
  * @param {string} username
- * @param {'free'|'pro'|'max'} plan
+ * @param {'free'|'premium'|'ceo'} plan
  */
 export async function upgradePlan(username, plan) {
   const res = await fetch(`${BASE}/api/credits/upgrade`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
     body: JSON.stringify({ username, plan }),
   });
 

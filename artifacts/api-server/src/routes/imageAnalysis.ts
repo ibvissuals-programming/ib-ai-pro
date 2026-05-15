@@ -6,6 +6,7 @@ import { z } from "zod";
 import { ai } from "@workspace/integrations-gemini-ai";
 import { assertGeminiProvider } from "../lib/aiGuard";
 import { logger } from "../lib/logger";
+import { requireAuth } from "../middleware/requireAuth";
 import { creditGuard, deductRequestCredits, appendCreditHeaders } from "../middleware/creditGuard";
 import { CREDIT_COSTS } from "../lib/credits";
 
@@ -13,13 +14,7 @@ const router = Router();
 
 const VISION_MODEL = "gemini-2.5-flash";
 
-// ~4 MB base64 string ≈ ~3 MB decoded image — safe for Gemini inline data.
-// express.json() body limit is set to 8 MB in app.ts to accommodate this.
 const MAX_BASE64_LEN = 5_600_000;
-
-// Hard timeout for the Gemini vision API call. If the API hangs, the request
-// fails cleanly after this duration rather than holding a connection open
-// indefinitely and blocking server resources.
 const ANALYSIS_TIMEOUT_MS = 55_000;
 
 const ALLOWED_MIME_TYPES = [
@@ -68,11 +63,9 @@ Analyze this image and return ONLY a valid JSON object with no markdown fences, 
 Make each prompt specific, vivid, and directly informed by what is visible in this image. Respond with ONLY the JSON.
 `.trim();
 
-// Credit guard runs BEFORE the route handler.
-// CREDIT_COSTS.image_analysis = 2 credits per full analysis.
-// Deduction happens ONLY after a successful response — failed requests are never charged.
 router.post(
   "/analyze-image",
+  requireAuth,
   creditGuard(CREDIT_COSTS.image_analysis),
   async (req: Request, res: Response) => {
     const parsed = AnalyzeImageSchema.safeParse(req.body);
@@ -90,8 +83,6 @@ router.post(
     try {
       assertGeminiProvider(VISION_MODEL);
 
-      // Race the Gemini API call against a hard timeout. This prevents the route
-      // from hanging indefinitely if the vision API is slow or unresponsive.
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(
           () =>
@@ -125,7 +116,6 @@ router.post(
 
       const rawText = (result.text ?? "").trim();
 
-      // Strip markdown code fences if the model wrapped the JSON
       const jsonText = rawText
         .replace(/^```json?\s*/i, "")
         .replace(/\s*```$/, "")
@@ -140,9 +130,6 @@ router.post(
         return;
       }
 
-      // ── Success: deduct credits and append status headers ────────────────
-      // Deduction is atomic (in-memory) and happens only here — never on any
-      // error path above. This ensures failed requests are never charged.
       deductRequestCredits(req);
       appendCreditHeaders(req, res);
 

@@ -2,125 +2,121 @@
  * Credit guard middleware — IB AI Assistant freemium system.
  *
  * Architecture rules:
+ *   - requireAuth MUST run before creditGuard. This middleware reads req.user.
+ *   - CEO role bypasses ALL credit checks (no limits, no deductions).
  *   - NEVER deduct credits here. Deduction happens AFTER a successful response
  *     via deductRequestCredits(), so failed requests are never charged.
- *   - Requests with no x-username header pass through (guest/unauthenticated).
  *   - Returns 402 with structured payload when credits are exhausted so the
- *     frontend can show the upgrade modal without interrupting active streams.
- *   - This middleware is completely isolated from the SSE streaming pipeline.
- *     It only runs on non-streaming endpoints (/api/analyze-image).
+ *     frontend can show the upgrade prompt without interrupting active streams.
  */
 import { type Request, type Response, type NextFunction } from "express";
 import {
-  getUserRecord,
-  hasSufficientCredits,
+  getUserById,
+  hasCredits,
   deductCredits,
-  getCreditStatus,
-  PLAN_DAILY_CREDITS,
-} from "../lib/credits";
+  toPublicUser,
+  FREE_CREDITS,
+} from "../lib/userStore";
 
 // ── Request type augmentation ─────────────────────────────────────────────────
-// Carries credit context from the guard to the route handler so the handler
-// can call deductRequestCredits() after a successful response.
 
 declare global {
   namespace Express {
     interface Request {
       creditContext?: {
-        username: string;
+        userId: string;
         cost: number;
       };
     }
   }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function extractUsername(req: Request): string | null {
-  const raw = req.headers["x-username"];
-  if (!raw || typeof raw !== "string") return null;
-  const clean = raw.trim().toLowerCase();
-  return clean.length > 0 && clean.length <= 60 ? clean : null;
-}
-
 // ── Middleware factory ────────────────────────────────────────────────────────
 
 /**
- * creditGuard(cost) — returns an Express middleware that checks and reserves
- * credits for the request.
+ * creditGuard(cost) — Express middleware that checks and reserves credits.
+ *
+ * Requires requireAuth to have run first (reads req.user).
  *
  * Usage:
- *   router.post('/analyze-image', creditGuard(CREDIT_COSTS.image_analysis), handler)
+ *   router.post('/route', requireAuth, creditGuard(CREDIT_COSTS.chat), handler)
  *
  * After a successful response, the handler must call:
  *   deductRequestCredits(req)
  */
 export function creditGuard(cost: number) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    // Free operations bypass the guard entirely
     if (cost === 0) {
       next();
       return;
     }
 
-    const username = extractUsername(req);
-
-    // No username → allow through (unauthenticated guest, no credit tracking)
-    if (!username) {
-      next();
-      return;
-    }
-
-    const record = getUserRecord(username);
-    const limit = PLAN_DAILY_CREDITS[record.plan];
-    const isUnlimited = limit === Infinity;
-    const remaining = isUnlimited ? null : Math.max(0, limit - record.dailyCreditsUsed);
-
-    if (!hasSufficientCredits(username, cost)) {
-      res.status(402).json({
-        error: "Insufficient credits",
-        code: "CREDITS_EXHAUSTED",
-        remaining: remaining ?? 0,
-        limit: isUnlimited ? null : limit,
-        plan: record.plan,
-        cost,
+    // requireAuth must precede this middleware
+    if (!req.user) {
+      res.status(401).json({
+        error: "Authentication required",
+        code: "UNAUTHENTICATED",
       });
       return;
     }
 
-    // Attach context — route handler calls deductRequestCredits() on success
-    req.creditContext = { username, cost };
+    // CEO bypasses all credit checks — no limits, no deductions
+    if (req.user.role === "ceo") {
+      req.creditContext = { userId: req.user.userId, cost: 0 };
+      next();
+      return;
+    }
+
+    const user = getUserById(req.user.userId);
+    if (!user) {
+      res.status(401).json({ error: "User not found", code: "USER_NOT_FOUND" });
+      return;
+    }
+
+    if (!hasCredits(user, cost)) {
+      res.status(402).json({
+        error: "Insufficient credits",
+        code: "CREDITS_EXHAUSTED",
+        remaining: user.credits,
+        limit: FREE_CREDITS,
+        cost,
+        plan: user.role,
+      });
+      return;
+    }
+
+    req.creditContext = { userId: req.user.userId, cost };
     next();
   };
 }
 
 /**
- * Deduct credits from the request's credit context.
- *
+ * Deduct credits for this request.
  * MUST be called only after a successful generation — never on error paths.
- * No-ops if creditContext is absent (unauthenticated requests).
+ * No-ops if creditContext is absent or cost is 0 (CEO / unauthenticated).
  */
 export function deductRequestCredits(req: Request): void {
   const ctx = req.creditContext;
-  if (!ctx) return;
-  deductCredits(ctx.username, ctx.cost);
+  if (!ctx || ctx.cost === 0) return;
+  deductCredits(ctx.userId, ctx.cost);
 }
 
 /**
- * Append credit headers to a successful response for the frontend to consume.
- * Keeps the frontend credit display in sync without a separate polling call.
+ * Append credit headers to a successful response so the frontend
+ * can sync credit display without a separate polling call.
  */
 export function appendCreditHeaders(req: Request, res: Response): void {
-  const username = extractUsername(req);
-  if (!username) return;
+  if (!req.user) return;
   try {
-    const status = getCreditStatus(username);
-    if (status.creditsRemaining !== null) {
-      res.setHeader("X-Credits-Remaining", String(status.creditsRemaining));
-      res.setHeader("X-Credits-Limit", String(status.dailyLimit));
+    const user = getUserById(req.user.userId);
+    if (!user) return;
+    const pub = toPublicUser(user);
+    if (pub.role !== "ceo") {
+      res.setHeader("X-Credits-Remaining", String(pub.credits));
+      res.setHeader("X-Credits-Limit", String(FREE_CREDITS));
     }
-    res.setHeader("X-Credits-Plan", status.plan);
+    res.setHeader("X-Credits-Plan", pub.role);
   } catch {
-    // Non-critical — do not disrupt the response
+    // Non-critical
   }
 }

@@ -21,11 +21,10 @@ export default function Login() {
       return;
     }
     setLoading(true);
-    await new Promise(r => setTimeout(r, 400));
-    const result = login(username.trim(), password);
+    const result = await login(username.trim(), password);
     setLoading(false);
     if (result.success) {
-      setUser({ username: username.trim() });
+      setUser(result.user);
       setLocation('/chat');
     } else {
       setError(result.error || 'Login failed');
@@ -126,7 +125,7 @@ export default function Login() {
         </p>
 
         <p className="text-center text-xs text-muted-foreground/40 mt-5 leading-relaxed max-w-xs mx-auto">
-          Accounts are stored locally in this browser. Clearing browser data will remove your account.
+          Accounts are securely stored on our servers and persist across all sessions and devices.
         </p>
       </motion.div>
     </div>

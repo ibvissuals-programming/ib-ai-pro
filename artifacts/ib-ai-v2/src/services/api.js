@@ -1,11 +1,11 @@
+import { getAuthHeaders } from '../auth/authService';
+
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 const CHAT_URL = `${BASE}/api/chat`;
 
 // Total timeout covers both the initial TCP/TLS connection AND the full SSE
 // stream read. Keeping one timer for the whole lifecycle prevents a stalled
 // Gemini mid-stream from hanging the reader indefinitely.
-// 55 s gives Gemini enough time to stream long responses while still bounding
-// worst-case wait time for the user.
 const STREAM_TIMEOUT_MS = 55_000;
 
 /**
@@ -13,9 +13,6 @@ const STREAM_TIMEOUT_MS = 55_000;
  *
  * Yields string chunks as they arrive from the SSE stream.
  * Throws a typed Error on network errors, non-2xx responses, or server errors.
- *
- * The AbortController timer is kept alive through the entire stream read so
- * a stalled Gemini stream cannot hang the reader forever.
  *
  * @param {Array<{role: string, content: string}>} messages
  * @returns {AsyncGenerator<string>}
@@ -28,12 +25,14 @@ export async function* streamChat(messages) {
   try {
     response = await fetch(CHAT_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
       body: JSON.stringify({ messages }),
       signal: controller.signal,
     });
   } catch (err) {
-    // Initial connection failed — clean up and propagate
     clearTimeout(timer);
     throw err;
   }
@@ -41,6 +40,9 @@ export async function* streamChat(messages) {
   if (!response.ok) {
     clearTimeout(timer);
     const body = await response.text().catch(() => '');
+    // Propagate 401/402 codes distinctly for the UI to handle
+    if (response.status === 401) throw new Error('UNAUTHENTICATED');
+    if (response.status === 402) throw new Error('CREDITS_EXHAUSTED');
     throw new Error(`API error ${response.status}: ${body}`);
   }
 
@@ -86,8 +88,6 @@ export async function* streamChat(messages) {
       }
     }
   } finally {
-    // Timer is cleared here — after the full stream — not after the initial
-    // fetch. This keeps the AbortController live for the entire read lifecycle.
     clearTimeout(timer);
     reader.releaseLock();
   }

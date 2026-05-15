@@ -54,3 +54,5 @@ externalPort = 80
 [userenv]
 
 [userenv.shared]
+JWT_SECRET = "cfbdb2c8202fcd48c52505b9f16dacf05bbc925b3489013920bbfd3f5ef17682"
+CEO_USERNAME = "ibaiceo"

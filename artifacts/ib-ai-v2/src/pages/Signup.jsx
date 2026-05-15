@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { motion } from 'framer-motion';
 import { Cpu, AlertCircle, CheckCircle } from 'lucide-react';
-import { signup, login } from '../auth/authService';
+import { signup } from '../auth/authService';
 import { useAuth } from '../hooks/useAuth';
 
 export default function Signup() {
@@ -37,15 +37,13 @@ export default function Signup() {
     }
 
     setLoading(true);
-    await new Promise(r => setTimeout(r, 400));
-    const result = signup(username.trim(), password);
+    const result = await signup(username.trim(), password);
     setLoading(false);
 
     if (result.success) {
       setSuccess(true);
-      await new Promise(r => setTimeout(r, 800));
-      login(username.trim(), password);
-      setUser({ username: username.trim() });
+      setUser(result.user);
+      await new Promise(r => setTimeout(r, 600));
       setLocation('/chat');
     } else {
       setError(result.error || 'Signup failed');
@@ -169,7 +167,7 @@ export default function Signup() {
         </p>
 
         <p className="text-center text-xs text-muted-foreground/40 mt-5 leading-relaxed max-w-xs mx-auto">
-          Accounts are stored locally in this browser. Clearing browser data will remove your account.
+          Accounts are securely stored on our servers and persist across all sessions and devices.
         </p>
       </motion.div>
     </div>

@@ -1,53 +1,151 @@
-const USERS_KEY = 'ib_users';
-const SESSION_KEY = 'ib_current_user';
+/**
+ * Auth service — IB AI Assistant.
+ *
+ * Replaces localStorage-only auth with server-side API calls.
+ * JWT token stored in localStorage under IB_TOKEN_KEY.
+ *
+ * Public API (unchanged interface for useAuth.js compatibility):
+ *   signup(username, password) → { success, error? }
+ *   login(username, password)  → { success, error? }
+ *   logout()
+ *   getCurrentUser()           → { id, username, role, credits } | null
+ *   isAuthenticated()          → boolean
+ *   getToken()                 → string | null
+ *   getAuthHeaders()           → { Authorization: 'Bearer ...' } | {}
+ */
 
-const normalizeUsername = (str) => str.trim().toLowerCase();
+const IB_TOKEN_KEY = 'ib_token';
+const IB_USER_KEY = 'ib_cached_user';
 
-export function getUsers() {
-  try { return JSON.parse(localStorage.getItem(USERS_KEY)) || []; }
-  catch { return []; }
-}
-
-export function saveUsers(users) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
-}
-
-export function signup(username, password) {
-  const users = getUsers();
-  const cleanUsername = normalizeUsername(username);
-  const cleanPassword = password.trim();
-
-  if (users.find(u => u.username === cleanUsername)) {
-    return { success: false, error: 'Username already exists' };
+const BASE = (() => {
+  try {
+    return (import.meta?.env?.BASE_URL ?? '').replace(/\/$/, '');
+  } catch {
+    return '';
   }
-  users.push({ username: cleanUsername, password: cleanPassword });
-  saveUsers(users);
-  return { success: true };
+})();
+
+// ── Token storage ─────────────────────────────────────────────────────────────
+
+export function getToken() {
+  try { return localStorage.getItem(IB_TOKEN_KEY); }
+  catch { return null; }
 }
 
-export function login(username, password) {
-  const users = getUsers();
-  const cleanUsername = normalizeUsername(username);
-  const cleanPassword = password.trim();
+function saveToken(token) {
+  try { localStorage.setItem(IB_TOKEN_KEY, token); }
+  catch { /* ignore */ }
+}
 
-  const user = users.find(u => u.username === cleanUsername && u.password === cleanPassword);
-  if (!user) {
-    return { success: false, error: 'Invalid username or password' };
+function clearToken() {
+  try {
+    localStorage.removeItem(IB_TOKEN_KEY);
+    localStorage.removeItem(IB_USER_KEY);
+  } catch { /* ignore */ }
+}
+
+function saveUser(user) {
+  try { localStorage.setItem(IB_USER_KEY, JSON.stringify(user)); }
+  catch { /* ignore */ }
+}
+
+function loadCachedUser() {
+  try { return JSON.parse(localStorage.getItem(IB_USER_KEY)) || null; }
+  catch { return null; }
+}
+
+// ── Auth headers ──────────────────────────────────────────────────────────────
+
+export function getAuthHeaders() {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+// ── API helpers ───────────────────────────────────────────────────────────────
+
+async function post(path, body) {
+  const res = await fetch(`${BASE}/api${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return res;
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
+
+export async function signup(username, password) {
+  try {
+    const res = await post('/auth/register', { username, password });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Registration failed' };
+    }
+    saveToken(data.token);
+    saveUser(data.user);
+    return { success: true, user: data.user };
+  } catch (err) {
+    return { success: false, error: 'Network error — please try again' };
   }
-  localStorage.setItem(SESSION_KEY, cleanUsername);
-  return { success: true };
+}
+
+export async function login(username, password) {
+  try {
+    const res = await post('/auth/login', { username, password });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Login failed' };
+    }
+    saveToken(data.token);
+    saveUser(data.user);
+    return { success: true, user: data.user };
+  } catch (err) {
+    return { success: false, error: 'Network error — please try again' };
+  }
 }
 
 export function logout() {
-  localStorage.removeItem(SESSION_KEY);
+  clearToken();
 }
 
-// Returns {username} object so useAuth + all components work without changes
+/**
+ * Returns the cached user object from localStorage.
+ * For a verified server-side check, use verifySession() instead.
+ * Kept synchronous so existing components work without changes.
+ */
 export function getCurrentUser() {
-  const username = localStorage.getItem(SESSION_KEY);
-  return username ? { username } : null;
+  const token = getToken();
+  if (!token) return null;
+  return loadCachedUser();
 }
 
 export function isAuthenticated() {
-  return !!localStorage.getItem(SESSION_KEY);
+  return !!getToken() && !!loadCachedUser();
+}
+
+/**
+ * Verify the current token against the server and refresh the cached user.
+ * Call this on app mount to ensure the session is still valid.
+ *
+ * @returns {Promise<{id, username, role, credits}|null>}
+ */
+export async function verifySession() {
+  const token = getToken();
+  if (!token) return null;
+
+  try {
+    const res = await fetch(`${BASE}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      clearToken();
+      return null;
+    }
+    const data = await res.json();
+    saveUser(data.user);
+    return data.user;
+  } catch {
+    // Network failure — return cached user so app stays usable offline
+    return loadCachedUser();
+  }
 }

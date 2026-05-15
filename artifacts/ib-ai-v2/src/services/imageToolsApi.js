@@ -1,3 +1,5 @@
+import { getAuthHeaders } from '../auth/authService';
+
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 const GENERATE_URL = `${BASE}/api/image/generate`;
 const EDIT_URL = `${BASE}/api/image/edit`;
@@ -24,7 +26,10 @@ export async function generateImage(prompt) {
   try {
     res = await fetchWithTimeout(GENERATE_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
       body: JSON.stringify({ prompt }),
     });
   } catch (err) {
@@ -37,6 +42,13 @@ export async function generateImage(prompt) {
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
+    if (res.status === 401) throw new Error('Authentication required. Please log in again.');
+    if (res.status === 402) {
+      const err = new Error(data.error ?? 'Insufficient credits');
+      err.code = 'CREDITS_EXHAUSTED';
+      err.statusCode = 402;
+      throw err;
+    }
     throw new Error(data.error ?? `Server error ${res.status}`);
   }
 
@@ -54,7 +66,10 @@ export async function editImage(imageBase64, prompt) {
   try {
     res = await fetchWithTimeout(EDIT_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
       body: JSON.stringify({ image: imageBase64, prompt }),
     });
   } catch (err) {
@@ -67,6 +82,13 @@ export async function editImage(imageBase64, prompt) {
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
+    if (res.status === 401) throw new Error('Authentication required. Please log in again.');
+    if (res.status === 402) {
+      const err = new Error(data.error ?? 'Insufficient credits');
+      err.code = 'CREDITS_EXHAUSTED';
+      err.statusCode = 402;
+      throw err;
+    }
     throw new Error(data.error ?? `Server error ${res.status}`);
   }
 

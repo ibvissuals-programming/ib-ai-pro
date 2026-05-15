@@ -1,36 +1,34 @@
+import { getAuthHeaders } from '../auth/authService';
+
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 const ANALYZE_URL = `${BASE}/api/analyze-image`;
 
-// Image analysis can take longer than chat — allow up to 60 seconds
 const TIMEOUT_MS = 60_000;
 
 /**
  * Send an image to the backend for visual analysis.
  * Returns a structured object with analysis data and generated prompts.
  *
- * Passes the username as x-username header so the credit guard middleware
- * can check and deduct credits. The 402 response (CREDITS_EXHAUSTED) is
- * parsed and re-thrown with err.code set so useChat can handle it distinctly.
+ * Auth token is sent via Authorization header (replaces x-username).
+ * The 402 response (CREDITS_EXHAUSTED) is parsed and re-thrown with
+ * err.code set so useChat can handle it distinctly.
  *
  * @param {string} imageBase64 — raw base64 string (no data URL prefix)
  * @param {string} mimeType — e.g. "image/jpeg"
- * @param {string} [username] — current user's username for credit tracking
  * @returns {Promise<object>}
  */
-export async function analyzeImage(imageBase64, mimeType, username) {
+export async function analyzeImage(imageBase64, mimeType) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-  const headers = { 'Content-Type': 'application/json' };
-  if (username) {
-    headers['x-username'] = username;
-  }
 
   let response;
   try {
     response = await fetch(ANALYZE_URL, {
       method: 'POST',
-      headers,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
       body: JSON.stringify({ imageBase64, mimeType }),
       signal: controller.signal,
     });
@@ -39,8 +37,6 @@ export async function analyzeImage(imageBase64, mimeType, username) {
   }
 
   if (!response.ok) {
-    // Parse structured error body for credit exhaustion detection.
-    // Other errors are surfaced as generic API errors.
     let body;
     try {
       body = await response.json();

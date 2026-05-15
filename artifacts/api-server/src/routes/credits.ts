@@ -1,17 +1,24 @@
 /**
- * Credits API routes — IB AI Assistant freemium system.
+ * Credits API routes — IB AI Assistant.
  *
  * GET  /api/credits/:username  — fetch a user's current credit status
- * POST /api/credits/upgrade    — change a user's plan (demo; replace with
- *                                payment verification in production)
+ *                                (username-based for backward compat with frontend)
+ * POST /api/credits/upgrade    — change a user's role
  *
- * These routes are read-heavy and synchronous (in-memory store).
- * They do not touch the SSE streaming pipeline.
+ * NOTE: Prefer GET /api/auth/me for new integrations — it includes the full
+ * user object and is token-authenticated. This endpoint keeps the old
+ * username-based URL working for the existing useCredits hook.
  */
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import { getCreditStatus, upgradePlan, PLAN_DAILY_CREDITS } from "../lib/credits";
-import type { Plan } from "../lib/credits";
+import {
+  getUserByUsername,
+  setUserRole,
+  toPublicUser,
+  FREE_CREDITS,
+  RESET_INTERVAL_MS,
+} from "../lib/userStore";
+import type { UserRole } from "../lib/userStore";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -26,15 +33,36 @@ router.get("/credits/:username", (req: Request, res: Response) => {
     return;
   }
 
-  const status = getCreditStatus(username);
-  res.json(status);
+  const user = getUserByUsername(username);
+  if (!user) {
+    // Return a default-looking response for unknown users (non-breaking)
+    res.json({
+      username,
+      plan: "free",
+      creditsRemaining: FREE_CREDITS,
+      dailyLimit: FREE_CREDITS,
+      nextResetAt: Date.now() + RESET_INTERVAL_MS,
+    });
+    return;
+  }
+
+  const pub = toPublicUser(user);
+  const isCeo = pub.role === "ceo";
+
+  res.json({
+    username: pub.username,
+    plan: pub.role,
+    creditsRemaining: isCeo ? null : pub.credits,
+    dailyLimit: isCeo ? null : FREE_CREDITS,
+    nextResetAt: isCeo ? null : user.lastReset + RESET_INTERVAL_MS,
+  });
 });
 
 // ── POST /api/credits/upgrade ─────────────────────────────────────────────────
 
 const UpgradeSchema = z.object({
   username: z.string().min(1).max(60).transform((s) => s.trim().toLowerCase()),
-  plan: z.enum(["free", "pro", "max"]),
+  plan: z.enum(["free", "premium", "ceo"]),
 });
 
 router.post("/credits/upgrade", (req: Request, res: Response) => {
@@ -49,23 +77,21 @@ router.post("/credits/upgrade", (req: Request, res: Response) => {
   }
 
   const { username, plan } = parsed.data;
+  const user = getUserByUsername(username);
 
-  try {
-    const record = upgradePlan(username, plan as Plan);
-    const limit = PLAN_DAILY_CREDITS[plan as Plan];
-
-    logger.info({ username, plan }, "[credits] Plan upgraded");
-
-    res.json({
-      success: true,
-      username: record.username,
-      plan: record.plan,
-      dailyLimit: limit === Infinity ? null : limit,
-    });
-  } catch (err) {
-    logger.error({ err, username, plan }, "[credits] Upgrade failed");
-    res.status(500).json({ error: "Upgrade failed" });
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
   }
+
+  setUserRole(user.id, plan as UserRole);
+  logger.info({ username, plan }, "[credits] Role updated");
+
+  res.json({
+    success: true,
+    username: user.username,
+    plan,
+  });
 });
 
 export default router;
