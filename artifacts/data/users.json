@@ -124,5 +124,14 @@
     "credits": 40,
     "lastReset": 1778856016550,
     "createdAt": 1778856016550
+  },
+  {
+    "id": "9f7b788b-26d2-4f3e-b49e-08dbf2c9e8cb",
+    "username": "testuser_migration_check",
+    "passwordHash": "475ee48517f2a5aa6699dd32af06f3f4:402717783ab480efd15d3d07092ca546f77375500902d2ea78dd3f04302c87da21c2932ebb3813da71e05b51d729616d2c207551ae87d7fcd53bbd93e5dfb88e",
+    "role": "free",
+    "credits": 40,
+    "lastReset": 1778858724443,
+    "createdAt": 1778858724443
   }
 ]

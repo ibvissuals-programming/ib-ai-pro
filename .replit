@@ -20,41 +20,30 @@ author = "agent"
 task = "workflow.run"
 args = "API Server"
 
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Frontend"
-
 [[workflows.workflow]]
 name = "API Server"
 author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "PORT=8080 pnpm --filter api-server run dev"
 waitForPort = 8080
 
-[[workflows.workflow]]
-name = "Frontend"
-author = "agent"
-
 [workflows.workflow.metadata]
-outputType = "webview"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "PORT=23765 BASE_PATH=/ pnpm --filter ib-ai-v2 run dev"
-waitForPort = 23765
+outputType = "console"
 
 [agent]
-stack = "PNPM_WORKSPACE"
+stack = "BEST_EFFORT_FALLBACK"
 expertMode = true
+integrations = ["javascript_gemini_ai_integrations:2.0.0"]
 
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[[ports]]
+localPort = 5000
+externalPort = 80
 
 [[ports]]
 localPort = 8080
@@ -94,3 +83,6 @@ externalPort = 80
 JWT_SECRET = "cfbdb2c8202fcd48c52505b9f16dacf05bbc925b3489013920bbfd3f5ef17682"
 CEO_USERNAME = "ibaiceo"
 CEO_RECOVERY_KEY = "df9181a1faa38a8013ec319aba9d1086c26dc4927abc8dc8fb80f64c304695ad498abb88"
+
+[nix]
+channel = "stable-25_05"
