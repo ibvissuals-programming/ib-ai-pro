@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowUp, Trash2, ImagePlus, X, AlertCircle } from 'lucide-react';
+import { ArrowUp, Trash2, ImagePlus, X, AlertCircle, Wand2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { readImageFile, validateImageFile } from '../services/imageApi';
+import { hasEditIntent } from '../services/aiEngine';
 
-export function InputBox({ onSend, onSendImage, onClear, disabled }) {
+export function InputBox({ onSend, onSendImage, onSendImageEdit, onClear, disabled }) {
   const [value, setValue] = useState('');
   const [focused, setFocused] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -90,6 +91,23 @@ export function InputBox({ onSend, onSendImage, onClear, disabled }) {
     const trimmed = value.trim();
     if (!trimmed && !attachedImage) return;
 
+    // ── ROUTING DECISION ──────────────────────────────────────────────────────
+    // Image + edit-intent text → image editing pipeline (/api/image/edit)
+    // Image only (no text)    → image analysis pipeline (/api/analyze-image)
+    // Text only               → chat pipeline (/api/chat → Gemini)
+    // Image + non-edit text   → both chat and analysis fire independently
+    // ─────────────────────────────────────────────────────────────────────────
+    if (attachedImage && trimmed && hasEditIntent(trimmed)) {
+      if (onSendImageEdit) {
+        onSendImageEdit(attachedImage, trimmed);
+        setValue('');
+        setAttachedImage(null);
+        if (textareaRef.current) textareaRef.current.style.height = 'auto';
+        return; // ← hard stop: do NOT also fire onSend or onSendImage
+      }
+    }
+
+    // Default paths (unmodified behaviour)
     if (trimmed) {
       onSend(trimmed);
       setValue('');
@@ -197,8 +215,12 @@ export function InputBox({ onSend, onSendImage, onClear, disabled }) {
                 <p className="text-xs text-foreground font-medium truncate">
                   {attachedImage.filename}
                 </p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Ready to analyze
+                <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                  {value.trim() && hasEditIntent(value.trim()) ? (
+                    <><Wand2 size={9} className="text-primary" /> Ready to edit</>
+                  ) : (
+                    'Ready to analyze'
+                  )}
                 </p>
               </div>
               <button

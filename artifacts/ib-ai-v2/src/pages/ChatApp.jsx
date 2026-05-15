@@ -29,6 +29,7 @@ export default function ChatApp() {
     isTyping,
     sendMessage,
     sendImageAnalysis,
+    sendImageEdit,
     clearChat,
     switchChat,
     newChat,
@@ -133,6 +134,7 @@ export default function ChatApp() {
         <InputBox
           onSend={sendMessage}
           onSendImage={sendImageAnalysis}
+          onSendImageEdit={sendImageEdit}
           onClear={clearChat}
           disabled={isTyping}
         />

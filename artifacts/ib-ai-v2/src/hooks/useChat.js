@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { getChats, saveChats, createDefaultChats } from '../utils/storage';
 import { streamChat } from '../services/api';
 import { analyzeImage } from '../services/imageApi';
+import { editImage } from '../services/imageToolsApi';
 
 // ── Structured error classifiers ──────────────────────────────────────────────
 
@@ -211,6 +212,92 @@ export function useChat(username, { onCreditExhausted } = {}) {
     }
   }, [chatData, activeChatId, persist]);
 
+  // ── Image edit send ────────────────────────────────────────────────────────
+  // Called when user attaches an image AND types an edit-intent prompt.
+  // Routes to /api/image/edit (HuggingFace instruct-pix2pix) — NOT Gemini.
+  // Returns the edited image as a base64 data URL displayed inline in chat.
+  const sendImageEdit = useCallback(async ({ base64, mimeType, filename, previewUrl }, editPrompt) => {
+    if (!chatData || !activeChatId) return;
+
+    const userMsg = {
+      id: Date.now(),
+      role: 'user',
+      type: 'image-edit-request',
+      content: editPrompt,
+      imagePreview: previewUrl,
+      filename,
+      timestamp: new Date().toISOString(),
+    };
+
+    const currentMessages = chatData.chats[activeChatId]?.messages ?? [];
+    const updatedMessages = [...currentMessages, userMsg];
+
+    const currentTitle = chatData.chats[activeChatId]?.title;
+    const autoTitle =
+      currentTitle === 'New Chat'
+        ? `Edit: ${editPrompt.slice(0, 32)}${editPrompt.length > 32 ? '...' : ''}`
+        : currentTitle;
+
+    const withUserMsg = {
+      ...chatData,
+      chats: {
+        ...chatData.chats,
+        [activeChatId]: {
+          ...chatData.chats[activeChatId],
+          title: autoTitle,
+          messages: updatedMessages,
+        },
+      },
+    };
+    persist(withUserMsg);
+    setIsTyping(true);
+
+    const aiMsgId = Date.now() + 1;
+    const timestamp = new Date().toISOString();
+    let finalMessages = updatedMessages;
+
+    try {
+      const dataUrl = `data:${mimeType};base64,${base64}`;
+      const result = await editImage(dataUrl, editPrompt);
+
+      finalMessages = [
+        ...updatedMessages,
+        {
+          id: aiMsgId,
+          role: 'assistant',
+          type: 'image-edit-result',
+          content: result.b64Image,
+          timestamp,
+        },
+      ];
+    } catch (err) {
+      console.error('[IB AI Assistant] Image edit failed:', err.message);
+      const userFacingError = err.message.includes('HUGGINGFACE_API_KEY')
+        ? 'Image editing requires a free HuggingFace token. Add HUGGINGFACE_API_KEY to Replit Secrets — get one free at huggingface.co/settings/tokens.'
+        : `Image editing failed: ${err.message}`;
+      finalMessages = [
+        ...updatedMessages,
+        { id: aiMsgId, role: 'assistant', content: userFacingError, timestamp },
+      ];
+    } finally {
+      try {
+        persist({
+          ...withUserMsg,
+          chats: {
+            ...withUserMsg.chats,
+            [activeChatId]: {
+              ...withUserMsg.chats[activeChatId],
+              messages: finalMessages,
+            },
+          },
+        });
+      } catch (persistErr) {
+        console.error('[IB AI Assistant] Failed to persist image edit state:', persistErr);
+      }
+      setIsTyping(false);
+    }
+  }, [chatData, activeChatId, persist]);
+
   // ── Image analysis send ────────────────────────────────────────────────────
   const sendImageAnalysis = useCallback(async ({ base64, mimeType, filename }) => {
     if (!chatData || !activeChatId) return;
@@ -327,6 +414,7 @@ export function useChat(username, { onCreditExhausted } = {}) {
     isTyping,
     sendMessage,
     sendImageAnalysis,
+    sendImageEdit,
     clearChat,
     switchChat,
     newChat,

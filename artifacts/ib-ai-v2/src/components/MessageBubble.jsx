@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Copy, Check, Cpu, User, Square, CheckSquare, Image as ImageIcon } from 'lucide-react';
+import { Copy, Check, Cpu, User, Square, CheckSquare, Image as ImageIcon, Download, Wand2 } from 'lucide-react';
 import { ImageAnalysisCard } from './ImageAnalysisCard';
 
 // ─── Reliable clipboard helper ────────────────────────────────────────────────
@@ -156,9 +156,44 @@ function renderContent(text) {
   return result;
 }
 
+// ─── Edited image result card ─────────────────────────────────────────────────
+
+function EditedImageCard({ src }) {
+  const handleDownload = () => {
+    const a = document.createElement('a');
+    a.href = src;
+    a.download = `ib-ai-edit-${Date.now()}.png`;
+    a.click();
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-1.5 text-[10px] text-primary/70 font-medium uppercase tracking-widest">
+        <Wand2 size={10} />
+        Edited Image
+      </div>
+      <div className="relative rounded-xl overflow-hidden border border-border/50 bg-black/20">
+        <img
+          src={src}
+          alt="Edited"
+          className="w-full max-h-[480px] object-contain"
+        />
+        <button
+          onClick={handleDownload}
+          className="absolute bottom-2 right-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-black/60 backdrop-blur text-white text-xs hover:bg-black/80 transition-colors"
+        >
+          <Download size={11} />
+          Save
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Message content branching ────────────────────────────────────────────────
 
 function MessageContent({ message }) {
+  // User: image uploaded for analysis only (no text)
   if (message.type === 'image') {
     return (
       <div className="flex items-center gap-2 py-0.5">
@@ -169,6 +204,34 @@ function MessageContent({ message }) {
     );
   }
 
+  // User: image + edit-intent prompt → routing to /api/image/edit
+  if (message.type === 'image-edit-request') {
+    return (
+      <div className="flex items-start gap-2.5">
+        {message.imagePreview && (
+          <img
+            src={message.imagePreview}
+            alt={message.filename ?? 'source'}
+            className="w-12 h-12 rounded-lg object-cover border border-white/20 shrink-0"
+          />
+        )}
+        <div className="min-w-0">
+          <div className="flex items-center gap-1 text-[10px] opacity-60 mb-1">
+            <Wand2 size={9} />
+            Edit request
+          </div>
+          <span className="text-sm leading-relaxed">{message.content}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Assistant: edited image returned from /api/image/edit
+  if (message.type === 'image-edit-result') {
+    return <EditedImageCard src={message.content} />;
+  }
+
+  // Assistant: structured analysis JSON from /api/analyze-image
   if (message.type === 'image-analysis') {
     let data = null;
     try {
@@ -203,8 +266,11 @@ export function MessageBubble({
   const isPromptEngineering = message.mode === 'prompt_engineering';
   const isAnalysis = message.type === 'image-analysis';
   const isImageMsg = message.type === 'image';
+  const isEditRequest = message.type === 'image-edit-request';
+  const isEditResult = message.type === 'image-edit-result';
 
-  const bubbleMaxWidth = isAnalysis ? 'max-w-full w-full' : 'max-w-[78%]';
+  // Full-width for analysis cards and edit result images
+  const bubbleMaxWidth = (isAnalysis || isEditResult) ? 'max-w-full w-full' : 'max-w-[78%]';
 
   // ── Reliable copy handler ──────────────────────────────────────────────────
   const handleCopy = useCallback(async (e) => {
@@ -314,7 +380,7 @@ export function MessageBubble({
       >
         <div
           className={`px-4 py-3 rounded-2xl text-sm leading-relaxed transition-colors ${
-            isAnalysis
+            isAnalysis || isEditResult
               ? 'glass-card text-foreground rounded-tl-sm w-full'
               : isUser
               ? `bg-primary text-primary-foreground rounded-tr-sm shadow-lg shadow-primary/10 ${isSelected ? 'ring-1 ring-primary/40' : ''}`
@@ -332,7 +398,7 @@ export function MessageBubble({
         </div>
 
         {/* Single-message copy */}
-        {!selectionMode && !isTyping && !isImageMsg && (
+        {!selectionMode && !isTyping && !isImageMsg && !isEditRequest && !isEditResult && (
           <button
             onClick={handleCopy}
             data-testid={`button-copy-${message.id}`}
