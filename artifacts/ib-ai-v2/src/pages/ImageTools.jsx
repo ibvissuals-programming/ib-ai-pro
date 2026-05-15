@@ -3,10 +3,11 @@ import { Link } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Cpu, ArrowLeft, Wand2, Upload, ImageIcon,
-  Download, X, Loader2, AlertCircle, Sparkles,
+  Download, X, Loader2, AlertCircle, Sparkles, Copy, Check,
 } from 'lucide-react';
 import { generateImage, editImage } from '../services/imageToolsApi';
 import { useTheme } from '../contexts/ThemeContext';
+import { Sun, Moon } from 'lucide-react';
 
 // ── Rate limit guard (client-side, mirrors server) ────────────────────────────
 const RATE_LIMIT_MS = 11_000;
@@ -21,6 +22,70 @@ function useRateLimit() {
     lastRef.current = now;
     return 0;
   }, []);
+}
+
+// ── Copy button ────────────────────────────────────────────────────────────────
+
+function CopyButton({ text, label = 'Copy prompt' }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;top:-9999px;opacity:0;';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      disabled={!text}
+      className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed px-2 py-1 rounded-lg hover:bg-secondary transition-all"
+    >
+      {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+      {copied ? 'Copied!' : label}
+    </button>
+  );
+}
+
+// ── Skeleton placeholder ───────────────────────────────────────────────────────
+
+function ImageSkeleton({ label }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="flex flex-col items-center justify-center py-16 gap-4 rounded-2xl border border-dashed border-border/50 bg-secondary/20"
+    >
+      <div className="relative w-16 h-16">
+        <div className="absolute inset-0 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
+        <div className="absolute inset-2 rounded-full border border-primary/10 border-t-primary/40 animate-spin" style={{ animationDuration: '1.5s', animationDirection: 'reverse' }} />
+      </div>
+      <div className="text-center">
+        <p className="text-sm font-medium text-foreground">{label}</p>
+        <p className="text-xs text-muted-foreground mt-1">This takes 10–30 seconds</p>
+      </div>
+      <div className="flex gap-2">
+        {[40, 64, 48, 56].map((w, i) => (
+          <div
+            key={i}
+            className="h-1 rounded-full bg-primary/20 animate-pulse"
+            style={{ width: w, animationDelay: `${i * 0.15}s` }}
+          />
+        ))}
+      </div>
+    </motion.div>
+  );
 }
 
 // ── Image output card ──────────────────────────────────────────────────────────
@@ -120,9 +185,12 @@ function GenerateTab() {
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
-          Prompt
-        </label>
+        <div className="flex items-center justify-between">
+          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+            Prompt
+          </label>
+          <CopyButton text={prompt} />
+        </div>
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -169,18 +237,9 @@ function GenerateTab() {
         {error && <ErrorBox message={error} />}
       </AnimatePresence>
 
-      {loading && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex flex-col items-center justify-center py-16 gap-3 rounded-2xl border border-dashed border-border/50 bg-secondary/20"
-        >
-          <Loader2 size={28} className="animate-spin text-primary/60" />
-          <p className="text-sm text-muted-foreground">
-            Generating your image — this takes 10–30 seconds…
-          </p>
-        </motion.div>
-      )}
+      <AnimatePresence>
+        {loading && <ImageSkeleton label="Generating your image…" />}
+      </AnimatePresence>
 
       <AnimatePresence>
         {output && !loading && (
@@ -315,9 +374,12 @@ function EditTab() {
 
       {/* Edit prompt */}
       <div className="space-y-2">
-        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
-          Edit Instruction
-        </label>
+        <div className="flex items-center justify-between">
+          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+            Edit Instruction
+          </label>
+          <CopyButton text={prompt} />
+        </div>
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -364,22 +426,34 @@ function EditTab() {
         {error && <ErrorBox message={error} />}
       </AnimatePresence>
 
-      {loading && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex flex-col items-center justify-center py-16 gap-3 rounded-2xl border border-dashed border-border/50 bg-secondary/20"
-        >
-          <Loader2 size={28} className="animate-spin text-primary/60" />
-          <p className="text-sm text-muted-foreground">
-            Editing your image — this takes 15–30 seconds…
-          </p>
-        </motion.div>
-      )}
+      <AnimatePresence>
+        {loading && <ImageSkeleton label="Applying your edit…" />}
+      </AnimatePresence>
 
+      {/* Before / After preview */}
       <AnimatePresence>
         {output && !loading && (
-          <OutputCard src={output} onClear={() => setOutput(null)} />
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-3"
+          >
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Before</p>
+                <div className="rounded-xl overflow-hidden border border-border/50 bg-black/10">
+                  <img src={sourceImage} alt="Before" className="w-full object-contain max-h-48" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">After</p>
+                <div className="rounded-xl overflow-hidden border border-border/50 bg-black/10">
+                  <img src={output} alt="After" className="w-full object-contain max-h-48" />
+                </div>
+              </div>
+            </div>
+            <OutputCard src={output} onClear={() => setOutput(null)} />
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
@@ -415,20 +489,21 @@ export default function ImageTools() {
               <Cpu size={11} className="text-primary-foreground" />
             </div>
             <span className="text-sm font-semibold text-foreground tracking-tight">
-              AI Image Tools
+              AI Image Studio
             </span>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <span className="text-[11px] px-2.5 py-1 rounded-full border border-border/50 text-muted-foreground hidden sm:block">
-            Powered by HuggingFace
+            Powered by FLUX
           </span>
           <button
             onClick={toggleTheme}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors text-xs"
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            aria-label="Toggle theme"
           >
-            {theme === 'dark' ? '☀' : '☾'}
+            {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
           </button>
         </div>
       </header>
@@ -439,40 +514,14 @@ export default function ImageTools() {
           {/* Title */}
           <div>
             <h1 className="text-xl font-bold text-foreground tracking-tight">
-              AI Image Tools
+              AI Image Studio
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Generate new images or edit existing ones using free AI models.
+              Generate new images from text, or transform existing ones — no API key needed.
             </p>
           </div>
 
-          {/* Status notices */}
-          <div className="space-y-2">
-            <div className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-xs text-emerald-400 leading-relaxed">
-              <Sparkles size={13} className="shrink-0 mt-0.5" />
-              <span>
-                <strong>Image generation works now</strong> — powered by Pollinations.ai (FLUX model), no API key needed.
-              </span>
-            </div>
-            <div className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-400 leading-relaxed">
-              <ImageIcon size={13} className="shrink-0 mt-0.5" />
-              <span>
-                <strong>Image editing</strong> requires a free{' '}
-                <a
-                  href="https://huggingface.co/settings/tokens"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline underline-offset-2 hover:text-amber-300"
-                >
-                  HuggingFace token
-                </a>{' '}
-                added to Replit Secrets as{' '}
-                <code className="bg-amber-500/10 px-1 py-0.5 rounded font-mono">HUGGINGFACE_API_KEY</code>.
-              </span>
-            </div>
-          </div>
-
-          {/* Tabs */}
+          {/* Mode tabs */}
           <div className="flex gap-1 p-1 rounded-xl bg-secondary/40 border border-border/40 w-fit">
             {[
               { id: 'generate', icon: Sparkles, label: 'Generate' },
@@ -508,10 +557,8 @@ export default function ImageTools() {
             </AnimatePresence>
           </div>
 
-          {/* Footer note */}
           <p className="text-center text-xs text-muted-foreground/50">
-            Images are generated by open-source models via HuggingFace. Generation
-            takes 10–30 seconds on the free tier.
+            Images are generated via Pollinations AI · FLUX model · Free, no setup required
           </p>
         </div>
       </main>

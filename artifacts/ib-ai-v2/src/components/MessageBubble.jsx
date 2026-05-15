@@ -115,7 +115,7 @@ function renderContent(text) {
     }
 
     if (!trimmed) {
-      result.push(<br key={`br-${i}`} />);
+      result.push(<div key={`br-${i}`} className="h-2" />);
       i++;
       continue;
     }
@@ -124,29 +124,42 @@ function renderContent(text) {
       const num = trimmed.match(/^\d+/)[0];
       const rest = line.replace(/^\s*\d+\.\s*/, '');
       result.push(
-        <div key={`ol-${i}`} className="flex gap-2 my-0.5">
-          <span className="text-primary font-medium shrink-0">{num}.</span>
-          <span>{renderBold(rest)}</span>
+        <div key={`ol-${i}`} className="flex gap-2 my-1">
+          <span className="text-primary font-semibold shrink-0 min-w-[1.25rem] text-right">{num}.</span>
+          <span className="leading-relaxed">{renderBold(rest)}</span>
         </div>
       );
       i++;
       continue;
     }
 
-    if (trimmed.startsWith('- ') || trimmed.startsWith('– ')) {
-      const rest = line.replace(/^\s*[-–]\s*/, '');
+    if (trimmed.startsWith('- ') || trimmed.startsWith('– ') || trimmed.startsWith('* ')) {
+      const rest = line.replace(/^\s*[-–*]\s*/, '');
       result.push(
-        <div key={`li-${i}`} className="flex gap-2 my-0.5">
-          <span className="text-primary shrink-0 mt-0.5">–</span>
-          <span>{renderBold(rest)}</span>
+        <div key={`li-${i}`} className="flex gap-2 my-1">
+          <span className="text-primary/70 shrink-0 mt-1.5 w-1 h-1 rounded-full bg-primary/60 inline-block" />
+          <span className="leading-relaxed">{renderBold(rest)}</span>
         </div>
       );
+      i++;
+      continue;
+    }
+
+    if (trimmed.startsWith('# ') || trimmed.startsWith('## ') || trimmed.startsWith('### ')) {
+      const level = trimmed.match(/^#+/)[0].length;
+      const text = trimmed.replace(/^#+\s*/, '');
+      const cls = level === 1
+        ? 'text-base font-bold text-foreground mt-3 mb-1'
+        : level === 2
+        ? 'text-sm font-semibold text-foreground mt-2.5 mb-1'
+        : 'text-sm font-medium text-foreground/80 mt-2 mb-0.5';
+      result.push(<p key={`h-${i}`} className={cls}>{renderBold(text)}</p>);
       i++;
       continue;
     }
 
     result.push(
-      <p key={`p-${i}`} className="leading-relaxed">
+      <p key={`p-${i}`} className="leading-relaxed my-0.5">
         {renderBold(line)}
       </p>
     );
