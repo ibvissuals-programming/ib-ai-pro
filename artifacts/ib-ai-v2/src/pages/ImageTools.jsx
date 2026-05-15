@@ -446,25 +446,30 @@ export default function ImageTools() {
             </p>
           </div>
 
-          {/* HF key notice */}
-          <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-xl bg-primary/8 border border-primary/20 text-xs text-primary/80 leading-relaxed">
-            <Sparkles size={13} className="shrink-0 mt-0.5" />
-            <span>
-              Requires a free{' '}
-              <a
-                href="https://huggingface.co/settings/tokens"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline underline-offset-2 hover:text-primary"
-              >
-                HuggingFace token
-              </a>{' '}
-              added to Replit Secrets as{' '}
-              <code className="bg-primary/10 px-1 py-0.5 rounded text-[11px]">
-                HUGGINGFACE_API_KEY
-              </code>
-              . Creating an account and token is free.
-            </span>
+          {/* Status notices */}
+          <div className="space-y-2">
+            <div className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-xs text-emerald-400 leading-relaxed">
+              <Sparkles size={13} className="shrink-0 mt-0.5" />
+              <span>
+                <strong>Image generation works now</strong> — powered by Pollinations.ai (FLUX model), no API key needed.
+              </span>
+            </div>
+            <div className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-400 leading-relaxed">
+              <ImageIcon size={13} className="shrink-0 mt-0.5" />
+              <span>
+                <strong>Image editing</strong> requires a free{' '}
+                <a
+                  href="https://huggingface.co/settings/tokens"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-2 hover:text-amber-300"
+                >
+                  HuggingFace token
+                </a>{' '}
+                added to Replit Secrets as{' '}
+                <code className="bg-amber-500/10 px-1 py-0.5 rounded font-mono">HUGGINGFACE_API_KEY</code>.
+              </span>
+            </div>
           </div>
 
           {/* Tabs */}
