@@ -4,10 +4,13 @@ import { Copy, Check, Cpu, User, Square, CheckSquare, Image as ImageIcon } from 
 import { ImageAnalysisCard } from './ImageAnalysisCard';
 
 // ─── Reliable clipboard helper ────────────────────────────────────────────────
+// Note: isSecureContext guard intentionally omitted — the Replit preview runs
+// in a proxied iframe where isSecureContext can be false even over HTTPS, which
+// would silently prevent the Clipboard API from being attempted at all.
 
 async function copyToClipboard(text) {
-  // Primary: async Clipboard API (requires secure context + user gesture)
-  if (navigator.clipboard && window.isSecureContext) {
+  // Primary: async Clipboard API
+  if (navigator.clipboard) {
     try {
       await navigator.clipboard.writeText(text);
       return true;
@@ -15,14 +18,17 @@ async function copyToClipboard(text) {
       // Fall through to execCommand fallback
     }
   }
-  // Fallback: document.execCommand — works on iOS Safari & older browsers
+  // Fallback: document.execCommand — works on iOS Safari, older browsers,
+  // and iframe contexts where the Clipboard API is unavailable.
   try {
     const textarea = document.createElement('textarea');
     textarea.value = text;
-    textarea.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none;';
+    textarea.style.cssText =
+      'position:fixed;top:-9999px;left:-9999px;opacity:0;pointer-events:none;';
     document.body.appendChild(textarea);
-    textarea.focus();
+    textarea.focus({ preventScroll: true });
     textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
     const ok = document.execCommand('copy');
     document.body.removeChild(textarea);
     return ok;

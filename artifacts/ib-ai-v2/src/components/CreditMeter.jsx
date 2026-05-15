@@ -14,7 +14,7 @@ function barColor(pct) {
 }
 
 /**
- * Compact credit meter displayed at the bottom of the Sidebar.
+ * Compact usage meter displayed at the bottom of the Sidebar.
  *
  * @param {{ credits: object|null, onUpgradeClick: () => void }} props
  */
@@ -33,9 +33,18 @@ export function CreditMeter({ credits, onUpgradeClick }) {
   const low = !isUnlimited && creditsRemaining <= 1;
   const empty = !isUnlimited && creditsRemaining === 0;
 
+  function usageLabel() {
+    if (isUnlimited) return null;
+    if (empty) return <span className="text-rose-400">Limit reached</span>;
+    if (low) return <span className="text-amber-400">Running low</span>;
+    return null;
+  }
+
+  const label = usageLabel();
+
   return (
     <div className="px-4 py-3 border-t border-sidebar-border space-y-2">
-      {/* Plan badge + credit count */}
+      {/* Plan badge + optional status label */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           {plan === 'max' ? (
@@ -48,10 +57,10 @@ export function CreditMeter({ credits, onUpgradeClick }) {
               <span className="flex items-center gap-1">
                 Unlimited <InfinityIcon size={10} />
               </span>
+            ) : label ? (
+              label
             ) : (
-              <span className={empty ? 'text-rose-400' : low ? 'text-amber-400' : ''}>
-                {creditsRemaining} / {dailyLimit} credits
-              </span>
+              <span className="text-muted-foreground/60">Daily usage</span>
             )}
           </span>
         </div>
@@ -73,7 +82,7 @@ export function CreditMeter({ credits, onUpgradeClick }) {
         </div>
       )}
 
-      {/* Upgrade nudge — only shown for free plan when credits are low */}
+      {/* Upgrade nudge — only shown for free plan when usage is low */}
       {plan === 'free' && (low || empty) && (
         <motion.button
           initial={{ opacity: 0 }}
