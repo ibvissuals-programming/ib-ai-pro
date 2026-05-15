@@ -5,6 +5,10 @@
  *   - HMAC-SHA256 with JWT_SECRET env var
  *   - Format: base64url(JSON payload) + "." + base64url(HMAC signature)
  *   - 30-day expiry
+ *
+ * recoverySession flag:
+ *   true  = issued via CEO recovery key — ONLY allows POST /api/auth/change-password
+ *   false = normal authenticated session — full access
  */
 import { createHmac, timingSafeEqual } from "crypto";
 import type { UserRole } from "./userStore";
@@ -19,6 +23,7 @@ export interface TokenPayload {
   userId: string;
   username: string;
   role: UserRole;
+  recoverySession: boolean; // true = restricted to password change only
   iat: number; // issued at (Unix ms)
   exp: number; // expires at (Unix ms)
 }

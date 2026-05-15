@@ -26,7 +26,7 @@ const router = Router();
 // ── GET /api/credits/:username ────────────────────────────────────────────────
 
 router.get("/credits/:username", (req: Request, res: Response) => {
-  const username = req.params.username?.trim().toLowerCase();
+  const username = (Array.isArray(req.params.username) ? req.params.username[0] : req.params.username)?.trim().toLowerCase();
 
   if (!username || username.length > 60) {
     res.status(400).json({ error: "Invalid username" });

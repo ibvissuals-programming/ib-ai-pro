@@ -1,8 +1,10 @@
 /**
  * Auth middleware — IB AI Assistant.
  *
- * requireAuth: strict — returns 401 if no valid token.
- * optionalAuth: soft — attaches req.user if token valid, passes through if not.
+ * requireAuth:       strict — returns 401 if no valid token. Allows recovery sessions.
+ * requireNormalAuth: strict — returns 401 if no valid token, 403 if recoverySession.
+ *                    Use on all protected routes EXCEPT POST /api/auth/change-password.
+ * optionalAuth:      soft — attaches req.user if token valid, passes through if not.
  *
  * Token is extracted from: Authorization: Bearer <token>
  */
@@ -28,7 +30,7 @@ function extractToken(req: Request): string | null {
   return token.length > 0 ? token : null;
 }
 
-// ── Strict middleware ─────────────────────────────────────────────────────────
+// ── Strict middleware (allows recovery sessions) ──────────────────────────────
 
 export function requireAuth(
   req: Request,
@@ -52,6 +54,46 @@ export function requireAuth(
       code: "TOKEN_INVALID",
     });
   }
+}
+
+// ── Normal-session-only middleware (blocks recovery sessions) ─────────────────
+//
+// Recovery sessions (recoverySession: true in JWT) are restricted to
+// POST /api/auth/change-password only. All other protected routes must
+// use this middleware to enforce password rotation before full access.
+
+export function requireNormalAuth(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  const token = extractToken(req);
+  if (!token) {
+    res.status(401).json({
+      error: "Authentication required",
+      code: "UNAUTHENTICATED",
+    });
+    return;
+  }
+  let payload: TokenPayload;
+  try {
+    payload = verifyToken(token);
+  } catch {
+    res.status(401).json({
+      error: "Invalid or expired session — please log in again",
+      code: "TOKEN_INVALID",
+    });
+    return;
+  }
+  if (payload.recoverySession) {
+    res.status(403).json({
+      error: "Password change required",
+      code: "PASSWORD_CHANGE_REQUIRED",
+    });
+    return;
+  }
+  req.user = payload;
+  next();
 }
 
 // ── Soft middleware ───────────────────────────────────────────────────────────

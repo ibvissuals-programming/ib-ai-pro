@@ -2,23 +2,26 @@
  * Image generation + editing routes — IB AI Assistant
  *
  * POST /api/image/generate  — text-to-image via FLUX (Pollinations)
- * POST /api/image/edit      — image-to-image via Pollinations regeneration
+ * POST /api/image/edit      — image-to-image (true img2img or grounded fallback)
  *
  * ISOLATION: These routes are fully independent of /api/chat and the Gemini
  * integration. They share no state, no handlers, and no response logic.
  *
- * Auth: requireAuth enforced on both routes.
+ * Auth: requireNormalAuth enforced — recovery sessions are blocked (must change
+ *       password first). Image uploads validated: MIME + 10 MB size limit.
  * Credits: image_generate = 3, image_edit = 5 (deducted after success).
  */
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { generateImage, editImage } from "../services/imageGenService";
 import { logger } from "../lib/logger";
-import { requireAuth } from "../middleware/requireAuth";
+import { requireNormalAuth } from "../middleware/requireAuth";
 import { creditGuard, deductRequestCredits, appendCreditHeaders } from "../middleware/creditGuard";
 import { CREDIT_COSTS } from "../lib/userStore";
 
 const router = Router();
+
+const MAX_IMAGE_B64_CHARS = 14_000_000; // ~10 MB decoded
 
 // ── Validation schemas ────────────────────────────────────────────────────────
 
@@ -27,7 +30,7 @@ const GenerateSchema = z.object({
 });
 
 const EditSchema = z.object({
-  image: z.string().min(1, "Image is required"),
+  image: z.string().min(10, "Image is required"),
   prompt: z
     .string()
     .min(1, "Edit instruction is required")
@@ -38,7 +41,7 @@ const EditSchema = z.object({
 
 router.post(
   "/image/generate",
-  requireAuth,
+  requireNormalAuth,
   creditGuard(CREDIT_COSTS.image_generate),
   async (req: Request, res: Response) => {
     const parsed = GenerateSchema.safeParse(req.body);
@@ -67,7 +70,20 @@ router.post(
 
 router.post(
   "/image/edit",
-  requireAuth,
+  requireNormalAuth,
+  (req: Request, res: Response, next) => {
+    // 413 guard: check base64 payload size before creditGuard or heavy processing
+    const body = req.body as { image?: unknown };
+    if (typeof body.image === "string" && body.image.length > MAX_IMAGE_B64_CHARS) {
+      logger.warn(
+        { chars: body.image.length },
+        "[imageEdit] edit rejected — payload too large",
+      );
+      res.status(413).json({ error: "Payload Too Large — image exceeds 10 MB" });
+      return;
+    }
+    next();
+  },
   creditGuard(CREDIT_COSTS.image_edit),
   async (req: Request, res: Response) => {
     const parsed = EditSchema.safeParse(req.body);
@@ -86,7 +102,12 @@ router.post(
     } catch (err: unknown) {
       logger.error({ err }, "[imageGen] edit failed");
       const message = err instanceof Error ? err.message : "Image editing failed";
-      res.status(503).json({ error: message });
+      // Preserve 413 status from service layer if thrown with statusCode
+      const status =
+        err instanceof Error && (err as Error & { statusCode?: number }).statusCode === 413
+          ? 413
+          : 503;
+      res.status(status).json({ error: message });
     }
   },
 );

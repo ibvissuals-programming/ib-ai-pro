@@ -2,13 +2,15 @@
  * User store — IB AI Assistant persistent identity system.
  *
  * Replaces the localStorage-based auth with a server-side user database.
- * Stores users to disk via atomic JSON writes (same pattern as credits.ts).
+ * Stores users to disk via atomic JSON writes (write tmp → fsync → rename).
  *
  * Architecture:
  *   - Passwords hashed with Node.js crypto.scryptSync (no external deps)
  *   - UUIDs via crypto.randomUUID()
  *   - CEO role assigned at signup/login if username matches CEO_USERNAME env var
  *   - Credits stored on the user record; 40/24h rolling window for free users
+ *   - Write mutex: Promise chain prevents concurrent file writes
+ *   - Schema validation on load: invalid/duplicate records are repaired + backed up
  */
 import { randomUUID, scryptSync, timingSafeEqual, randomBytes } from "crypto";
 import { promises as fs } from "fs";
@@ -61,6 +63,10 @@ export type CreditFeature = keyof typeof CREDIT_COSTS;
 const store = new Map<string, User>(); // keyed by userId
 let saveScheduled = false;
 
+// ── Write mutex — Promise chain prevents concurrent file writes ───────────────
+
+let persistChain: Promise<void> = Promise.resolve();
+
 // ── Password helpers ──────────────────────────────────────────────────────────
 
 function hashPassword(password: string): string {
@@ -82,17 +88,65 @@ function verifyPassword(password: string, stored: string): boolean {
   }
 }
 
-// ── Persistence ───────────────────────────────────────────────────────────────
+// ── Schema validation ─────────────────────────────────────────────────────────
+
+function isValidUserRecord(u: unknown): u is User {
+  if (!u || typeof u !== "object") return false;
+  const r = u as Record<string, unknown>;
+  return (
+    typeof r["id"] === "string" && r["id"].length > 0 &&
+    typeof r["username"] === "string" && r["username"].length > 0 &&
+    typeof r["passwordHash"] === "string" && (r["passwordHash"] as string).includes(":") &&
+    ["free", "premium", "ceo"].includes(r["role"] as string) &&
+    typeof r["credits"] === "number" &&
+    typeof r["lastReset"] === "number" &&
+    typeof r["createdAt"] === "number"
+  );
+}
+
+// ── Corruption backup ─────────────────────────────────────────────────────────
+
+async function backupCorruptedFile(): Promise<void> {
+  try {
+    const timestamp = Date.now();
+    const backupPath = USERS_FILE.replace(".json", `.corrupt.${timestamp}.json`);
+    await fs.copyFile(USERS_FILE, backupPath);
+    logger.warn({ backupPath }, "[userStore] backup created");
+  } catch (backupErr) {
+    logger.error({ backupErr }, "[userStore] Failed to create corruption backup");
+  }
+}
+
+// ── Atomic persistence with mutex + fsync ─────────────────────────────────────
 
 async function persistStore(): Promise<void> {
+  // Chain onto the previous write — guarantees serial execution
+  const prev = persistChain;
+  let resolveChain!: () => void;
+  persistChain = new Promise<void>((r) => { resolveChain = r; });
+
   try {
+    await prev; // wait for any in-progress write to finish
+
     await fs.mkdir(DATA_DIR, { recursive: true });
     const data = JSON.stringify(Array.from(store.values()), null, 2);
     const tmp = USERS_FILE + ".tmp";
-    await fs.writeFile(tmp, data, "utf8");
+
+    // Open for write, fsync before rename to guarantee crash safety
+    const fh = await fs.open(tmp, "w");
+    try {
+      await fh.writeFile(data, "utf8");
+      await fh.datasync(); // flush to disk before rename
+    } finally {
+      await fh.close();
+    }
+
     await fs.rename(tmp, USERS_FILE);
+    logger.info("[userStore] atomic write success");
   } catch (err) {
     logger.error({ err }, "[userStore] Failed to persist");
+  } finally {
+    resolveChain();
   }
 }
 
@@ -105,20 +159,75 @@ function scheduleSave(): void {
   });
 }
 
+// ── Load with schema validation ───────────────────────────────────────────────
+
 export async function loadUserStore(): Promise<void> {
+  let raw: string;
   try {
-    const data = await fs.readFile(USERS_FILE, "utf8");
-    const users: User[] = JSON.parse(data);
-    for (const user of users) {
-      store.set(user.id, user);
-    }
-    logger.info({ count: store.size }, "[userStore] Loaded users");
+    raw = await fs.readFile(USERS_FILE, "utf8");
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       logger.info("[userStore] No users file — starting fresh");
-    } else {
-      logger.error({ err }, "[userStore] Failed to load users");
+      return;
     }
+    logger.error({ err }, "[userStore] Failed to read users file");
+    return;
+  }
+
+  // ── Validate JSON ─────────────────────────────────────────────────────────
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    logger.error("[userStore] corruption detected — invalid JSON");
+    await backupCorruptedFile();
+    return;
+  }
+
+  if (!Array.isArray(parsed)) {
+    logger.error("[userStore] corruption detected — root is not an array");
+    await backupCorruptedFile();
+    return;
+  }
+
+  // ── Validate individual records ───────────────────────────────────────────
+  const valid: User[] = [];
+  let invalidCount = 0;
+  for (const u of parsed) {
+    if (isValidUserRecord(u)) {
+      valid.push(u);
+    } else {
+      invalidCount++;
+      logger.warn({ record: JSON.stringify(u).slice(0, 80) }, "[userStore] skipping invalid record");
+    }
+  }
+
+  // ── Deduplicate by id and username (keep first occurrence) ────────────────
+  const seenIds = new Set<string>();
+  const seenUsernames = new Set<string>();
+  let dupCount = 0;
+  for (const u of valid) {
+    if (seenIds.has(u.id) || seenUsernames.has(u.username)) {
+      logger.warn({ username: u.username }, "[userStore] duplicate detected — skipping");
+      dupCount++;
+      continue;
+    }
+    seenIds.add(u.id);
+    seenUsernames.add(u.username);
+    store.set(u.id, u);
+  }
+
+  logger.info(
+    { count: store.size, invalid: invalidCount, duplicates: dupCount },
+    "[userStore] Loaded users",
+  );
+
+  // ── If any corruption found: backup + persist cleaned version ─────────────
+  if (invalidCount > 0 || dupCount > 0) {
+    logger.warn("[userStore] corruption detected — backing up and repairing");
+    await backupCorruptedFile();
+    await persistStore();
+    logger.info("[userStore] repaired file persisted");
   }
 }
 
@@ -316,11 +425,14 @@ export function setUserRole(userId: string, role: UserRole): void {
  * changeUserPassword() — safely update a user's password hash.
  *
  * - Rehashes using scrypt (same algorithm as createUser)
- * - Persists to disk atomically via scheduleSave
+ * - Persists to disk atomically with mutex (no race conditions)
  * - Never stores plaintext
- * - Returns false if user not found
+ * - Returns false if user not found or password too short
  */
-export function changeUserPassword(userId: string, newPassword: string): boolean {
+export async function changeUserPassword(
+  userId: string,
+  newPassword: string,
+): Promise<boolean> {
   const user = store.get(userId);
   if (!user) {
     logger.warn({ userId }, "[userStore] changeUserPassword — user not found");
@@ -331,7 +443,8 @@ export function changeUserPassword(userId: string, newPassword: string): boolean
     return false;
   }
   user.passwordHash = hashPassword(newPassword);
-  scheduleSave();
+  // Persist immediately and await (not deferred) for password changes
+  await persistStore();
   logger.info({ userId, username: user.username }, "[userStore] Password changed");
   return true;
 }

@@ -1,9 +1,14 @@
 /**
  * Auth routes — IB AI Assistant persistent identity system.
  *
- * POST /api/auth/register  — create a new account
- * POST /api/auth/login     — authenticate and receive a token
- * GET  /api/auth/me        — return current user from token
+ * POST /api/auth/register        — create a new account
+ * POST /api/auth/login           — authenticate and receive a token (PATH A or B)
+ * POST /api/auth/change-password — update password (works for recovery sessions)
+ * GET  /api/auth/me              — return current user from token (normal sessions only)
+ *
+ * JWT claims:
+ *   recoverySession: true  — issued via recovery key, ONLY /api/auth/change-password allowed
+ *   recoverySession: false — full normal session access
  */
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
@@ -19,7 +24,7 @@ import {
   RESET_INTERVAL_MS,
 } from "../lib/userStore";
 import { signToken } from "../lib/token";
-import { requireAuth } from "../middleware/requireAuth";
+import { requireAuth, requireNormalAuth } from "../middleware/requireAuth";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -61,6 +66,7 @@ router.post("/auth/register", (req: Request, res: Response) => {
     userId: user.id,
     username: user.username,
     role: user.role,
+    recoverySession: false,
   });
 
   logger.info({ username: user.username, role: user.role }, "[auth] Registered");
@@ -78,12 +84,14 @@ router.post("/auth/register", (req: Request, res: Response) => {
 //   PATH A — Normal login (all users):
 //     Body: { username, password }
 //     Validates password against scrypt hash in DB.
+//     Issues: recoverySession: false
 //
 //   PATH B — CEO recovery (CEO only):
 //     Header: x-ceo-recovery-key: <CEO_RECOVERY_KEY env var>
 //     Body:   { username }  (password field ignored / not required)
 //     Bypasses password check entirely.
 //     Rejected immediately if username !== CEO_USERNAME or key doesn't match.
+//     Issues: recoverySession: true  → ONLY /api/auth/change-password is permitted.
 //     Never available to normal users under any circumstance.
 
 router.post("/auth/login", async (req: Request, res: Response) => {
@@ -127,21 +135,23 @@ router.post("/auth/login", async (req: Request, res: Response) => {
       return;
     }
 
+    // Recovery token: restricted to change-password only
     const token = signToken({
       userId: user.id,
       username: user.username,
       role: user.role,
+      recoverySession: true,
     });
 
     logger.info(
       { username: user.username, role: user.role },
-      "[auth] CEO login via recovery key",
+      "[auth] recovery session issued",
     );
 
     res.json({
       token,
       user: toPublicUser(user),
-      recoveryLogin: true, // hint to frontend: suggest password reset
+      recoveryLogin: true, // hint to frontend: password rotation required
     });
     return;
   }
@@ -168,6 +178,7 @@ router.post("/auth/login", async (req: Request, res: Response) => {
     userId: user.id,
     username: user.username,
     role: user.role,
+    recoverySession: false,
   });
 
   logger.info({ username: user.username, role: user.role }, "[auth] Login");
@@ -180,47 +191,74 @@ router.post("/auth/login", async (req: Request, res: Response) => {
 
 // ── POST /api/auth/change-password ────────────────────────────────────────────
 //
-// Authenticated users can change their own password.
-// CEO recovery sessions can use this to set a fresh permanent password
-// after logging in via the recovery key (bypassing the old unknown password).
+// Works for both normal and recovery sessions (uses requireAuth, not requireNormalAuth).
+//
+// Recovery session flow:
+//   1. CEO logs in via recovery key → gets recoverySession: true JWT
+//   2. POST /api/auth/change-password with new password
+//   3. Server issues a fresh recoverySession: false JWT in the response
+//   4. Frontend replaces the stored token — full access restored
 //
 // Body: { newPassword: string (min 6) }
-// Auth: requireAuth (valid JWT in Authorization header)
+// Auth: requireAuth (valid JWT — both session types accepted)
 
 const ChangePasswordSchema = z.object({
   newPassword: z.string().min(6, "Password must be at least 6 characters").max(128),
 });
 
-router.post("/auth/change-password", requireAuth, (req: Request, res: Response) => {
-  const parsed = ChangePasswordSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({
-      error: "Invalid request",
-      details: parsed.error.flatten(),
-    });
-    return;
-  }
+router.post(
+  "/auth/change-password",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    const parsed = ChangePasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: "Invalid request",
+        details: parsed.error.flatten(),
+      });
+      return;
+    }
 
-  const { newPassword } = parsed.data;
-  const userId = req.user!.userId;
+    const { newPassword } = parsed.data;
+    const userId = req.user!.userId;
+    const wasRecoverySession = req.user!.recoverySession;
 
-  const ok = changeUserPassword(userId, newPassword);
-  if (!ok) {
-    res.status(404).json({ error: "User not found" });
-    return;
-  }
+    const ok = await changeUserPassword(userId, newPassword);
+    if (!ok) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
 
-  logger.info(
-    { userId, username: req.user!.username },
-    "[auth] Password changed successfully",
-  );
+    logger.info(
+      { userId, username: req.user!.username, wasRecoverySession },
+      "[auth] password rotation completed",
+    );
 
-  res.json({ success: true, message: "Password updated successfully" });
-});
+    // If this was a recovery session, issue a fresh normal JWT immediately.
+    // The client must replace its stored token with this new one.
+    if (wasRecoverySession) {
+      const freshToken = signToken({
+        userId: req.user!.userId,
+        username: req.user!.username,
+        role: req.user!.role,
+        recoverySession: false,
+      });
+      res.json({
+        success: true,
+        message: "Password updated successfully",
+        token: freshToken, // replace the recovery token
+      });
+      return;
+    }
+
+    res.json({ success: true, message: "Password updated successfully" });
+  },
+);
 
 // ── GET /api/auth/me ──────────────────────────────────────────────────────────
+// requireNormalAuth blocks recovery sessions — they must change password first.
 
-router.get("/auth/me", requireAuth, (req: Request, res: Response) => {
+router.get("/auth/me", requireNormalAuth, (req: Request, res: Response) => {
   const user = getUserById(req.user!.userId);
   if (!user) {
     res.status(404).json({ error: "User not found" });

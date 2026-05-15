@@ -6,7 +6,9 @@
  *
  * Public API (unchanged interface for useAuth.js compatibility):
  *   signup(username, password) → { success, error? }
- *   login(username, password)  → { success, error? }
+ *   login(username, password)  → { success, error?, recoveryLogin? }
+ *   recoveryLogin(username, key) → { success, error?, recoveryLogin? }
+ *   changePassword(newPassword) → { success, error? }
  *   logout()
  *   getCurrentUser()           → { id, username, role, credits } | null
  *   isAuthenticated()          → boolean
@@ -134,7 +136,11 @@ export async function recoveryLogin(username, recoveryKey) {
 
 /**
  * changePassword() — change the current user's password.
- * Requires a valid session token.
+ * Requires a valid session token (including recovery sessions).
+ *
+ * After a successful recovery-session password change, the server issues
+ * a fresh normal JWT. This function saves it, replacing the restricted token.
+ *
  * Returns { success, error? }
  */
 export async function changePassword(newPassword) {
@@ -153,6 +159,10 @@ export async function changePassword(newPassword) {
     const data = await res.json();
     if (!res.ok) {
       return { success: false, error: data.error || 'Password change failed' };
+    }
+    // If the server issued a fresh normal token (after recovery session), save it
+    if (data.token) {
+      saveToken(data.token);
     }
     return { success: true };
   } catch (err) {
@@ -183,6 +193,9 @@ export function isAuthenticated() {
  * Verify the current token against the server and refresh the cached user.
  * Call this on app mount to ensure the session is still valid.
  *
+ * NOTE: Recovery sessions will get a 403 from /api/auth/me (which uses
+ * requireNormalAuth). This is correct — they should be redirected to change-password.
+ *
  * @returns {Promise<{id, username, role, credits}|null>}
  */
 export async function verifySession() {
@@ -194,6 +207,11 @@ export async function verifySession() {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) {
+      // 403 = recovery session (password change required) — keep token but return null
+      // so the app can redirect to the password-change flow
+      if (res.status === 403) {
+        return null;
+      }
       clearToken();
       return null;
     }
