@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
+import { Link, useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Trash2, Cpu, MessageSquare, Check, X, PenLine, Search } from 'lucide-react';
+import { Plus, Trash2, Cpu, MessageSquare, Check, X, PenLine, Search, ImageIcon } from 'lucide-react';
 import { CreditMeter } from './CreditMeter';
 
 function HighlightedText({ text, query }) {
@@ -251,6 +252,17 @@ export function Sidebar({ chats, activeChatId, onSwitch, onNew, onDelete, onRena
             </AnimatePresence>
           </>
         )}
+      </div>
+
+      {/* Image Tools nav link */}
+      <div className="px-3 pb-1">
+        <Link to="/image-tools">
+          <a className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-all border border-transparent hover:border-border/40 group">
+            <ImageIcon size={14} className="shrink-0 group-hover:text-primary transition-colors" />
+            <span className="font-medium">AI Image Tools</span>
+            <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">NEW</span>
+          </a>
+        </Link>
       </div>
 
       {/* Credit Meter — above user footer */}

@@ -5,6 +5,7 @@ import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 import ChatApp from "@/pages/ChatApp";
 import Landing from "@/pages/Landing";
+import ImageTools from "@/pages/ImageTools";
 import NotFound from "@/pages/not-found";
 import { ProtectedRoute } from "@/auth/ProtectedRoute";
 import { isAuthenticated } from "@/auth/authService";
@@ -21,6 +22,11 @@ function Router() {
       <Route path="/chat">
         <ProtectedRoute>
           <ChatApp />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/image-tools">
+        <ProtectedRoute>
+          <ImageTools />
         </ProtectedRoute>
       </Route>
       <Route component={NotFound} />
