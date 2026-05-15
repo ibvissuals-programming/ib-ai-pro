@@ -10,6 +10,7 @@ import { z } from "zod";
 import {
   createUser,
   authenticateUser,
+  authenticateCeoByRecoveryKey,
   getUserById,
   toPublicUser,
   CREDIT_COSTS,
@@ -70,8 +71,81 @@ router.post("/auth/register", (req: Request, res: Response) => {
 });
 
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
+//
+// Two authentication paths:
+//
+//   PATH A — Normal login (all users):
+//     Body: { username, password }
+//     Validates password against scrypt hash in DB.
+//
+//   PATH B — CEO recovery (CEO only):
+//     Header: x-ceo-recovery-key: <CEO_RECOVERY_KEY env var>
+//     Body:   { username }  (password field ignored / not required)
+//     Bypasses password check entirely.
+//     Rejected immediately if username !== CEO_USERNAME or key doesn't match.
+//     Never available to normal users under any circumstance.
 
-router.post("/auth/login", (req: Request, res: Response) => {
+router.post("/auth/login", async (req: Request, res: Response) => {
+  const incomingRecoveryKey = req.headers["x-ceo-recovery-key"];
+
+  // ── PATH B: CEO recovery key flow ──────────────────────────────────────────
+  if (incomingRecoveryKey) {
+    const configuredKey = process.env["CEO_RECOVERY_KEY"];
+
+    // Recovery key must be configured server-side — if not, refuse with same
+    // generic error to avoid leaking that recovery exists.
+    if (!configuredKey || typeof incomingRecoveryKey !== "string") {
+      res.status(401).json({ error: "Invalid username or password" });
+      return;
+    }
+
+    // Timing-safe comparison to prevent timing attacks on the recovery key.
+    const { timingSafeEqual } = await import("crypto");
+    const a = Buffer.from(incomingRecoveryKey);
+    const b = Buffer.from(configuredKey);
+    const keysMatch =
+      a.length === b.length && timingSafeEqual(a, b);
+
+    if (!keysMatch) {
+      logger.warn({ ip: req.ip }, "[auth] CEO recovery key mismatch");
+      res.status(401).json({ error: "Invalid username or password" });
+      return;
+    }
+
+    // Key is valid — extract username from body (password not required).
+    const username = (req.body as Record<string, unknown>)?.username;
+    if (typeof username !== "string" || username.length < 1) {
+      res.status(400).json({ error: "Username required" });
+      return;
+    }
+
+    const user = authenticateCeoByRecoveryKey(username);
+    if (!user) {
+      // username wasn't the CEO — reject with generic error
+      res.status(401).json({ error: "Invalid username or password" });
+      return;
+    }
+
+    const token = signToken({
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+    });
+
+    logger.info(
+      { username: user.username, role: user.role },
+      "[auth] CEO login via recovery key",
+    );
+
+    res.json({
+      token,
+      user: toPublicUser(user),
+      recoveryLogin: true, // hint to frontend: suggest password reset
+    });
+    return;
+  }
+
+  // ── PATH A: Normal password login (all users) ───────────────────────────────
   const parsed = LoginSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({

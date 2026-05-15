@@ -56,3 +56,4 @@ externalPort = 80
 [userenv.shared]
 JWT_SECRET = "cfbdb2c8202fcd48c52505b9f16dacf05bbc925b3489013920bbfd3f5ef17682"
 CEO_USERNAME = "ibaiceo"
+CEO_RECOVERY_KEY = "df9181a1faa38a8013ec319aba9d1086c26dc4927abc8dc8fb80f64c304695ad498abb88"

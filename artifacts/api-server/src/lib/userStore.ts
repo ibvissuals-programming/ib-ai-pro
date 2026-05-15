@@ -218,13 +218,73 @@ export function authenticateUser(
   if (!user) return null;
   if (!verifyPassword(password, user.passwordHash)) return null;
 
-  // Apply CEO override at every login (env var may be set after account creation)
+  // Apply CEO role at every login — env var may be set after account creation
   if (isCeoUsername(user.username) && user.role !== "ceo") {
     user.role = "ceo";
     scheduleSave();
     logger.info({ username: user.username }, "[userStore] CEO role applied");
   }
 
+  return user;
+}
+
+/**
+ * authenticateCeoByRecoveryKey()
+ *
+ * PATH B — zero-lockout CEO recovery.
+ * Bypasses password check ONLY when:
+ *   1. username matches CEO_USERNAME env var
+ *   2. caller has already verified the recovery key matches CEO_RECOVERY_KEY
+ *
+ * This function NEVER accepts a recovery key itself — that check must be done
+ * by the caller (route layer) so the key never enters this module.
+ *
+ * If the CEO account doesn't exist yet (e.g. fresh deploy), it will be
+ * bootstrapped with a placeholder hash; caller should prompt password reset.
+ *
+ * Normal users: always returns null — no bypass possible.
+ */
+export function authenticateCeoByRecoveryKey(
+  username: string,
+): User | null {
+  if (!isCeoUsername(username)) {
+    logger.warn(
+      { username },
+      "[userStore] Recovery key used for non-CEO username — rejected",
+    );
+    return null;
+  }
+
+  let user = getUserByUsername(username);
+
+  // Bootstrap CEO if somehow missing (e.g. fresh deploy, corrupted DB)
+  if (!user) {
+    const placeholder = `recovery-bootstrap-${randomUUID()}`;
+    user = {
+      id: randomUUID(),
+      username: username.trim().toLowerCase(),
+      passwordHash: hashPassword(placeholder), // unknown password until set
+      role: "ceo",
+      credits: FREE_CREDITS,
+      lastReset: Date.now(),
+      createdAt: Date.now(),
+    };
+    store.set(user.id, user);
+    scheduleSave();
+    logger.warn(
+      { username },
+      "[userStore] CEO bootstrapped via recovery key — set a real password",
+    );
+  }
+
+  // Always ensure role is ceo regardless of stored value
+  if (user.role !== "ceo") {
+    user.role = "ceo";
+    scheduleSave();
+    logger.info({ username }, "[userStore] CEO role corrected via recovery");
+  }
+
+  logger.info({ username }, "[userStore] CEO authenticated via recovery key");
   return user;
 }
 
