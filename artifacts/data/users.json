@@ -11,7 +11,7 @@
   {
     "id": "e66361c6-3db4-4309-af86-dd009485add3",
     "username": "ibaiceo",
-    "passwordHash": "99fb3ed335a8579d692ea7b9c6fdc33a:a38e36546f0828af3135ce23d946f98b159260493255b610dc023313dabb7cdcb1ae39a8e7abea5cb100aca14c482b53c5ca0b8c0a7406d285425681ca6a951f",
+    "passwordHash": "7a974bd5a01e593d11635e70afd378a2:7a0a1cdea4485b9a959f4144ebdb5142a529717939b0290e0a1b733eb2364976f7fdcff8a60f5b4a15aaf3e1d1347021142eae93a664ecd0a6320912a04e376c",
     "role": "ceo",
     "credits": 40,
     "lastReset": 1778822777673,
@@ -34,5 +34,95 @@
     "credits": 40,
     "lastReset": 1778854633718,
     "createdAt": 1778854633718
+  },
+  {
+    "id": "222b03cd-9c84-4055-88ad-3cecf104d5d1",
+    "username": "rltest01778855705318",
+    "passwordHash": "ed51f8e88622bdf94a1836c13345d60e:6621d2f659f83c7e3d99c8b37e269ac067b7bea0d9559e9e7711d1f19f987d64fd688d88bcf3ab00b23c8ba764be56c9501fba9c4df30303b2e29c37f6589bf0",
+    "role": "free",
+    "credits": 40,
+    "lastReset": 1778855705368,
+    "createdAt": 1778855705368
+  },
+  {
+    "id": "aec9129e-d7e0-4f47-bebd-c5032768eedf",
+    "username": "rltest11778855705371",
+    "passwordHash": "e17b0fe661b44a99e7ce87f539f17336:edeaf26cce2bc2d7b0189b0eef386f80ad6f9348c53ab2ed3153949f2774127a7f9f3e1e5373ea5e0046b7f8e6001a74ae5865b156b45a977e97aa5163358fc3",
+    "role": "free",
+    "credits": 40,
+    "lastReset": 1778855705417,
+    "createdAt": 1778855705417
+  },
+  {
+    "id": "5f5a1c16-6c2b-460a-bda7-e2a01e06f031",
+    "username": "rltest21778855705418",
+    "passwordHash": "b73f46d6ffd32fe91aefb3e5492d0eae:0869eb461ef7eada0db93fc7239cecc694bef0e8e1d57667d0a99d8d186c1597f852f2d3a92bdfe3ebab6bcb91cbbffc82fcaf4b543f8595985c93b5bafbce56",
+    "role": "free",
+    "credits": 40,
+    "lastReset": 1778855705455,
+    "createdAt": 1778855705455
+  },
+  {
+    "id": "2f9aeb04-1925-4889-8dda-888959ed91e5",
+    "username": "rltest31778855705457",
+    "passwordHash": "d42b82dcaf9695fd582e5d89511c9a98:bfbacbeb4bb7803d40140df794f6eb7df0815c4c060852e8bada8893e4a0ae36bedac022e61eb9893ad65326ae7894f2025af670f43c8aa7576779c680f287c5",
+    "role": "free",
+    "credits": 40,
+    "lastReset": 1778855705494,
+    "createdAt": 1778855705494
+  },
+  {
+    "id": "08af9312-a025-49e8-8ed7-8224e2d0ffa9",
+    "username": "rltest41778855705495",
+    "passwordHash": "7b93c809c4687289634004c7e3cebece:1310b89bf119c7a823c63c6cf326ab50a6ac2217af449c31d1e6f6c97fd426c85b053121e1ff65765de18b4c7e37a3b06228cff210ee2d8aeef3fbc5b5853b54",
+    "role": "free",
+    "credits": 40,
+    "lastReset": 1778855705547,
+    "createdAt": 1778855705547
+  },
+  {
+    "id": "c8386eac-5c71-4283-bfac-b115b23756f5",
+    "username": "rrl0z1778856016300",
+    "passwordHash": "4a0d82ad6b83597a7ce5f6be5364ffff:f58625ebcb688b25bfe95c445019dc03f7fc973b57b098019e96de15dcd2f21e6cf7146bdf9b2dd9e9e6c2cf461466bd5a93b60129b2bcca74b536f098173beb",
+    "role": "free",
+    "credits": 40,
+    "lastReset": 1778856016363,
+    "createdAt": 1778856016363
+  },
+  {
+    "id": "f0c3e831-1556-420b-a4cf-49a82580ebcc",
+    "username": "rrl1z1778856016364",
+    "passwordHash": "7517cc1c228369c182ac64cc508546a1:77100a3ce201f1d9dff0129e83d285ad2f6ca92245824007f416aae61535094284821ed5936e31ab25bea9e01951175514d7ee2f0df2240657fceed5c4c497f8",
+    "role": "free",
+    "credits": 40,
+    "lastReset": 1778856016403,
+    "createdAt": 1778856016403
+  },
+  {
+    "id": "0601e454-e931-4d69-8451-a7307e2b642e",
+    "username": "rrl2z1778856016404",
+    "passwordHash": "5a77a59846691a1e97427bff85de3e9b:0c8dd943e89108b0539100c6684811717963f5f91af0e58386ae02f583041b6caef8e623863a89e80919fa48abdb45816f0a2ffc1652a8e12b47c46284989840",
+    "role": "free",
+    "credits": 40,
+    "lastReset": 1778856016457,
+    "createdAt": 1778856016457
+  },
+  {
+    "id": "22ff31cd-76e7-4748-b3c2-e95b9c115dd4",
+    "username": "rrl3z1778856016458",
+    "passwordHash": "25b1870be03f03fd49eaca755568a96b:3f6a217125c54362116dead8dc1fc4a932382f8de3cf17785b393b65674edaada63eee602169d7a4b7d30087d30b1007f345f07b9a899be2da2f049652cbc122",
+    "role": "free",
+    "credits": 40,
+    "lastReset": 1778856016494,
+    "createdAt": 1778856016494
+  },
+  {
+    "id": "c3cee2ab-4e2e-49f4-9d4c-e17f617ac4bb",
+    "username": "rrl4z1778856016496",
+    "passwordHash": "5cc048e320731eafdee188e1621ed584:689df293a56846df74d1323f767e02f34fa27e90b37ff71292e4f7311ac26def22a7a520f9d940c076d6b898b64609cdc1d830890eb816808c1243479fd9523e",
+    "role": "free",
+    "credits": 40,
+    "lastReset": 1778856016550,
+    "createdAt": 1778856016550
   }
 ]

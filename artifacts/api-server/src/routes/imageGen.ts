@@ -10,6 +10,7 @@
  * Auth: requireNormalAuth enforced — recovery sessions are blocked (must change
  *       password first). Image uploads validated: MIME + 10 MB size limit.
  * Credits: image_generate = 3, image_edit = 5 (deducted after success).
+ * Rate limit: 10 generate / 10 edit per minute per IP.
  */
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
@@ -17,6 +18,7 @@ import { generateImage, editImage } from "../services/imageGenService";
 import { logger } from "../lib/logger";
 import { requireNormalAuth } from "../middleware/requireAuth";
 import { creditGuard, deductRequestCredits, appendCreditHeaders } from "../middleware/creditGuard";
+import { rateLimit } from "../middleware/rateLimit";
 import { CREDIT_COSTS } from "../lib/userStore";
 
 const router = Router();
@@ -37,11 +39,35 @@ const EditSchema = z.object({
     .max(500, "Prompt too long"),
 });
 
+// ── User-safe error sanitizer for route layer ─────────────────────────────────
+// The service layer already sanitizes most errors; this catches anything else.
+
+function toRouteError(err: unknown, context: "generate" | "edit"): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  // Already-sanitized messages from service layer pass through unchanged
+  if (
+    msg.includes("Unsupported image type") ||
+    msg.includes("No image supplied") ||
+    msg.includes("Image too large") ||
+    msg.includes("temporarily") ||
+    msg.includes("overloaded") ||
+    msg.includes("Please retry") ||
+    msg.includes("please try again") ||
+    msg.includes("Please try again") ||
+    msg.includes("rate limit")
+  ) {
+    return msg;
+  }
+  // Catch-all for unexpected errors
+  return `Image ${context} failed. Please try again.`;
+}
+
 // ── POST /api/image/generate ──────────────────────────────────────────────────
 
 router.post(
   "/image/generate",
   requireNormalAuth,
+  rateLimit(10, 60_000, "image_generate"),
   creditGuard(CREDIT_COSTS.image_generate),
   async (req: Request, res: Response) => {
     const parsed = GenerateSchema.safeParse(req.body);
@@ -59,8 +85,7 @@ router.post(
       res.json({ b64Image, status: "success" });
     } catch (err: unknown) {
       logger.error({ err }, "[imageGen] generate failed");
-      const message =
-        err instanceof Error ? err.message : "Image generation failed";
+      const message = toRouteError(err, "generate");
       res.status(503).json({ error: message });
     }
   },
@@ -71,6 +96,7 @@ router.post(
 router.post(
   "/image/edit",
   requireNormalAuth,
+  rateLimit(10, 60_000, "image_edit"),
   (req: Request, res: Response, next) => {
     // 413 guard: check base64 payload size before creditGuard or heavy processing
     const body = req.body as { image?: unknown };
@@ -101,7 +127,7 @@ router.post(
       res.json({ b64Image, status: "success" });
     } catch (err: unknown) {
       logger.error({ err }, "[imageGen] edit failed");
-      const message = err instanceof Error ? err.message : "Image editing failed";
+      const message = toRouteError(err, "edit");
       // Preserve 413 status from service layer if thrown with statusCode
       const status =
         err instanceof Error && (err as Error & { statusCode?: number }).statusCode === 413

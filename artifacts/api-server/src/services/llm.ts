@@ -79,10 +79,14 @@ export async function createChatStream(
     } catch (err) {
       attempt++;
       if (!isRetryable(err) || attempt >= MAX_RETRIES) {
+        logger.warn({ provider: "gemini" }, "[ai] provider unavailable");
         throw err;
       }
       const backoff = RETRY_DELAY_MS * 2 ** (attempt - 1);
-      logger.warn({ attempt, backoff }, "Gemini transient error — retrying");
+      logger.warn(
+        { attempt, backoff, provider: "gemini" },
+        "[ai] retry attempt",
+      );
       await delay(backoff);
     }
   }

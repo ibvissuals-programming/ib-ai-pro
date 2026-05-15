@@ -9,6 +9,10 @@
  * JWT claims:
  *   recoverySession: true  — issued via recovery key, ONLY /api/auth/change-password allowed
  *   recoverySession: false — full normal session access
+ *
+ * Rate limits:
+ *   register  — 5 per 5 minutes per IP
+ *   login     — 15 per 60 seconds per IP
  */
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
@@ -25,6 +29,7 @@ import {
 } from "../lib/userStore";
 import { signToken } from "../lib/token";
 import { requireAuth, requireNormalAuth } from "../middleware/requireAuth";
+import { rateLimit } from "../middleware/rateLimit";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -43,39 +48,43 @@ const LoginSchema = z.object({
 
 // ── POST /api/auth/register ───────────────────────────────────────────────────
 
-router.post("/auth/register", (req: Request, res: Response) => {
-  const parsed = RegisterSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({
-      error: "Invalid request",
-      details: parsed.error.flatten(),
+router.post(
+  "/auth/register",
+  rateLimit(5, 5 * 60_000, "register"),
+  (req: Request, res: Response) => {
+    const parsed = RegisterSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: "Invalid request",
+        details: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    const { username, password } = parsed.data;
+    const result = createUser(username, password);
+
+    if (!result.success) {
+      res.status(409).json({ error: result.error });
+      return;
+    }
+
+    const { user } = result;
+    const token = signToken({
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+      recoverySession: false,
     });
-    return;
-  }
 
-  const { username, password } = parsed.data;
-  const result = createUser(username, password);
+    logger.info({ username: user.username, role: user.role }, "[auth] Registered");
 
-  if (!result.success) {
-    res.status(409).json({ error: result.error });
-    return;
-  }
-
-  const { user } = result;
-  const token = signToken({
-    userId: user.id,
-    username: user.username,
-    role: user.role,
-    recoverySession: false,
-  });
-
-  logger.info({ username: user.username, role: user.role }, "[auth] Registered");
-
-  res.status(201).json({
-    token,
-    user: toPublicUser(user),
-  });
-});
+    res.status(201).json({
+      token,
+      user: toPublicUser(user),
+    });
+  },
+);
 
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
 //
@@ -94,100 +103,104 @@ router.post("/auth/register", (req: Request, res: Response) => {
 //     Issues: recoverySession: true  → ONLY /api/auth/change-password is permitted.
 //     Never available to normal users under any circumstance.
 
-router.post("/auth/login", async (req: Request, res: Response) => {
-  const incomingRecoveryKey = req.headers["x-ceo-recovery-key"];
+router.post(
+  "/auth/login",
+  rateLimit(15, 60_000, "login"),
+  async (req: Request, res: Response) => {
+    const incomingRecoveryKey = req.headers["x-ceo-recovery-key"];
 
-  // ── PATH B: CEO recovery key flow ──────────────────────────────────────────
-  if (incomingRecoveryKey) {
-    const configuredKey = process.env["CEO_RECOVERY_KEY"];
+    // ── PATH B: CEO recovery key flow ──────────────────────────────────────────
+    if (incomingRecoveryKey) {
+      const configuredKey = process.env["CEO_RECOVERY_KEY"];
 
-    // Recovery key must be configured server-side — if not, refuse with same
-    // generic error to avoid leaking that recovery exists.
-    if (!configuredKey || typeof incomingRecoveryKey !== "string") {
-      res.status(401).json({ error: "Invalid username or password" });
+      // Recovery key must be configured server-side — if not, refuse with same
+      // generic error to avoid leaking that recovery exists.
+      if (!configuredKey || typeof incomingRecoveryKey !== "string") {
+        res.status(401).json({ error: "Invalid username or password" });
+        return;
+      }
+
+      // Timing-safe comparison to prevent timing attacks on the recovery key.
+      const { timingSafeEqual } = await import("crypto");
+      const a = Buffer.from(incomingRecoveryKey);
+      const b = Buffer.from(configuredKey);
+      const keysMatch =
+        a.length === b.length && timingSafeEqual(a, b);
+
+      if (!keysMatch) {
+        logger.warn({ ip: req.ip }, "[auth] CEO recovery key mismatch");
+        res.status(401).json({ error: "Invalid username or password" });
+        return;
+      }
+
+      // Key is valid — extract username from body (password not required).
+      const username = (req.body as Record<string, unknown>)?.username;
+      if (typeof username !== "string" || username.length < 1) {
+        res.status(400).json({ error: "Username required" });
+        return;
+      }
+
+      const user = authenticateCeoByRecoveryKey(username);
+      if (!user) {
+        // username wasn't the CEO — reject with generic error
+        res.status(401).json({ error: "Invalid username or password" });
+        return;
+      }
+
+      // Recovery token: restricted to change-password only
+      const token = signToken({
+        userId: user.id,
+        username: user.username,
+        role: user.role,
+        recoverySession: true,
+      });
+
+      logger.info(
+        { username: user.username, role: user.role },
+        "[auth] recovery session issued",
+      );
+
+      res.json({
+        token,
+        user: toPublicUser(user),
+        recoveryLogin: true, // hint to frontend: password rotation required
+      });
       return;
     }
 
-    // Timing-safe comparison to prevent timing attacks on the recovery key.
-    const { timingSafeEqual } = await import("crypto");
-    const a = Buffer.from(incomingRecoveryKey);
-    const b = Buffer.from(configuredKey);
-    const keysMatch =
-      a.length === b.length && timingSafeEqual(a, b);
-
-    if (!keysMatch) {
-      logger.warn({ ip: req.ip }, "[auth] CEO recovery key mismatch");
-      res.status(401).json({ error: "Invalid username or password" });
+    // ── PATH A: Normal password login (all users) ───────────────────────────────
+    const parsed = LoginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: "Invalid request",
+        details: parsed.error.flatten(),
+      });
       return;
     }
 
-    // Key is valid — extract username from body (password not required).
-    const username = (req.body as Record<string, unknown>)?.username;
-    if (typeof username !== "string" || username.length < 1) {
-      res.status(400).json({ error: "Username required" });
-      return;
-    }
+    const { username, password } = parsed.data;
+    const user = authenticateUser(username, password);
 
-    const user = authenticateCeoByRecoveryKey(username);
     if (!user) {
-      // username wasn't the CEO — reject with generic error
       res.status(401).json({ error: "Invalid username or password" });
       return;
     }
 
-    // Recovery token: restricted to change-password only
     const token = signToken({
       userId: user.id,
       username: user.username,
       role: user.role,
-      recoverySession: true,
+      recoverySession: false,
     });
 
-    logger.info(
-      { username: user.username, role: user.role },
-      "[auth] recovery session issued",
-    );
+    logger.info({ username: user.username, role: user.role }, "[auth] Login");
 
     res.json({
       token,
       user: toPublicUser(user),
-      recoveryLogin: true, // hint to frontend: password rotation required
     });
-    return;
-  }
-
-  // ── PATH A: Normal password login (all users) ───────────────────────────────
-  const parsed = LoginSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({
-      error: "Invalid request",
-      details: parsed.error.flatten(),
-    });
-    return;
-  }
-
-  const { username, password } = parsed.data;
-  const user = authenticateUser(username, password);
-
-  if (!user) {
-    res.status(401).json({ error: "Invalid username or password" });
-    return;
-  }
-
-  const token = signToken({
-    userId: user.id,
-    username: user.username,
-    role: user.role,
-    recoverySession: false,
-  });
-
-  logger.info({ username: user.username, role: user.role }, "[auth] Login");
-
-  res.json({
-    token,
-    user: toPublicUser(user),
-  });
-});
+  },
+);
 
 // ── POST /api/auth/change-password ────────────────────────────────────────────
 //

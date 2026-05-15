@@ -14,6 +14,12 @@
  * MIME validation: only image/png, image/jpeg, image/webp accepted.
  * Size limit: base64 payload must not exceed 10 MB decoded.
  * Response validation: output must match ^data:image/(png|jpeg|jpg|webp);base64,
+ *
+ * PROVIDER RESILIENCE:
+ *   Pollinations: up to 2 retries with exponential backoff on 429/402/503.
+ *   Gemini: timeout guard on every call.
+ *   Observability: [ai] prefix logs for timeout / retry / unavailable events.
+ *   Error messages: all raw provider errors are sanitized before propagation.
  */
 import { logger } from "../lib/logger";
 
@@ -23,7 +29,49 @@ const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB decoded
 const ACCEPTED_MIMES = ["image/png", "image/jpeg", "image/webp"] as const;
 const RESPONSE_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,/;
 
+// ── Pollinations retry config ──────────────────────────────────────────────────
+const MAX_POLLINATIONS_RETRIES = 2; // 2 retries after initial attempt = 3 total
+const POLLINATIONS_RETRY_BASE_MS = 2_000;
+
 type AcceptedMime = (typeof ACCEPTED_MIMES)[number];
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** True when Pollinations returned a status worth retrying */
+function isRetryableStatus(status: number): boolean {
+  return status === 429 || status === 402 || status === 503;
+}
+
+/**
+ * Convert raw provider errors into user-safe messages.
+ * Never surfaces internal URLs, JSON bodies, or queue metadata.
+ */
+function sanitizeProviderError(err: unknown, context: "generate" | "edit"): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const lower = raw.toLowerCase();
+
+  if (lower.includes("timeout") || lower.includes("timedout") || lower.includes("timed out") || lower.includes("aborted")) {
+    return `Image ${context} temporarily unavailable — please retry in a moment.`;
+  }
+  if (lower.includes("queue full") || lower.includes("402") || lower.includes("overloaded")) {
+    return `Image ${context} is temporarily overloaded. Please retry.`;
+  }
+  if (lower.includes("rate limit") || lower.includes("429")) {
+    return `Image provider rate limit reached. Please retry in a moment.`;
+  }
+  if (lower.includes("503") || lower.includes("service unavailable")) {
+    return `Image provider temporarily unavailable. Please retry.`;
+  }
+  if (lower.includes("empty response")) {
+    return `Image ${context} returned an empty response — please try again.`;
+  }
+  // Generic fallback — safe enough to surface
+  return `Image ${context} failed. Please try again.`;
+}
 
 // ── Prompt enhancer ────────────────────────────────────────────────────────────
 
@@ -68,10 +116,65 @@ function validateImageResponse(result: string): void {
   }
 }
 
-// ── TEXT-TO-IMAGE: Pollinations.ai ────────────────────────────────────────────
-// Free, no auth required. Uses FLUX model. Returns binary JPEG.
+// ── Pollinations fetch with retry + observability ──────────────────────────────
 
 const POLLINATIONS_BASE = "https://image.pollinations.ai/prompt";
+
+async function pollinationsFetch(
+  imageUrl: string,
+  context: "generate" | "edit",
+): Promise<Response> {
+  let lastErr: Error = new Error("Unknown error");
+
+  for (let attempt = 0; attempt <= MAX_POLLINATIONS_RETRIES; attempt++) {
+    if (attempt > 0) {
+      const backoff = POLLINATIONS_RETRY_BASE_MS * 2 ** (attempt - 1);
+      logger.warn(
+        { attempt, backoff, provider: "pollinations" },
+        "[ai] retry attempt",
+      );
+      await delay(backoff);
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(imageUrl, {
+        method: "GET",
+        headers: { Accept: "image/*" },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "TimeoutError") {
+        logger.warn({ attempt: attempt + 1, provider: "pollinations" }, "[ai] provider timeout");
+        // Timeouts are not retried — provider is busy; surface clean message
+        throw new Error(sanitizeProviderError(err, context));
+      }
+      lastErr = err instanceof Error ? err : new Error(String(err));
+      if (attempt < MAX_POLLINATIONS_RETRIES) continue;
+      break;
+    }
+
+    if (isRetryableStatus(response.status)) {
+      const text = await response.text().catch(() => "");
+      lastErr = new Error(`HTTP ${response.status}: ${text.slice(0, 80)}`);
+      logger.warn(
+        { attempt: attempt + 1, status: response.status, provider: "pollinations" },
+        "[ai] retry attempt",
+      );
+      if (attempt < MAX_POLLINATIONS_RETRIES) continue;
+      break;
+    }
+
+    // Non-retryable HTTP error or success
+    return response;
+  }
+
+  logger.warn({ provider: "pollinations" }, "[ai] provider unavailable");
+  throw new Error(sanitizeProviderError(lastErr, context));
+}
+
+// ── TEXT-TO-IMAGE: Pollinations.ai ────────────────────────────────────────────
+// Free, no auth required. Uses FLUX model. Returns binary JPEG.
 
 export async function generateImage(prompt: string): Promise<string> {
   const enhanced = enhancePrompt(prompt);
@@ -86,36 +189,18 @@ export async function generateImage(prompt: string): Promise<string> {
     "[imageGen] generating",
   );
 
-  let response: Response;
-  try {
-    response = await fetch(imageUrl, {
-      method: "GET",
-      headers: { Accept: "image/*" },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-  } catch (err: unknown) {
-    if (err instanceof Error && err.name === "TimeoutError") {
-      throw new Error(
-        "Image generation timed out (35s) — Pollinations may be busy. Please try again.",
-      );
-    }
-    throw new Error(
-      `Network error: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
+  const response = await pollinationsFetch(imageUrl, "generate");
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    throw new Error(
-      `Image generation failed (HTTP ${response.status}): ${text.slice(0, 200)}`,
-    );
+    const raw = `HTTP ${response.status}: ${text.slice(0, 80)}`;
+    logger.error({ status: response.status, provider: "pollinations" }, "[ai] provider unavailable");
+    throw new Error(sanitizeProviderError(new Error(raw), "generate"));
   }
 
   const buffer = await response.arrayBuffer();
   if (buffer.byteLength < 500) {
-    throw new Error(
-      "Image generation returned an empty response — please try again.",
-    );
+    throw new Error("Image generation returned an empty response — please try again.");
   }
 
   const base64 = Buffer.from(buffer).toString("base64");
@@ -202,7 +287,10 @@ async function tryGeminiImg2Img(
         config: { responseModalities: ["IMAGE"] },
       }),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Gemini img2img timeout")), GEMINI_TIMEOUT_MS),
+        setTimeout(() => {
+          logger.warn({ provider: "gemini" }, "[ai] provider timeout");
+          reject(new Error("Gemini img2img timeout"));
+        }, GEMINI_TIMEOUT_MS),
       ),
     ]);
 
@@ -232,7 +320,7 @@ async function tryGeminiImg2Img(
     return null;
   } catch (err) {
     logger.warn(
-      { err: err instanceof Error ? err.message : String(err) },
+      { err: err instanceof Error ? err.message : String(err), provider: "gemini" },
       "[imageEdit] Gemini img2img unavailable — trying grounded fallback",
     );
     return null;
@@ -264,7 +352,10 @@ async function describeImageForEdit(parsed: ParsedImage): Promise<string> {
       config: { temperature: 0.2, maxOutputTokens: 250 },
     }),
     new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Gemini describe timeout")), GEMINI_TIMEOUT_MS),
+      setTimeout(() => {
+        logger.warn({ provider: "gemini" }, "[ai] provider timeout");
+        reject(new Error("Gemini describe timeout"));
+      }, GEMINI_TIMEOUT_MS),
     ),
   ]);
 
@@ -293,29 +384,13 @@ async function regenerateWithFlux(editPrompt: string): Promise<string> {
     "[imageGen] editing (Gemini-grounded regeneration)",
   );
 
-  let response: Response;
-  try {
-    response = await fetch(imageUrl, {
-      method: "GET",
-      headers: { Accept: "image/*" },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-  } catch (err: unknown) {
-    if (err instanceof Error && err.name === "TimeoutError") {
-      throw new Error(
-        "Image editing timed out (35s) — please try again.",
-      );
-    }
-    throw new Error(
-      `Network error: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
+  const response = await pollinationsFetch(imageUrl, "edit");
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    throw new Error(
-      `Image editing failed (HTTP ${response.status}): ${text.slice(0, 200)}`,
-    );
+    const raw = `HTTP ${response.status}: ${text.slice(0, 80)}`;
+    logger.error({ status: response.status, provider: "pollinations" }, "[ai] provider unavailable");
+    throw new Error(sanitizeProviderError(new Error(raw), "edit"));
   }
 
   const buffer = await response.arrayBuffer();
@@ -364,7 +439,7 @@ export async function editImage(
       { err: err instanceof Error ? err.message : String(err) },
       "[imageEdit] image analysis failed",
     );
-    throw new Error("Image analysis failed. Retry.");
+    throw new Error("Image analysis failed. Please retry.");
   }
 
   const editPrompt = `${description}. Apply this edit: ${prompt.trim()}, highly detailed, sharp focus, professional quality`;
