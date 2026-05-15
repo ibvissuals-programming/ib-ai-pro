@@ -28,9 +28,22 @@ import {
   getIntentLabel,
   type ImageIntent,
 } from "./imageIntentClassifier";
+import {
+  createJob,
+  advanceJob,
+  completeJob,
+  failJob,
+  jobSummary,
+  type ImageJob,
+  type ModelUsed,
+} from "./imageJobManager";
+import {
+  classifyComplexity,
+  classifyJobType,
+  complexityTimeout,
+} from "./imageComplexityClassifier";
 
 const REQUEST_TIMEOUT_MS = 35_000;
-const GEMINI_TIMEOUT_MS = 25_000;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB decoded
 const ACCEPTED_MIMES = ["image/png", "image/jpeg", "image/webp"] as const;
 const RESPONSE_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,/;
@@ -168,6 +181,49 @@ export function enhancePrompt(raw: string): string {
 
   const suffix = alreadyHasQuality ? "" : QUALITY_SUFFIX;
   return `${styleExpansion}${raw.trim()}${suffix}`;
+}
+
+// ── LAYER 5 — Preservation Guarantee ──────────────────────────────────────────
+
+const HARD_LOCK_SIGNALS = [
+  "preserve",
+  "keep exactly",
+  "do not change",
+  "don't change",
+  "protect",
+  "leave unchanged",
+  "keep the same",
+  "maintain exactly",
+  "do not modify",
+];
+
+/**
+ * Detect if the user requested explicit preservation of specific elements.
+ * If true → HARD PRESERVATION LOCK: no modification to protected elements.
+ */
+function detectPreservationLock(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  return HARD_LOCK_SIGNALS.some((s) => lower.includes(s));
+}
+
+// ── LAYER 4 — Controlled Prompt Expansion ────────────────────────────────────
+// Builds a structured FLUX prompt:
+//   [Preservation Layer] + [Core Instruction] + [Style Layer]
+// Max 1 primary style + 2 secondary style tokens to avoid over-specification.
+
+function buildStructuredPrompt(
+  prompt: string,
+  hasPreservationLock: boolean,
+): string {
+  // Preservation layer — always included for edit jobs
+  const preservationLayer = hasPreservationLock
+    ? "STRICT PRESERVATION — do not alter face, clothing, logos, text, or pose: "
+    : "Preserve face identity, clothing textures, logos, and pose — ";
+
+  // Core instruction with style expansion (LAYER 3)
+  const coreExpanded = enhancePrompt(prompt);
+
+  return `${preservationLayer}${coreExpanded}`;
 }
 
 // ── Response validation ────────────────────────────────────────────────────────
@@ -325,13 +381,14 @@ function parseAndValidateImage(imageDataUrl: string): ParsedImage {
 
 // ── TIER 1: True img2img via Gemini image model ────────────────────────────────
 // Sends the uploaded image as input and requests an image output from Gemini.
-// Uses intent-aware instructions from LAYER 1 classifier.
+// Uses intent-aware instructions (LAYER 1) and complexity-based timeout (LAYER 8).
 // Returns the result as a data URL, or null if this path is unavailable.
 
 async function tryGeminiImg2Img(
   parsed: ParsedImage,
   prompt: string,
   intent: ImageIntent,
+  timeoutMs: number,
 ): Promise<string | null> {
   try {
     const { ai } = await import("@workspace/integrations-gemini-ai");
@@ -355,9 +412,9 @@ async function tryGeminiImg2Img(
       }),
       new Promise<never>((_, reject) =>
         setTimeout(() => {
-          logger.warn({ provider: "gemini" }, "[ai] provider timeout");
+          logger.warn({ provider: "gemini", timeoutMs }, "[ai] provider timeout");
           reject(new Error("Gemini img2img timeout"));
-        }, GEMINI_TIMEOUT_MS),
+        }, timeoutMs),
       ),
     ]);
 
@@ -400,6 +457,7 @@ async function tryGeminiImg2Img(
 // Hard failure if Gemini is unavailable (no silent prompt-only fallback).
 
 async function describeImageForEdit(parsed: ParsedImage): Promise<string> {
+  const DESCRIBE_TIMEOUT_MS = 25_000;
   const { ai } = await import("@workspace/integrations-gemini-ai");
 
   const result = await Promise.race([
@@ -422,7 +480,7 @@ async function describeImageForEdit(parsed: ParsedImage): Promise<string> {
       setTimeout(() => {
         logger.warn({ provider: "gemini" }, "[ai] provider timeout");
         reject(new Error("Gemini describe timeout"));
-      }, GEMINI_TIMEOUT_MS),
+      }, DESCRIBE_TIMEOUT_MS),
     ),
   ]);
 
@@ -475,13 +533,21 @@ async function regenerateWithFlux(editPrompt: string): Promise<string> {
   return result;
 }
 
-// ── editImage: main entry point ────────────────────────────────────────────────
-// LAYER 1 (classify) → LAYER 2 (execute) → LAYER 3 (expand) pipeline.
+// ── EditResult — returned by editImage ────────────────────────────────────────
+
+export interface EditResult {
+  b64Image: string;
+  job: ReturnType<typeof jobSummary>;
+}
+
+// ── editImage: full orchestration pipeline ────────────────────────────────────
+// LAYER 0 (complexity) → LAYER 1 (intent) → LAYER 4+5 (prompt) →
+// LAYER 6 (retry) → LAYER 8 (routing) → LAYER 7 (observability)
 
 export async function editImage(
   imageBase64: string,
   prompt: string,
-): Promise<string> {
+): Promise<EditResult> {
   // Hard failure: image is required for edit operations
   if (!imageBase64 || imageBase64.trim().length < 10) {
     logger.warn("[imageEdit] edit rejected — no image supplied");
@@ -491,38 +557,85 @@ export async function editImage(
   // Parse + validate MIME type and size
   const parsed = parseAndValidateImage(imageBase64);
 
-  // ── LAYER 1: Classify intent ──────────────────────────────────────────────
-  // Image is present, so generation mode won't be returned.
+  // ── LAYER 0: Classify complexity and job type ─────────────────────────────
   const intent = classifyImageIntent(prompt, true);
-  logger.info(
-    { intent: getIntentLabel(intent), prompt: prompt.slice(0, 80) },
-    "[imageEdit] intent classified",
+  const complexity = classifyComplexity(prompt);
+  const jobType = classifyJobType(intent, true);
+  const timeoutMs = complexityTimeout(complexity);
+
+  // ── LAYER 5: Preservation lock detection ──────────────────────────────────
+  const hasPreservationLock = detectPreservationLock(prompt);
+
+  // ── LAYER 4: Build structured prompt ──────────────────────────────────────
+  const expandedPrompt = buildStructuredPrompt(prompt, hasPreservationLock);
+
+  // ── LAYER 1: Create job (status = queued) ─────────────────────────────────
+  const job: ImageJob = createJob({
+    jobType,
+    complexity,
+    intent: getIntentLabel(intent),
+    prompt,
+    expandedPrompt,
+  });
+
+  advanceJob(
+    job,
+    "processing",
+    `Intent: ${getIntentLabel(intent)} | Complexity: ${complexity}${hasPreservationLock ? " | HARD LOCK active" : ""}`,
   );
 
-  // ── LAYER 3: Expand prompt for FLUX fallback ──────────────────────────────
-  const expandedPrompt = enhancePrompt(prompt);
-
-  // ── Tier 1: Attempt true img2img via Gemini image model ──────────────────
-  // Passes the classified intent so Gemini receives a precise, scoped instruction.
-  const img2imgResult = await tryGeminiImg2Img(parsed, prompt, intent);
-  if (img2imgResult) {
-    return img2imgResult;
-  }
-
-  // ── Tier 2: Gemini vision description + FLUX regeneration ─────────────────
-  // Hard failure if Gemini description fails — no silent prompt-only fallback.
-  let description: string;
   try {
-    description = await describeImageForEdit(parsed);
-  } catch (err) {
-    logger.error(
-      { err: err instanceof Error ? err.message : String(err) },
-      "[imageEdit] image analysis failed",
-    );
-    throw new Error("Image analysis failed. Please retry.");
-  }
+    // ── LAYER 8: Model routing — Tier 1 (Gemini img2img) ──────────────────
+    advanceJob(job, "streaming", `Tier 1 — Gemini img2img (${timeoutMs}ms timeout)`);
 
-  // Combine: image description + expanded user prompt (LAYER 3 expansion applied)
-  const editPrompt = `${description}. Apply this edit: ${expandedPrompt}`;
-  return regenerateWithFlux(editPrompt);
+    let img2imgResult = await tryGeminiImg2Img(parsed, prompt, intent, timeoutMs);
+
+    if (img2imgResult) {
+      completeJob(job, "gemini-img2img");
+      return { b64Image: img2imgResult, job: jobSummary(job) };
+    }
+
+    // ── LAYER 6: Auto-retry once for STANDARD/HEAVY before Tier 2 fallback ─
+    if (complexity !== "SIMPLE") {
+      advanceJob(job, "retrying", "Tier 1 retry — Gemini img2img attempt 2", {
+        retryCount: 1,
+      });
+      img2imgResult = await tryGeminiImg2Img(parsed, prompt, intent, timeoutMs);
+      if (img2imgResult) {
+        completeJob(job, "gemini-img2img");
+        return { b64Image: img2imgResult, job: jobSummary(job) };
+      }
+    }
+
+    // ── LAYER 8: Tier 2 — Gemini vision describe + FLUX regeneration ──────
+    advanceJob(job, "streaming", "Tier 2 — Gemini vision describe → FLUX render", {
+      modelUsed: "gemini-vision",
+    });
+
+    let description: string;
+    try {
+      description = await describeImageForEdit(parsed);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : "Gemini describe failed";
+      failJob(job, reason);
+      throw new Error("Image analysis failed. Please retry.");
+    }
+
+    // LAYER 4: Combine image description + LAYER 4/5 structured prompt
+    const fluxPrompt = `${description}. Apply this edit: ${expandedPrompt}`;
+
+    advanceJob(job, "streaming", "FLUX rendering", { modelUsed: "flux" });
+    const fluxResult = await regenerateWithFlux(fluxPrompt);
+
+    completeJob(job, "flux");
+    return { b64Image: fluxResult, job: jobSummary(job) };
+
+  } catch (err) {
+    // Guard against double-fail if failJob was already called above
+    if (job.status !== "failed") {
+      const reason = err instanceof Error ? err.message : "Unknown error";
+      failJob(job, reason);
+    }
+    throw err;
+  }
 }

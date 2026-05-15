@@ -14,7 +14,7 @@
  */
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import { generateImage, editImage } from "../services/imageGenService";
+import { generateImage, editImage, type EditResult } from "../services/imageGenService";
 import { logger } from "../lib/logger";
 import { requireNormalAuth } from "../middleware/requireAuth";
 import { creditGuard, deductRequestCredits, appendCreditHeaders } from "../middleware/creditGuard";
@@ -121,14 +121,13 @@ router.post(
     }
 
     try {
-      const b64Image = await editImage(parsed.data.image, parsed.data.prompt);
+      const result: EditResult = await editImage(parsed.data.image, parsed.data.prompt);
       deductRequestCredits(req);
       appendCreditHeaders(req, res);
-      res.json({ b64Image, status: "success" });
+      res.json({ b64Image: result.b64Image, status: "success", job: result.job });
     } catch (err: unknown) {
       logger.error({ err }, "[imageGen] edit failed");
       const message = toRouteError(err, "edit");
-      // Preserve 413 status from service layer if thrown with statusCode
       const status =
         err instanceof Error && (err as Error & { statusCode?: number }).statusCode === 413
           ? 413
