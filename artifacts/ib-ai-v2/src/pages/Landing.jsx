@@ -34,7 +34,7 @@ function Navbar() {
           <Cpu size={13} className="text-primary-foreground" />
         </div>
         <span className="font-semibold text-sm tracking-tight text-foreground font-heading">
-          IB AI <span className="text-primary">v3</span>
+          IB AI <span className="text-primary">Assistant</span>
         </span>
       </div>
 
@@ -240,7 +240,7 @@ function Features() {
         <FadeIn className="text-center mb-12">
           <h2 className="text-2xl sm:text-3xl font-bold text-foreground font-heading">The Full Creative Suite</h2>
           <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto font-light leading-relaxed">
-            IB AI v3 is built for creators — chat, analyze images, and generate professional creative briefs.
+            IB AI Assistant is built for creators — chat, analyze images, and generate professional creative briefs.
           </p>
         </FadeIn>
 
@@ -370,7 +370,7 @@ function FinalCta() {
           <div className="relative p-10 rounded-2xl glass-panel border-primary/20 bg-primary/5 overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-purple-500/5 pointer-events-none" />
             <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-3 font-heading">
-              Start Creating with IB AI v3
+              Start Creating with IB AI Assistant
             </h2>
             <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
               Chat with an AI that understands creative work — and analyzes images to build production-ready briefs.
@@ -403,11 +403,11 @@ function Footer() {
             <Cpu size={10} className="text-primary-foreground" />
           </div>
           <span className="text-xs font-semibold text-foreground">
-            IB AI <span className="text-primary">v3</span>
+            IB AI <span className="text-primary">Assistant</span>
           </span>
         </div>
         <p className="text-xs text-muted-foreground/60">
-          © {new Date().getFullYear()} IB AI v3. All rights reserved.
+          © {new Date().getFullYear()} IB AI Assistant. All rights reserved.
         </p>
         <div className="flex items-center gap-4">
           <Link to="/login" className="text-xs text-muted-foreground hover:text-foreground transition-colors">

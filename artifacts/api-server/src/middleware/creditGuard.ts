@@ -1,5 +1,5 @@
 /**
- * Credit guard middleware — IB AI Pro freemium system.
+ * Credit guard middleware — IB AI Assistant freemium system.
  *
  * Architecture rules:
  *   - NEVER deduct credits here. Deduction happens AFTER a successful response

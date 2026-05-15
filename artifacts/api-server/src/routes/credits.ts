@@ -1,5 +1,5 @@
 /**
- * Credits API routes — IB AI Pro freemium system.
+ * Credits API routes — IB AI Assistant freemium system.
  *
  * GET  /api/credits/:username  — fetch a user's current credit status
  * POST /api/credits/upgrade    — change a user's plan (demo; replace with

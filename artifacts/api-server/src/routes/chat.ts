@@ -1,5 +1,5 @@
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║  ROUTE IMMUTABILITY RULE — IB AI Pro                           ║
+// ║  ROUTE IMMUTABILITY RULE — IB AI Assistant                     ║
 // ║  /api/chat is the ONLY AI execution endpoint.                  ║
 // ║  All AI requests MUST route through POST /api/chat.            ║
 // ║  Direct or alternative AI execution paths are forbidden.       ║

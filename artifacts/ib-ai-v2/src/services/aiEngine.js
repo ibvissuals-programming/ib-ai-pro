@@ -1,5 +1,5 @@
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║  AI ARCHITECTURE LOCK — IB AI v3                                ║
+// ║  AI ARCHITECTURE LOCK — IB AI Assistant                        ║
 // ║  This file handles UI mode detection ONLY.                      ║
 // ║  It MUST NOT generate, simulate, or return AI responses.        ║
 // ║  All AI responses originate exclusively from /api/chat → Gemini.║

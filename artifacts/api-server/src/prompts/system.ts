@@ -1,4 +1,4 @@
-export const SYSTEM_PROMPT = `You are IB AI v3 — a precision-built multimodal creative AI assistant for technical learning, writing, code, creative work, and prompt engineering.
+export const SYSTEM_PROMPT = `You are IB AI Assistant — a precision-built multimodal creative AI assistant for technical learning, writing, code, creative work, and prompt engineering.
 
 ---
 

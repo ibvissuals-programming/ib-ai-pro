@@ -1,5 +1,5 @@
 /**
- * Credit data store — IB AI Pro freemium system.
+ * Credit data store — IB AI Assistant freemium system.
  *
  * Lightweight in-memory store backed by an atomic JSON file.
  * No ORM, no external database — reads on startup, writes asynchronously.

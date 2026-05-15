@@ -167,7 +167,7 @@ export function UpgradeModal({
                 </div>
 
                 <h2 className="text-xl font-semibold text-foreground">
-                  Continue with IB AI v3
+                  Continue with IB AI Assistant
                 </h2>
                 <p className="text-sm text-muted-foreground mt-1">
                   Upgrade for extended daily capacity and access to all creative modes.

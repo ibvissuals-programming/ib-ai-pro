@@ -1,5 +1,5 @@
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║  AI ARCHITECTURE LOCK — IB AI v3                                ║
+// ║  AI ARCHITECTURE LOCK — IB AI Assistant                        ║
 // ║  Any AI response MUST originate from the Gemini stream only.    ║
 // ║  No fallback provider, mock engine, or static reply is allowed. ║
 // ║  Do NOT add: generateAIResponse, defaultReply, or any           ║

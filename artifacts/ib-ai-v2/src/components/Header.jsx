@@ -6,15 +6,15 @@ import { useTheme } from '../contexts/ThemeContext';
 function exportChat(messages, title, format) {
   if (!messages || messages.length === 0) return;
 
-  const safeTitle = (title || 'ib-ai-pro-chat').replace(/[^a-z0-9_\-\s]/gi, '').trim().replace(/\s+/g, '-').toLowerCase() || 'ib-ai-pro-chat';
+  const safeTitle = (title || 'ib-ai-assistant-chat').replace(/[^a-z0-9_\-\s]/gi, '').trim().replace(/\s+/g, '-').toLowerCase() || 'ib-ai-assistant-chat';
 
   let content;
   if (format === 'md') {
     const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-    content = `# ${title || 'IB AI Pro Chat'}\n_Exported on ${date}_\n\n---\n\n` +
-      messages.map(m => `**${m.role === 'user' ? 'You' : 'IB AI Pro'}**:\n${m.content}`).join('\n\n---\n\n');
+    content = `# ${title || 'IB AI Assistant Chat'}\n_Exported on ${date}_\n\n---\n\n` +
+      messages.map(m => `**${m.role === 'user' ? 'You' : 'IB AI Assistant'}**:\n${m.content}`).join('\n\n---\n\n');
   } else {
-    content = messages.map(m => `${m.role === 'user' ? 'You' : 'IB AI Pro'}: ${m.content}`).join('\n\n');
+    content = messages.map(m => `${m.role === 'user' ? 'You' : 'IB AI Assistant'}: ${m.content}`).join('\n\n');
   }
 
   const blob = new Blob([content], { type: format === 'md' ? 'text/markdown' : 'text/plain' });

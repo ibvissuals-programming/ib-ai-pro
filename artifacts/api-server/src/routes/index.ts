@@ -1,5 +1,5 @@
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║  ROUTE IMMUTABILITY RULE — IB AI Pro                           ║
+// ║  ROUTE IMMUTABILITY RULE — IB AI Assistant                     ║
 // ║  /api/chat is the ONLY streaming AI execution endpoint.        ║
 // ║  All streaming chat requests MUST route through POST /api/chat.║
 // ║  /api/analyze-image is the vision analysis endpoint (separate).║

@@ -52,7 +52,7 @@ export function useSelection(messages) {
     return messages
       .filter((m) => selectedIds.has(m.id))
       .map((m) => {
-        const role = m.role === 'user' ? 'You' : 'IB AI v3';
+        const role = m.role === 'user' ? 'You' : 'IB AI Assistant';
 
         if (m.type === 'image') {
           return `${role}:\n[Image: ${m.content}]`;

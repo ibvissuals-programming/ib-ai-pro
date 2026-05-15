@@ -1,5 +1,5 @@
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║  RUNTIME AI PROVIDER GUARD — IB AI v3                          ║
+// ║  RUNTIME AI PROVIDER GUARD — IB AI Assistant                   ║
 // ║  Enforces Gemini as the ONLY valid AI execution path.          ║
 // ║  Called before every API call. Cannot be bypassed at runtime.  ║
 // ╚══════════════════════════════════════════════════════════════════╝

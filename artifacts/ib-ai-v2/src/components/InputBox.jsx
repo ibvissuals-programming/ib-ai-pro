@@ -232,7 +232,7 @@ export function InputBox({ onSend, onSendImage, onClear, disabled }) {
             disabled={disabled}
             rows={1}
             data-testid="input-message"
-            placeholder="Message IB AI v3… or drop an image"
+            placeholder="Message IB AI Assistant… or drop an image"
             className="w-full bg-transparent text-foreground text-sm placeholder:text-muted-foreground/60 resize-none outline-none px-4 py-3.5 pr-28 leading-relaxed disabled:opacity-50"
             style={{ maxHeight: '120px', minHeight: '52px' }}
           />

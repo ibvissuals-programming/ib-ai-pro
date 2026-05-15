@@ -199,13 +199,13 @@ export function useChat(username, { onCreditExhausted } = {}) {
         throw new Error('Empty response from Gemini');
       }
     } catch (err) {
-      console.error('[IB AI Pro] Gemini request failed:', err.message);
+      console.error('[IB AI Assistant] Gemini request failed:', err.message);
       finalContent = classifyStreamError(err);
     } finally {
       try {
         persist(buildState(finalContent));
       } catch (persistErr) {
-        console.error('[IB AI Pro] Failed to persist message state:', persistErr);
+        console.error('[IB AI Assistant] Failed to persist message state:', persistErr);
       }
       setIsTyping(false);
     }
@@ -264,7 +264,7 @@ export function useChat(username, { onCreditExhausted } = {}) {
       };
       finalMessages = [...updatedMessages, aiMsg];
     } catch (err) {
-      console.error('[IB AI Pro] Image analysis failed:', err.message);
+      console.error('[IB AI Assistant] Image analysis failed:', err.message);
 
       if (err.code === 'CREDITS_EXHAUSTED') {
         // Soft gate: show the result already generated (none), then trigger
@@ -303,7 +303,7 @@ export function useChat(username, { onCreditExhausted } = {}) {
           },
         });
       } catch (persistErr) {
-        console.error('[IB AI Pro] Failed to persist image analysis state:', persistErr);
+        console.error('[IB AI Assistant] Failed to persist image analysis state:', persistErr);
       }
       setIsTyping(false);
     }
