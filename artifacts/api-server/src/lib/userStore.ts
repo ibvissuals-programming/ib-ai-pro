@@ -251,3 +251,81 @@ export function setUserRole(userId: string, role: UserRole): void {
   user.role = role;
   scheduleSave();
 }
+
+// ── CEO account repair ────────────────────────────────────────────────────────
+
+/**
+ * repairCeoAccount() — called once at server startup, after loadUserStore().
+ *
+ * Safe, targeted repair that ONLY touches the CEO account:
+ *   1. If CEO_USERNAME is not set → skips entirely (no-op).
+ *   2. If CEO account does not exist AND CEO_PASSWORD is set → creates it.
+ *   3. If CEO account exists:
+ *      - Ensures role === "ceo" (upgrades if it was somehow demoted).
+ *      - If CEO_PASSWORD is set → updates password hash (one-time repair).
+ *   4. NO other user record is ever read, modified, or deleted.
+ *
+ * CEO_PASSWORD is consumed safely: it resets the hash, then you can
+ * remove the env var — the account will keep working with the new password.
+ */
+export async function repairCeoAccount(): Promise<void> {
+  const ceoUsername = process.env["CEO_USERNAME"]?.trim().toLowerCase();
+
+  if (!ceoUsername) {
+    return; // CEO_USERNAME not configured — nothing to repair
+  }
+
+  const ceoPassword = process.env["CEO_PASSWORD"]?.trim();
+  const existing = getUserByUsername(ceoUsername);
+
+  if (!existing) {
+    if (ceoPassword) {
+      // CEO account was never created — bootstrap it now
+      const user: User = {
+        id: randomUUID(),
+        username: ceoUsername,
+        passwordHash: hashPassword(ceoPassword),
+        role: "ceo",
+        credits: FREE_CREDITS,
+        lastReset: Date.now(),
+        createdAt: Date.now(),
+      };
+      store.set(user.id, user);
+      await persistStore();
+      logger.info({ username: ceoUsername }, "[ceoRepair] CEO account created");
+    } else {
+      logger.warn(
+        { username: ceoUsername },
+        "[ceoRepair] CEO account not found — set CEO_PASSWORD env var to create it",
+      );
+    }
+    return;
+  }
+
+  // CEO account exists — apply targeted repairs only
+  let changed = false;
+
+  if (existing.role !== "ceo") {
+    existing.role = "ceo";
+    changed = true;
+    logger.info({ username: ceoUsername }, "[ceoRepair] CEO role corrected");
+  }
+
+  if (ceoPassword) {
+    existing.passwordHash = hashPassword(ceoPassword);
+    changed = true;
+    logger.info(
+      { username: ceoUsername },
+      "[ceoRepair] CEO password hash updated (remove CEO_PASSWORD env var after successful login)",
+    );
+  }
+
+  if (changed) {
+    await persistStore();
+  }
+
+  logger.info(
+    { username: ceoUsername, role: existing.role },
+    "[ceoRepair] CEO account verified OK",
+  );
+}

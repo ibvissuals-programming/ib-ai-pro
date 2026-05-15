@@ -1,6 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { loadUserStore } from "./lib/userStore";
+import { loadUserStore, repairCeoAccount } from "./lib/userStore";
 
 const rawPort = process.env["PORT"];
 
@@ -16,8 +16,13 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-// Load both stores from disk before accepting requests.
+// Step 1: Load persisted users from disk.
 await loadUserStore();
+
+// Step 2: Safely repair CEO account — ONLY touches the CEO record.
+//   If CEO_PASSWORD env var is set, updates CEO's password hash.
+//   Ensures CEO role is correct. Never modifies any other user.
+await repairCeoAccount();
 
 app.listen(port, (err) => {
   if (err) {
