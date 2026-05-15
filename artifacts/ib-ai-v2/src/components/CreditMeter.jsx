@@ -81,7 +81,7 @@ export function CreditMeter({ credits, onUpgradeClick }) {
           onClick={onUpgradeClick}
           className="w-full text-xs text-primary hover:text-primary/80 text-center transition-colors"
         >
-          {empty ? 'No credits left — Upgrade for more →' : 'Running low — Upgrade →'}
+          {empty ? 'Daily limit reached — Upgrade' : 'Running low — Upgrade'}
         </motion.button>
       )}
     </div>

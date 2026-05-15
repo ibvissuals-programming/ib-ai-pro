@@ -65,7 +65,7 @@ export default function Signup() {
             <Cpu size={19} className="text-primary-foreground" />
           </div>
           <h1 className="text-xl font-semibold text-foreground tracking-tight font-heading">
-            IB AI <span className="text-primary">Pro</span>
+            IB AI <span className="text-primary">v3</span>
           </h1>
           <p className="text-sm text-muted-foreground mt-1 font-light">Create your account</p>
         </div>

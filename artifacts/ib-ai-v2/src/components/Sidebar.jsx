@@ -166,7 +166,7 @@ export function Sidebar({ chats, activeChatId, onSwitch, onNew, onDelete, onRena
           <Cpu size={12} className="text-primary-foreground" />
         </div>
         <span className="font-semibold text-sm tracking-tight text-sidebar-foreground font-heading">
-          IB AI <span className="text-primary">Pro</span>
+          IB AI <span className="text-primary">v3</span>
         </span>
       </div>
 

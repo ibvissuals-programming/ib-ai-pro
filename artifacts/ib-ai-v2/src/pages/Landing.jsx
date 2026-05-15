@@ -34,7 +34,7 @@ function Navbar() {
           <Cpu size={13} className="text-primary-foreground" />
         </div>
         <span className="font-semibold text-sm tracking-tight text-foreground font-heading">
-          IB AI <span className="text-primary">Pro</span>
+          IB AI <span className="text-primary">v3</span>
         </span>
       </div>
 
@@ -54,7 +54,7 @@ function Navbar() {
           to="/signup"
           className="text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors font-medium"
         >
-          Start Free
+          Get Started
         </Link>
       </div>
     </nav>
@@ -104,8 +104,8 @@ function Hero() {
         transition={{ duration: 0.6, delay: 0.2 }}
         className="mt-5 text-base sm:text-lg text-muted-foreground max-w-xl leading-relaxed"
       >
-        AI-powered creative studio for images, videos, and viral content.
-        Upload any image and get professional cinematic prompts in seconds.
+        An AI assistant built for creative work — chat, analyze images, and generate
+        production-ready prompts for editing, video, and content.
       </motion.p>
 
       {/* CTAs */}
@@ -119,7 +119,7 @@ function Hero() {
           to="/signup"
           className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-xl font-medium text-sm hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
         >
-          Start Free
+          Get Started
           <ArrowRight size={15} />
         </Link>
         <a
@@ -138,7 +138,7 @@ function Hero() {
         transition={{ duration: 0.6, delay: 0.5 }}
         className="mt-6 text-xs text-muted-foreground/60"
       >
-        Free to start · No credit card required · 5 free analyses daily
+        Free to start · No payment required · No credit card needed
       </motion.p>
     </section>
   );
@@ -151,21 +151,21 @@ function DemoFlow() {
     {
       icon: Upload,
       title: 'Upload Any Image',
-      desc: 'Drop in a photo, product shot, portrait, or scene. JPEG, PNG, WebP, GIF supported.',
+      desc: 'Drop in a photo, product shot, portrait, or scene. JPEG, PNG, WebP, and GIF supported.',
       color: 'text-blue-400',
       bg: 'bg-blue-500/10 border-blue-500/20',
     },
     {
       icon: Cpu,
       title: 'AI Analyzes Instantly',
-      desc: 'Gemini vision reads mood, composition, lighting, and creative potential in seconds.',
+      desc: 'Gemini reads mood, composition, lighting, and creative potential — in seconds.',
       color: 'text-primary',
       bg: 'bg-primary/10 border-primary/20',
     },
     {
       icon: Sparkles,
       title: 'Get Creative Outputs',
-      desc: 'Receive cinematic prompts, video direction, viral formats, and luxury brand aesthetics.',
+      desc: 'Receive cinematic prompts, video direction, viral formats, and design-ready briefs.',
       color: 'text-purple-400',
       bg: 'bg-purple-500/10 border-purple-500/20',
     },
@@ -177,7 +177,7 @@ function DemoFlow() {
         <FadeIn className="text-center mb-12">
           <h2 className="text-2xl sm:text-3xl font-bold text-foreground font-heading">How It Works</h2>
           <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto font-light leading-relaxed">
-            From upload to professional creative brief in under 10 seconds.
+            From upload to a complete creative brief in under 10 seconds.
           </p>
         </FadeIn>
 
@@ -215,22 +215,22 @@ function Features() {
     {
       icon: Camera,
       title: 'Cinematic Image Prompts',
-      desc: 'Generate camera angles, lighting setups, and color grades that transform any photo into a cinematic production brief.',
+      desc: 'Generate camera angles, lighting setups, and color grades that transform any photo into a production-ready brief.',
     },
     {
       icon: Film,
-      title: 'Video Direction AI',
-      desc: 'Full professional video direction: camera movement, transitions, pacing, mood, and format — ready to hand to any editor.',
+      title: 'Video Direction',
+      desc: 'Camera movement, transitions, pacing, mood, and format — structured output ready to hand to any editor.',
     },
     {
       icon: Zap,
-      title: 'Viral Content Generator',
-      desc: 'Platform-optimized creative formats — TikTok vertical, luxury brand, editorial aesthetic, and viral hook strategies.',
+      title: 'Viral Content Formats',
+      desc: 'Platform-optimized creative formats — TikTok vertical, luxury brand, editorial, and viral hook strategies.',
     },
     {
       icon: Layers,
       title: 'Multi-Mode Creative Engine',
-      desc: 'Switch between cinematic, luxury, wallpaper, Canva-ready, and social formats. One image, infinite creative directions.',
+      desc: 'Switch between cinematic, luxury, wallpaper, design-ready, and social formats. One image, multiple directions.',
     },
   ];
 
@@ -240,7 +240,7 @@ function Features() {
         <FadeIn className="text-center mb-12">
           <h2 className="text-2xl sm:text-3xl font-bold text-foreground font-heading">The Full Creative Suite</h2>
           <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto font-light leading-relaxed">
-            IB AI Pro is not a chatbot. It's a professional creative engine.
+            IB AI v3 is built for creators — chat, analyze images, and generate professional creative briefs.
           </p>
         </FadeIn>
 
@@ -275,9 +275,9 @@ function Pricing() {
       name: 'Free',
       price: '$0',
       period: 'forever',
-      desc: 'Try the platform, no commitment.',
-      features: ['5 credits per day', '2 image analyses daily', 'Unlimited AI chat', 'Basic creative prompts'],
-      cta: 'Get Started Free',
+      desc: 'Get started with no commitment.',
+      features: ['Daily usage included', 'Image analysis', 'Unlimited AI chat', 'Creative prompts', 'Chat export'],
+      cta: 'Get Started',
       ctaLink: '/signup',
       ctaCls: 'border border-border text-foreground hover:bg-secondary',
     },
@@ -285,8 +285,8 @@ function Pricing() {
       name: 'Pro',
       price: '$9',
       period: '/month',
-      desc: 'For creators who ship daily.',
-      features: ['100 credits per day', 'Unlimited image analyses', 'All creative modes', 'Video direction AI', 'Priority generation'],
+      desc: 'For creators who work daily.',
+      features: ['Extended daily capacity', 'Unlimited image analyses', 'All creative modes', 'Video direction', 'Priority generation'],
       cta: 'Start Pro',
       ctaLink: '/signup',
       ctaCls: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20',
@@ -296,8 +296,8 @@ function Pricing() {
       name: 'Max',
       price: '$29',
       period: '/month',
-      desc: 'Studios and power users.',
-      features: ['Unlimited credits', 'Unlimited everything', 'Fastest generation', 'Dedicated support', 'Early feature access'],
+      desc: 'For studios and power users.',
+      features: ['Unlimited capacity', 'Unlimited everything', 'Fastest generation', 'Dedicated support', 'Early feature access'],
       cta: 'Start Max',
       ctaLink: '/signup',
       ctaCls: 'border border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10',
@@ -370,10 +370,10 @@ function FinalCta() {
           <div className="relative p-10 rounded-2xl glass-panel border-primary/20 bg-primary/5 overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-purple-500/5 pointer-events-none" />
             <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-3 font-heading">
-              Start Creating With IB AI Pro
+              Start Creating with IB AI v3
             </h2>
             <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
-              Join creators turning ordinary images into cinematic content every day.
+              Chat with an AI that understands creative work — and analyzes images to build production-ready briefs.
             </p>
             <Link
               to="/signup"
@@ -383,7 +383,7 @@ function FinalCta() {
               <ArrowRight size={15} />
             </Link>
             <p className="mt-4 text-xs text-muted-foreground/60">
-              No credit card required · 5 free analyses daily
+              No payment required · No credit card needed
             </p>
           </div>
         </div>
@@ -403,11 +403,11 @@ function Footer() {
             <Cpu size={10} className="text-primary-foreground" />
           </div>
           <span className="text-xs font-semibold text-foreground">
-            IB AI <span className="text-primary">Pro</span>
+            IB AI <span className="text-primary">v3</span>
           </span>
         </div>
         <p className="text-xs text-muted-foreground/60">
-          © {new Date().getFullYear()} IB AI Pro. All rights reserved.
+          © {new Date().getFullYear()} IB AI v3. All rights reserved.
         </p>
         <div className="flex items-center gap-4">
           <Link to="/login" className="text-xs text-muted-foreground hover:text-foreground transition-colors">

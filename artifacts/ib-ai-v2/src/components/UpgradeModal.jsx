@@ -9,17 +9,17 @@ const PLANS = [
     name: 'Free',
     price: '$0',
     period: 'forever',
-    description: 'Perfect for trying it out',
+    description: 'Free to start, no payment required.',
     icon: Zap,
     iconCls: 'text-muted-foreground',
     cardCls: 'border-border',
     btnCls: 'bg-muted text-muted-foreground hover:bg-muted/80',
     features: [
-      '5 credits per day',
+      'Daily usage included',
       '2 image analyses per day',
       'Unlimited chat',
-      'Basic creative prompts',
-      'Export chats',
+      'Creative prompts',
+      'Chat export',
     ],
   },
   {
@@ -27,18 +27,18 @@ const PLANS = [
     name: 'Pro',
     price: '$9',
     period: '/month',
-    description: 'For serious creators',
+    description: 'For creators who work daily.',
     icon: Zap,
     iconCls: 'text-primary',
     cardCls: 'border-primary/50 bg-primary/5',
     btnCls: 'bg-primary text-primary-foreground hover:bg-primary/90',
     badge: 'Most Popular',
     features: [
-      '100 credits per day',
+      'Extended daily capacity',
       'Unlimited image analyses',
       'Unlimited chat',
       'All creative modes',
-      'Video direction AI',
+      'Video direction',
       'Priority generation',
     ],
   },
@@ -47,18 +47,18 @@ const PLANS = [
     name: 'Max',
     price: '$29',
     period: '/month',
-    description: 'Unlimited creative power',
+    description: 'For studios and power users.',
     icon: Crown,
     iconCls: 'text-yellow-400',
     cardCls: 'border-yellow-500/30',
     btnCls: 'bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 border border-yellow-500/30',
     features: [
-      'Unlimited credits',
-      'Unlimited everything',
+      'Unlimited capacity',
+      'Unlimited image analyses',
+      'All creative modes',
       'Fastest generation',
-      'All Pro features',
       'Dedicated support',
-      'Early access to features',
+      'Early feature access',
     ],
   },
 ];
@@ -162,15 +162,15 @@ export function UpgradeModal({
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-medium mb-3">
                   <Zap size={11} />
                   {creditsRemaining === 0
-                    ? "You've reached your free daily limit"
-                    : `${creditsRemaining} credit${creditsRemaining !== 1 ? 's' : ''} remaining`}
+                    ? 'Daily limit reached'
+                    : `${creditsRemaining} use${creditsRemaining !== 1 ? 's' : ''} remaining today`}
                 </div>
 
                 <h2 className="text-xl font-semibold text-foreground">
-                  Unlock the full creative engine
+                  Continue with IB AI v3
                 </h2>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Upgrade to continue generating cinematic prompts, video directions, and viral content.
+                  Upgrade for extended daily capacity and access to all creative modes.
                 </p>
               </div>
 
