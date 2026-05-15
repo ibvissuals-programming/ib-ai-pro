@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '../hooks/useAuth';
 import { useChat } from '../hooks/useChat';
@@ -38,8 +38,12 @@ export default function ChatApp() {
     onCreditExhausted: () => setUpgradeModalOpen(true),
   });
 
-  const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
-  const currentMode = lastUserMessage ? detectMode(lastUserMessage.content) : 'chat';
+  const currentMode = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') return detectMode(messages[i].content);
+    }
+    return 'chat';
+  }, [messages]);
 
   const handleLogout = () => {
     logout();

@@ -76,6 +76,10 @@
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
 
+  /* Ambient glow blob colors */
+  --blob-primary: rgba(59, 130, 246, 0.055);
+  --blob-secondary: rgba(99, 102, 241, 0.042);
+
   --background: 222 47% 8%;
   --foreground: 213 31% 91%;
   --border: 217 33% 20%;
@@ -125,6 +129,10 @@
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .06);
 
+  /* Ambient glow blob colors — softer in light mode */
+  --blob-primary: rgba(59, 130, 246, 0.032);
+  --blob-secondary: rgba(99, 102, 241, 0.022);
+
   --background: 210 20% 98%;
   --foreground: 222 47% 11%;
   --border: 214 32% 88%;
@@ -167,6 +175,15 @@
   --radius: .5rem;
 }
 
+@keyframes blob-drift-a {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(2%, 4%) scale(1.06); }
+}
+@keyframes blob-drift-b {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(-3%, -2%) scale(1.04); }
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -179,6 +196,34 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  /* Ambient glow blobs — CSS only, zero JS, pointer-events none */
+  body::before,
+  body::after {
+    content: '';
+    position: fixed;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  body::before {
+    top: -25%;
+    left: -15%;
+    width: 55%;
+    height: 55%;
+    background: radial-gradient(ellipse, var(--blob-primary) 0%, transparent 70%);
+    animation: blob-drift-a 20s ease-in-out infinite alternate;
+  }
+
+  body::after {
+    bottom: -20%;
+    right: -10%;
+    width: 48%;
+    height: 48%;
+    background: radial-gradient(ellipse, var(--blob-secondary) 0%, transparent 70%);
+    animation: blob-drift-b 26s ease-in-out infinite alternate;
+  }
+
   h1, h2, h3, h4 {
     font-family: 'Space Grotesk', sans-serif;
     letter-spacing: -0.022em;
@@ -188,71 +233,81 @@
 /* ─── Glass Utilities ─────────────────────────────────────────────────────────── */
 @layer utilities {
 
-  /* Night mode glass (default) */
+  /*
+   * Glass depth hierarchy — dark mode:
+   *   glass-panel  = primary surfaces   (strongest)
+   *   glass-card   = secondary surfaces (medium)
+   *   glass-subtle = tertiary surfaces  (lightest)
+   *   glass-input  = input containers   (crisp + focused)
+   */
+
   .glass-panel {
-    background: rgba(8, 11, 22, 0.70);
-    backdrop-filter: blur(22px) saturate(180%);
-    -webkit-backdrop-filter: blur(22px) saturate(180%);
+    background: rgba(12, 16, 28, 0.72);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
     border: 1px solid rgba(255, 255, 255, 0.14);
-    box-shadow: 0 10px 35px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.10);
-    border-radius: 16px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+    border-radius: 18px;
   }
 
   .glass-card {
-    background: rgba(8, 11, 22, 0.60);
+    background: rgba(10, 14, 26, 0.62);
     backdrop-filter: blur(18px) saturate(170%);
     -webkit-backdrop-filter: blur(18px) saturate(170%);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.07);
-    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    border-radius: 14px;
   }
 
   .glass-subtle {
-    background: rgba(8, 11, 22, 0.50);
-    backdrop-filter: blur(14px) saturate(150%);
-    -webkit-backdrop-filter: blur(14px) saturate(150%);
-    border: 1px solid rgba(255, 255, 255, 0.09);
+    background: rgba(8, 11, 22, 0.48);
+    backdrop-filter: blur(12px) saturate(150%);
+    -webkit-backdrop-filter: blur(12px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .glass-input {
-    background: rgba(8, 11, 22, 0.65);
-    backdrop-filter: blur(22px) saturate(180%);
-    -webkit-backdrop-filter: blur(22px) saturate(180%);
+    background: rgba(10, 14, 26, 0.68);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
     border: 1px solid rgba(255, 255, 255, 0.13);
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.08);
     border-radius: 20px;
   }
 
-  /* Light mode glass overrides */
+  /*
+   * Light mode glass overrides — same depth hierarchy, inverted palette.
+   * Maintains identical border-radius and structure across themes.
+   */
   .light .glass-panel {
-    background: rgba(255, 255, 255, 0.78);
-    backdrop-filter: blur(16px) saturate(150%);
-    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    background: rgba(255, 255, 255, 0.80);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
     border: 1px solid rgba(0, 0, 0, 0.08);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.90);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.95);
   }
 
   .light .glass-card {
     background: rgba(255, 255, 255, 0.88);
-    backdrop-filter: blur(12px) saturate(130%);
-    -webkit-backdrop-filter: blur(12px) saturate(130%);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
     border: 1px solid rgba(0, 0, 0, 0.07);
-    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.07);
   }
 
   .light .glass-subtle {
-    background: rgba(255, 255, 255, 0.65);
-    backdrop-filter: blur(8px) saturate(120%);
-    -webkit-backdrop-filter: blur(8px) saturate(120%);
+    background: rgba(255, 255, 255, 0.68);
+    backdrop-filter: blur(10px) saturate(130%);
+    -webkit-backdrop-filter: blur(10px) saturate(130%);
     border: 1px solid rgba(0, 0, 0, 0.06);
   }
 
   .light .glass-input {
-    background: rgba(255, 255, 255, 0.92);
-    backdrop-filter: blur(14px) saturate(140%);
-    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(16px) saturate(145%);
+    -webkit-backdrop-filter: blur(16px) saturate(145%);
     border: 1px solid rgba(0, 0, 0, 0.09);
-    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 1);
+    box-shadow: 0 2px 14px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 1);
   }
 
   /* Font utilities */

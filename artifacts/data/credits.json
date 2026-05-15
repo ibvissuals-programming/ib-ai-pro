@@ -19,5 +19,12 @@
     "dailyCreditsUsed": 0,
     "lastResetDate": "2026-05-13",
     "totalUsage": 0
+  },
+  {
+    "username": "ibaiceo",
+    "plan": "free",
+    "dailyCreditsUsed": 2,
+    "lastResetDate": "2026-05-14",
+    "totalUsage": 2
   }
 ]
