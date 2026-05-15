@@ -312,6 +312,30 @@ export function setUserRole(userId: string, role: UserRole): void {
   scheduleSave();
 }
 
+/**
+ * changeUserPassword() — safely update a user's password hash.
+ *
+ * - Rehashes using scrypt (same algorithm as createUser)
+ * - Persists to disk atomically via scheduleSave
+ * - Never stores plaintext
+ * - Returns false if user not found
+ */
+export function changeUserPassword(userId: string, newPassword: string): boolean {
+  const user = store.get(userId);
+  if (!user) {
+    logger.warn({ userId }, "[userStore] changeUserPassword — user not found");
+    return false;
+  }
+  if (newPassword.length < 6) {
+    logger.warn({ userId }, "[userStore] changeUserPassword — password too short");
+    return false;
+  }
+  user.passwordHash = hashPassword(newPassword);
+  scheduleSave();
+  logger.info({ userId, username: user.username }, "[userStore] Password changed");
+  return true;
+}
+
 // ── CEO account repair ────────────────────────────────────────────────────────
 
 /**

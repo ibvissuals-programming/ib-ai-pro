@@ -13,6 +13,7 @@ import {
   authenticateCeoByRecoveryKey,
   getUserById,
   toPublicUser,
+  changeUserPassword,
   CREDIT_COSTS,
   FREE_CREDITS,
   RESET_INTERVAL_MS,
@@ -175,6 +176,46 @@ router.post("/auth/login", async (req: Request, res: Response) => {
     token,
     user: toPublicUser(user),
   });
+});
+
+// ── POST /api/auth/change-password ────────────────────────────────────────────
+//
+// Authenticated users can change their own password.
+// CEO recovery sessions can use this to set a fresh permanent password
+// after logging in via the recovery key (bypassing the old unknown password).
+//
+// Body: { newPassword: string (min 6) }
+// Auth: requireAuth (valid JWT in Authorization header)
+
+const ChangePasswordSchema = z.object({
+  newPassword: z.string().min(6, "Password must be at least 6 characters").max(128),
+});
+
+router.post("/auth/change-password", requireAuth, (req: Request, res: Response) => {
+  const parsed = ChangePasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({
+      error: "Invalid request",
+      details: parsed.error.flatten(),
+    });
+    return;
+  }
+
+  const { newPassword } = parsed.data;
+  const userId = req.user!.userId;
+
+  const ok = changeUserPassword(userId, newPassword);
+  if (!ok) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  logger.info(
+    { userId, username: req.user!.username },
+    "[auth] Password changed successfully",
+  );
+
+  res.json({ success: true, message: "Password updated successfully" });
 });
 
 // ── GET /api/auth/me ──────────────────────────────────────────────────────────

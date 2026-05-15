@@ -16,5 +16,14 @@
     "credits": 40,
     "lastReset": 1778822777673,
     "createdAt": 1778822777673
+  },
+  {
+    "id": "d0939a88-a9d0-49e6-b88c-58887f5bc728",
+    "username": "testuser_val",
+    "passwordHash": "a1b02886792275c1ecd08462f62c90e0:af220a5094c4802697daf0e5fb815addfb69e1aa463dbc8c99bf8495d71f6ccbec019695b7ed67852124b8410da42ec6a53f4dcf2b413aa08399287f01a5f3e5",
+    "role": "free",
+    "credits": 40,
+    "lastReset": 1778853805536,
+    "createdAt": 1778853805536
   }
 ]

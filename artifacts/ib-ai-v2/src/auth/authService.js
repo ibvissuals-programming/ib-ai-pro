@@ -98,7 +98,63 @@ export async function login(username, password) {
     }
     saveToken(data.token);
     saveUser(data.user);
-    return { success: true, user: data.user };
+    return { success: true, user: data.user, recoveryLogin: data.recoveryLogin ?? false };
+  } catch (err) {
+    return { success: false, error: 'Network error — please try again' };
+  }
+}
+
+/**
+ * recoveryLogin() — CEO recovery path.
+ * Sends x-ceo-recovery-key header + username body.
+ * Password not required.
+ * Returns { success, user?, recoveryLogin?, error? }
+ */
+export async function recoveryLogin(username, recoveryKey) {
+  try {
+    const res = await fetch(`${BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-ceo-recovery-key': recoveryKey,
+      },
+      body: JSON.stringify({ username }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Recovery login failed' };
+    }
+    saveToken(data.token);
+    saveUser(data.user);
+    return { success: true, user: data.user, recoveryLogin: true };
+  } catch (err) {
+    return { success: false, error: 'Network error — please try again' };
+  }
+}
+
+/**
+ * changePassword() — change the current user's password.
+ * Requires a valid session token.
+ * Returns { success, error? }
+ */
+export async function changePassword(newPassword) {
+  const token = getToken();
+  if (!token) return { success: false, error: 'Not authenticated' };
+
+  try {
+    const res = await fetch(`${BASE}/api/auth/change-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ newPassword }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Password change failed' };
+    }
+    return { success: true };
   } catch (err) {
     return { success: false, error: 'Network error — please try again' };
   }
