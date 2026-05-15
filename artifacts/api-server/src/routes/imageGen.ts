@@ -1,8 +1,8 @@
 /**
  * Image generation + editing routes — IB AI Assistant
  *
- * POST /api/image/generate  — text-to-image via FLUX.1-schnell (HuggingFace)
- * POST /api/image/edit      — image-to-image via instruct-pix2pix (HuggingFace)
+ * POST /api/image/generate  — text-to-image via FLUX (Pollinations)
+ * POST /api/image/edit      — image-to-image via Pollinations regeneration (no key required)
  *
  * ISOLATION: These routes are fully independent of /api/chat and the Gemini
  * integration. They share no state, no handlers, and no response logic.

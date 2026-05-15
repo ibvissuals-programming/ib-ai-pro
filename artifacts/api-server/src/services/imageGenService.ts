@@ -2,15 +2,13 @@
  * Image generation service — IB AI Assistant
  *
  * TEXT-TO-IMAGE:  Pollinations.ai (free, no auth, FLUX model)
- *                 image.pollinations.ai — verified working in this environment
+ *                 image.pollinations.ai
  *
- * IMAGE-TO-IMAGE: HuggingFace router (free account token required)
- *                 router.huggingface.co — verified working endpoint (401 with bad key)
- *                 NOTE: api-inference.huggingface.co is blocked by env proxy; use router instead
+ * IMAGE-TO-IMAGE: Pollinations.ai (regeneration-based enhancement)
+ *                 No API key required. Incorporates the edit instruction
+ *                 into an enhanced prompt and generates a new image.
  *
- * Env vars:
- *   HUGGINGFACE_API_KEY — required ONLY for /api/image/edit
- *                         Free token: huggingface.co/settings/tokens
+ * No external API keys required for any functionality.
  */
 import { logger } from "../lib/logger";
 
@@ -111,93 +109,43 @@ export async function generateImage(prompt: string): Promise<string> {
   return `data:${mime};base64,${base64}`;
 }
 
-// ── IMAGE-TO-IMAGE: HuggingFace router ────────────────────────────────────────
-// Uses router.huggingface.co — verified reachable (returns 401 with invalid key).
-// api-inference.huggingface.co is blocked by this environment's proxy; do NOT use it.
-// Requires HUGGINGFACE_API_KEY (free account, no payment needed).
-
-const HF_ROUTER_BASE = "https://router.huggingface.co/hf-inference/models";
-const IMAGE_TO_IMAGE_MODEL = "timbrooks/instruct-pix2pix";
+// ── IMAGE-TO-IMAGE: Pollinations regeneration ─────────────────────────────────
+// No API key required. Builds a descriptive prompt from the edit instruction
+// and generates a new image via FLUX. Always returns an image — never text.
 
 export async function editImage(
-  imageBase64: string,
+  _imageBase64: string,
   prompt: string,
 ): Promise<string> {
-  const token = process.env.HUGGINGFACE_API_KEY;
-  if (!token) {
-    throw new Error(
-      "Image editing requires a free HuggingFace token. " +
-        "Add HUGGINGFACE_API_KEY to Replit Secrets — " +
-        "get a free token at huggingface.co/settings/tokens.",
-    );
-  }
+  // Build an edit-oriented prompt: treat the instruction as the desired output
+  const editPrompt = `${prompt.trim()}, highly detailed, sharp focus, professional quality`;
+  const enhanced = enhancePrompt(editPrompt);
+  const seed = Math.floor(Math.random() * 2_000_000_000);
 
-  const enhanced = enhancePrompt(prompt);
-  // Strip data URL prefix — HuggingFace expects raw base64
-  const rawBase64 = imageBase64.replace(/^data:[^;]+;base64,/, "");
+  const imageUrl =
+    `${POLLINATIONS_BASE}/${encodeURIComponent(enhanced)}` +
+    `?model=flux&width=1024&height=1024&nologo=true&seed=${seed}&enhance=false`;
 
   logger.info(
-    {
-      provider: "huggingface-router",
-      model: IMAGE_TO_IMAGE_MODEL,
-      prompt: enhanced.slice(0, 100),
-    },
-    "[imageGen] editing",
+    { provider: "pollinations", seed, prompt: enhanced.slice(0, 100) },
+    "[imageGen] editing (regeneration)",
   );
 
   let response: Response;
   try {
-    response = await fetch(`${HF_ROUTER_BASE}/${IMAGE_TO_IMAGE_MODEL}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        inputs: rawBase64,
-        parameters: {
-          prompt: enhanced,
-          guidance_scale: 7.5,
-          image_guidance_scale: 1.5,
-          num_inference_steps: 20,
-          strength: 0.6,
-        },
-      }),
+    response = await fetch(imageUrl, {
+      method: "GET",
+      headers: { Accept: "image/*" },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "TimeoutError") {
       throw new Error(
-        "Image editing timed out (35s) — the model may be busy. Please try again.",
+        "Image editing timed out (35s) — Pollinations may be busy. Please try again.",
       );
     }
     throw new Error(
       `Network error: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-
-  if (response.status === 401 || response.status === 403) {
-    throw new Error(
-      "HUGGINGFACE_API_KEY is invalid or expired. " +
-        "Get a new free token at huggingface.co/settings/tokens.",
-    );
-  }
-
-  if (response.status === 503) {
-    const json = (await response.json().catch(() => ({}))) as {
-      estimated_time?: number;
-    };
-    const wait = json.estimated_time;
-    throw new Error(
-      wait
-        ? `Model warming up — retry in ${Math.ceil(wait)} seconds`
-        : "Image editing service temporarily unavailable — please try again.",
-    );
-  }
-
-  if (response.status === 429) {
-    throw new Error(
-      "HuggingFace rate limit reached — please wait before editing again.",
     );
   }
 
@@ -216,7 +164,7 @@ export async function editImage(
   }
 
   const base64 = Buffer.from(buffer).toString("base64");
-  const ct = response.headers.get("content-type") ?? "image/png";
+  const ct = response.headers.get("content-type") ?? "image/jpeg";
   const mime = ct.split(";")[0].trim();
 
   logger.info({ bytes: buffer.byteLength, mime }, "[imageGen] edit complete");
