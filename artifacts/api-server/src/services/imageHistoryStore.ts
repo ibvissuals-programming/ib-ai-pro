@@ -126,6 +126,24 @@ async function persistHistory(entries: HistoryEntry[]): Promise<void> {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
+ * LAYER 3: Eagerly create data directories at startup so later writes never
+ * fail with ENOENT. Safe to call multiple times (mkdir is idempotent).
+ */
+export async function initImageStore(): Promise<void> {
+  await fs.mkdir(IMAGES_DIR, { recursive: true });
+  // Touch the history file if it doesn't exist yet
+  try {
+    await fs.access(HISTORY_FILE);
+  } catch {
+    await fs.writeFile(HISTORY_FILE, "[]", "utf8");
+  }
+  logger.info(
+    { dataDir: DATA_DIR, imagesDir: IMAGES_DIR },
+    "[imageHistory] Store initialized",
+  );
+}
+
+/**
  * Save a generated or edited image to persistent history.
  * Writes the image file to disk and appends metadata.
  */
