@@ -396,6 +396,10 @@ async function tryGeminiImg2Img(
     // LAYER 1 + LAYER 2: Use intent-scoped instruction for precise editing
     const editInstruction = buildEditInstruction(intent, prompt);
 
+    // FIX: capture timeoutId so we can cancel it if Gemini wins the race,
+    // preventing a spurious [ai] provider timeout log after successful responses.
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
     const result = await Promise.race([
       ai.models.generateContent({
         model: "gemini-2.5-flash-image",
@@ -408,15 +412,18 @@ async function tryGeminiImg2Img(
             ],
           },
         ],
-        config: { responseModalities: ["IMAGE"] },
+        config: { responseModalities: ["TEXT", "IMAGE"] },
       }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => {
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
           logger.warn({ provider: "gemini", timeoutMs }, "[ai] provider timeout");
           reject(new Error("Gemini img2img timeout"));
-        }, timeoutMs),
-      ),
+        }, timeoutMs);
+      }),
     ]);
+
+    // Gemini won the race — cancel the pending timeout so it does not fire later
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
 
     // Look for image output in response parts
     const parts = result.candidates?.[0]?.content?.parts as Array<{
@@ -428,10 +435,23 @@ async function tryGeminiImg2Img(
         if (part.inlineData?.data && part.inlineData?.mimeType) {
           const outputMime = part.inlineData.mimeType;
           const outputBase64 = part.inlineData.data;
+
+          // LAYER 4: Output ≠ Input validation.
+          // Gemini sometimes echoes the input image unchanged (content policy block,
+          // unsupported edit, or model limitation). Treat echo as a failure so the
+          // pipeline falls through to retry / Tier 2 instead of returning the original.
+          if (outputBase64 === parsed.base64) {
+            logger.warn(
+              { provider: "gemini", outputBytes: outputBase64.length },
+              "[imageEdit] Gemini returned echo of input — not a transformation, falling back",
+            );
+            return null;
+          }
+
           const dataUrl = `data:${outputMime};base64,${outputBase64}`;
           validateImageResponse(dataUrl);
           logger.info(
-            { outputMime, bytes: outputBase64.length },
+            { outputMime, bytes: outputBase64.length, intent: editInstruction.slice(0, 60) },
             "[imageEdit] using true img2img",
           );
           return dataUrl;

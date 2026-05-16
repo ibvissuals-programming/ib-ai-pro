@@ -3,7 +3,7 @@ import { getAuthHeaders } from '../auth/authService';
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 const GENERATE_URL = `${BASE}/api/image/generate`;
 const EDIT_URL = `${BASE}/api/image/edit`;
-const TIMEOUT_MS = 32_000;
+const TIMEOUT_MS = 90_000;
 
 async function fetchWithTimeout(url, options) {
   const controller = new AbortController();
