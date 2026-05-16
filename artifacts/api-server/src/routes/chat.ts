@@ -9,7 +9,7 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { createChatStream, type ChatMessage } from "../services/llm";
-import { SYSTEM_PROMPT, IMAGE_PROMPT_COMPILER_PROMPT } from "../prompts/system";
+import { SYSTEM_PROMPT } from "../prompts/system";
 import { logger } from "../lib/logger";
 import { requireNormalAuth } from "../middleware/requireAuth";
 import { creditGuard, deductRequestCredits } from "../middleware/creditGuard";
@@ -19,23 +19,15 @@ const router = Router();
 
 // ─── Adaptive context window ──────────────────────────────────────────────────
 
-type ConversationMode = "image_prompt_compiler" | "coding" | "reasoning" | "chat";
+type ConversationMode = "coding" | "reasoning" | "chat";
 
 const CONTEXT_LIMITS: Record<ConversationMode, number> = {
-  image_prompt_compiler: 3,
   coding: 12,
   reasoning: 10,
   chat: 7,
 };
 
 const MAX_CONTENT_LENGTH = 8000;
-
-const IMAGE_PROMPT_COMPILER_SIGNALS = [
-  "compile a prompt", "compile prompt", "image prompt", "image generation prompt",
-  "prompt compiler", "make a prompt for", "create a prompt for", "generate image prompt",
-  "build a prompt", "convert to prompt", "prompt for this image",
-  "edit image prompt", "enhance image prompt", "style transfer prompt",
-];
 
 const CODING_SIGNALS = [
   "code", "debug", "error", "fix", "stack", "function", "variable",
@@ -52,20 +44,10 @@ const REASONING_SIGNALS = [
 
 /**
  * Detects conversation mode from the last 3 user messages.
- * image_prompt_compiler is checked first — it overrides all other modes.
- * Requires at least 2 matching signals for coding/reasoning.
+ * Requires at least 2 matching signals to qualify as a specialised mode.
  * Falls back to "chat" when signals are ambiguous or absent.
  */
 function detectMode(messages: Array<{ role: string; content: string }>): ConversationMode {
-  const lastUserMessage = messages
-    .filter((m) => m.role === "user")
-    .slice(-1)
-    .map((m) => m.content.toLowerCase())
-    .join(" ");
-
-  const isCompiler = IMAGE_PROMPT_COMPILER_SIGNALS.some((s) => lastUserMessage.includes(s));
-  if (isCompiler) return "image_prompt_compiler";
-
   const recentText = messages
     .filter((m) => m.role === "user")
     .slice(-3)
@@ -146,15 +128,10 @@ function buildContext(raw: RawMessage[]): ChatMessage[] {
   const mode = detectMode(cleaned);
   const window = CONTEXT_LIMITS[mode];
 
-  const systemPrompt =
-    mode === "image_prompt_compiler"
-      ? IMAGE_PROMPT_COMPILER_PROMPT
-      : buildDatedSystemPrompt();
-
   logger.debug({ mode, window, total: cleaned.length }, "context built");
 
   return [
-    { role: "system", content: systemPrompt },
+    { role: "system", content: buildDatedSystemPrompt() },
     ...cleaned.slice(-window),
   ];
 }

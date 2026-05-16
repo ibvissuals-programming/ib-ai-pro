@@ -10,22 +10,6 @@ const normalize = (text) => text.toLowerCase().trim().replace(/\s+/g, ' ');
 export function detectMode(input) {
   const text = normalize(input);
   if (
-    text.includes('compile a prompt') ||
-    text.includes('compile prompt') ||
-    text.includes('image prompt') ||
-    text.includes('image generation prompt') ||
-    text.includes('prompt compiler') ||
-    text.includes('make a prompt for') ||
-    text.includes('create a prompt for') ||
-    text.includes('generate image prompt') ||
-    text.includes('build a prompt') ||
-    text.includes('convert to prompt') ||
-    text.includes('prompt for this image') ||
-    text.includes('edit image prompt') ||
-    text.includes('enhance image prompt') ||
-    text.includes('style transfer prompt')
-  ) return 'image_prompt_compiler';
-  if (
     text.includes('generate a prompt') ||
     text.includes('improve this prompt') ||
     text.includes('optimize prompt') ||
