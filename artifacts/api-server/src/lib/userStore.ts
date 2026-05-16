@@ -51,9 +51,9 @@ export const RESET_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export const CREDIT_COSTS = {
   chat: 1,
-  image_generate: 3,
-  image_edit: 5,
-  image_analysis: 2,
+  image_generate: 1,
+  image_edit: 1,
+  image_analysis: 1,
 } as const;
 
 export type CreditFeature = keyof typeof CREDIT_COSTS;
