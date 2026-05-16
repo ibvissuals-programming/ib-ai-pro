@@ -1,32 +1,33 @@
 /**
- * Image generation service — IB AI Assistant
+ * Image generation service — IB AI Assistant (Production V4)
  *
  * TEXT-TO-IMAGE:  Pollinations.ai (free, no auth, FLUX model)
- *                 image.pollinations.ai
  *
- * IMAGE-TO-IMAGE: Two-tier approach:
- *   Tier 1 (true img2img): Gemini image model with image input + image output.
- *                           Preserves the actual subject pixel-faithfully.
- *   Tier 2 (grounded fallback): Gemini vision describes the uploaded image,
- *                                then FLUX regenerates grounded to that description.
- *   Hard failure: if both tiers fail, returns error — never silently prompt-only.
+ * IMAGE-TO-IMAGE: Two-tier pipeline:
+ *   Tier 1 (true img2img): Gemini image model — intent+mode+intensity aware.
+ *                          Uses cinematic lighting engine for HIGH/EXTREME modes.
+ *   Tier 2 (grounded fallback): Gemini vision describe → FLUX regeneration.
  *
- * MIME validation: only image/png, image/jpeg, image/webp accepted.
- * Size limit: base64 payload must not exceed 10 MB decoded.
- * Response validation: output must match ^data:image/(png|jpeg|jpg|webp);base64,
- *
- * PROVIDER RESILIENCE:
- *   Pollinations: up to 2 retries with exponential backoff on 429/402/503.
- *   Gemini: timeout guard on every call.
- *   Observability: [ai] prefix logs for timeout / retry / unavailable events.
- *   Error messages: all raw provider errors are sanitized before propagation.
+ * LAYER 1: Mode classifier (CINEMATIC_EDIT, SCREENSHOT_CLEANUP, AGGRESSIVE_RECONSTRUCTION, etc.)
+ * LAYER 2: Intensity levels (LOW / MEDIUM / HIGH / EXTREME) — controls prompt strength
+ * LAYER 3: Screenshot cleanup prompts — reconstruct artifacts naturally
+ * LAYER 4: Cinematic lighting engine — physically-grounded relighting, not filter-style
+ * LAYER 5: Fast path — SIMPLE/LOW skip retry; only HEAVY/EXTREME retries with stronger prompt
+ * LAYER 6: Similarity validation — reject near-identical outputs, retry with stronger guidance
+ * LAYER 7: Persistent image history — saved to disk after every successful operation
  */
 import { logger } from "../lib/logger";
 import {
+  classifyEditMode,
+  detectEditIntensity,
+  buildStrongInstruction,
+  getEditModeLabel,
   classifyImageIntent,
   buildEditInstruction,
   getIntentLabel,
   type ImageIntent,
+  type EditMode,
+  type EditIntensity,
 } from "./imageIntentClassifier";
 import {
   createJob,
@@ -42,41 +43,46 @@ import {
   classifyJobType,
   complexityTimeout,
 } from "./imageComplexityClassifier";
+import { saveToHistory } from "./imageHistoryStore";
 
 const REQUEST_TIMEOUT_MS = 35_000;
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB decoded
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_MIMES = ["image/png", "image/jpeg", "image/webp"] as const;
 const RESPONSE_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,/;
 
-// ── Pollinations retry config ──────────────────────────────────────────────────
-const MAX_POLLINATIONS_RETRIES = 2; // 2 retries after initial attempt = 3 total
+const MAX_POLLINATIONS_RETRIES = 2;
 const POLLINATIONS_RETRY_BASE_MS = 2_000;
 
 type AcceptedMime = (typeof ACCEPTED_MIMES)[number];
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** True when Pollinations returned a status worth retrying */
 function isRetryableStatus(status: number): boolean {
   return status === 429 || status === 402 || status === 503;
 }
 
-/**
- * Convert raw provider errors into user-safe messages.
- * Never surfaces internal URLs, JSON bodies, or queue metadata.
- */
-function sanitizeProviderError(err: unknown, context: "generate" | "edit"): string {
+function sanitizeProviderError(
+  err: unknown,
+  context: "generate" | "edit",
+): string {
   const raw = err instanceof Error ? err.message : String(err);
   const lower = raw.toLowerCase();
 
-  if (lower.includes("timeout") || lower.includes("timedout") || lower.includes("timed out") || lower.includes("aborted")) {
+  if (
+    lower.includes("timeout") ||
+    lower.includes("timedout") ||
+    lower.includes("timed out") ||
+    lower.includes("aborted")
+  ) {
     return `Image ${context} temporarily unavailable — please retry in a moment.`;
   }
-  if (lower.includes("queue full") || lower.includes("402") || lower.includes("overloaded")) {
+  if (
+    lower.includes("queue full") ||
+    lower.includes("402") ||
+    lower.includes("overloaded")
+  ) {
     return `Image ${context} is temporarily overloaded. Please retry.`;
   }
   if (lower.includes("rate limit") || lower.includes("429")) {
@@ -88,88 +94,89 @@ function sanitizeProviderError(err: unknown, context: "generate" | "edit"): stri
   if (lower.includes("empty response")) {
     return `Image ${context} returned an empty response — please try again.`;
   }
-  // Generic fallback — safe enough to surface
   return `Image ${context} failed. Please try again.`;
 }
 
-// ── LAYER 3: Prompt Expansion Engine ──────────────────────────────────────────
-// Converts short user prompts into structured professional prompts.
-// Style library auto-applies when a known aesthetic is detected.
+// ── Prompt Expansion Engine ───────────────────────────────────────────────────
 
 const QUALITY_SUFFIX =
   ", ultra realistic, sharp focus, highly detailed, professional quality, 8k";
 
-/**
- * Style library — auto-applied when detected in the prompt.
- * Each entry maps a keyword to a full professional prompt expansion.
- */
 const STYLE_MAP: Record<string, string> = {
-  // Photography styles
-  portrait: "studio portrait photography, professional lighting, shallow depth of field, bokeh, DSLR, sharp eyes, clean backdrop",
-  landscape: "scenic landscape photography, golden hour, vivid colors, wide angle lens, epic scale, dramatic sky",
-  product: "professional product photography, clean white background, studio lighting, sharp details, commercial grade",
+  portrait:
+    "studio portrait photography, professional lighting, shallow depth of field, bokeh, DSLR, sharp eyes, clean backdrop",
+  landscape:
+    "scenic landscape photography, golden hour, vivid colors, wide angle lens, epic scale, dramatic sky",
+  product:
+    "professional product photography, clean white background, studio lighting, sharp details, commercial grade",
   food: "food photography, natural light, shallow depth of field, appetizing, editorial, recipe magazine quality",
-  interior: "interior design photography, natural lighting, architectural digest style, warm tones, inviting atmosphere",
-
-  // Artistic styles
+  interior:
+    "interior design photography, natural lighting, architectural digest style, warm tones, inviting atmosphere",
   art: "digital art, highly detailed, concept art, artstation trending, professional illustration",
-  anime: "anime style illustration, clean line art, vibrant colors, studio quality, detailed background, cinematic composition, cel shaded",
-  manga: "manga style illustration, black and white ink, dynamic line weight, expressive characters, screen tone shading",
-  cartoon: "cartoon illustration style, bold outlines, flat colors, exaggerated proportions, clean and playful",
-  sketch: "pencil sketch illustration, fine line art, cross-hatching, artistic detail, hand-drawn quality",
-  watercolor: "watercolor illustration, soft washes, painterly texture, artistic brushwork, delicate color bleeding",
-  "oil painting": "classical oil painting style, rich textures, impasto technique, museum quality, old masters technique",
-  illustration: "professional illustration, detailed artwork, polished digital art, vibrant palette, editorial quality",
-  "pixel art": "pixel art style, 16-bit aesthetic, clean pixels, retro game art, detailed sprite work",
-  "3d render": "3D CGI render, photorealistic materials, global illumination, ray tracing, studio quality render",
-  "studio ghibli": "Studio Ghibli animation style, painterly backgrounds, soft color palette, whimsical atmosphere, hand-drawn aesthetic",
-  impressionist: "impressionist painting style, loose brushwork, light and color play, Monet-inspired, painterly texture",
-  "film noir": "film noir black and white, dramatic shadows, high contrast, moody atmosphere, 1940s cinematic style",
-
-  // Cinematic & premium aesthetics
-  cinematic: "cinematic portrait, dramatic lighting, shallow depth of field, anamorphic lens flares, teal-orange color grading, ultra realistic, film grain, 8k detail",
-  luxury: "luxury editorial photography, high-end fashion lighting, soft shadows, premium aesthetic, studio grade, elegant composition, immaculate detail",
-  "afro luxury": "afro luxury portrait, warm golden tones, cultural elegance, premium styling, rich textures, regal composition, editorial quality, high-end lighting",
-
-  // Digital / Pop culture styles
-  cyberpunk: "cyberpunk aesthetic, neon lights, futuristic cityscape glow, electric blues and magentas, rain-slicked reflections, high-tech dystopia",
+  anime:
+    "anime style illustration, clean line art, vibrant colors, studio quality, detailed background, cinematic composition, cel shaded",
+  manga:
+    "manga style illustration, black and white ink, dynamic line weight, expressive characters, screen tone shading",
+  cartoon:
+    "cartoon illustration style, bold outlines, flat colors, exaggerated proportions, clean and playful",
+  sketch:
+    "pencil sketch illustration, fine line art, cross-hatching, artistic detail, hand-drawn quality",
+  watercolor:
+    "watercolor illustration, soft washes, painterly texture, artistic brushwork, delicate color bleeding",
+  "oil painting":
+    "classical oil painting style, rich textures, impasto technique, museum quality, old masters technique",
+  illustration:
+    "professional illustration, detailed artwork, polished digital art, vibrant palette, editorial quality",
+  "pixel art":
+    "pixel art style, 16-bit aesthetic, clean pixels, retro game art, detailed sprite work",
+  "3d render":
+    "3D CGI render, photorealistic materials, global illumination, ray tracing, studio quality render",
+  "studio ghibli":
+    "Studio Ghibli animation style, painterly backgrounds, soft color palette, whimsical atmosphere, hand-drawn aesthetic",
+  impressionist:
+    "impressionist painting style, loose brushwork, light and color play, Monet-inspired, painterly texture",
+  "film noir":
+    "film noir black and white, dramatic shadows, high contrast, moody atmosphere, 1940s cinematic style",
+  cinematic:
+    "cinematic portrait, dramatic 3-point lighting, shallow depth of field, anamorphic lens flares, teal-orange color grading, ultra realistic, film grain, 8k detail",
+  luxury:
+    "luxury editorial photography, high-end fashion lighting, soft shadows, premium aesthetic, studio grade, elegant composition, immaculate detail",
+  "afro luxury":
+    "afro luxury portrait, warm golden tones, cultural elegance, premium styling, rich textures, regal composition, editorial quality, high-end lighting",
+  cyberpunk:
+    "cyberpunk aesthetic, neon lights, futuristic cityscape glow, electric blues and magentas, rain-slicked reflections, high-tech dystopia",
   gta: "GTA V loading screen art style, hyper-detailed illustration, dramatic pose, sharp lines, bold colors, action composition",
-  pixar: "Pixar animation style, 3D CGI, expressive character, warm lighting, vibrant colors, movie quality render, emotional depth",
-  disney: "Disney animation style, classic character design, expressive features, magical atmosphere, rich color palette, storybook quality",
-  vintage: "vintage film photography, warm grain, faded highlights, desaturated shadows, nostalgic 35mm aesthetic, soft vignette",
-  retro: "retro aesthetic, warm tones, analog grain, vintage color palette, nostalgic atmosphere, classic style",
-
-  // Mood / lighting styles
-  moody: "moody low-light photography, dramatic contrast, deep shadows, rich midtones, emotional atmosphere, cinematic tension",
-  dramatic: "dramatic lighting photography, strong directional light, deep shadows, powerful contrast, theatrical atmosphere",
+  pixar:
+    "Pixar animation style, 3D CGI, expressive character, warm lighting, vibrant colors, movie quality render, emotional depth",
+  disney:
+    "Disney animation style, classic character design, expressive features, magical atmosphere, rich color palette, storybook quality",
+  vintage:
+    "vintage film photography, warm grain, faded highlights, desaturated shadows, nostalgic 35mm aesthetic, soft vignette",
+  retro:
+    "retro aesthetic, warm tones, analog grain, vintage color palette, nostalgic atmosphere, classic style",
+  moody:
+    "moody low-light photography, dramatic contrast, deep shadows, rich midtones, emotional atmosphere, cinematic tension",
+  dramatic:
+    "dramatic lighting photography, strong directional light, deep shadows, powerful contrast, theatrical atmosphere",
   hdr: "HDR realism, ultra detail, high dynamic range, every texture visible, professional photography, extreme clarity",
   neon: "neon-lit photography, vivid electric colors, night scene, reflective surfaces, urban nightlife atmosphere, glow effects",
-  "dark mode": "dark moody aesthetic, near-black backgrounds, selective illumination, dramatic shadows, premium dark tone",
-
-  // Social media styles
-  tiktok: "viral TikTok visual style, sharp contrast, bright attention-focused colors, bold composition, high energy, trending aesthetic",
-  viral: "viral social media content style, eye-catching composition, bold colors, high contrast, maximum visual impact",
-  instagram: "Instagram editorial style, perfect lighting, aesthetically curated, aspirational composition, premium lifestyle feel",
-
-  // Logo / branding
+  "dark mode":
+    "dark moody aesthetic, near-black backgrounds, selective illumination, dramatic shadows, premium dark tone",
+  tiktok:
+    "viral TikTok visual style, sharp contrast, bright attention-focused colors, bold composition, high energy, trending aesthetic",
+  viral:
+    "viral social media content style, eye-catching composition, bold colors, high contrast, maximum visual impact",
+  instagram:
+    "Instagram editorial style, perfect lighting, aesthetically curated, aspirational composition, premium lifestyle feel",
   logo: "clean vector logo design, minimalist, professional branding, crisp edges, white background, scalable design",
 };
 
-/**
- * LAYER 3 — Expand a short user prompt into a structured professional prompt.
- * Detects style keywords and prepends the matching expansion.
- * Appends quality suffix unless the prompt already specifies quality.
- */
 export function enhancePrompt(raw: string): string {
   const lower = raw.toLowerCase().trim();
-
-  // Find the most specific style match (prefer longer keyword matches)
   const matchedKey = Object.keys(STYLE_MAP)
     .filter((k) => lower.includes(k))
     .sort((a, b) => b.length - a.length)[0];
-
   const styleExpansion = matchedKey ? `${STYLE_MAP[matchedKey]}, ` : "";
-
   const alreadyHasQuality =
     lower.includes("quality") ||
     lower.includes("detailed") ||
@@ -178,12 +185,11 @@ export function enhancePrompt(raw: string): string {
     lower.includes("8k") ||
     lower.includes("4k") ||
     lower.includes("ultra");
-
   const suffix = alreadyHasQuality ? "" : QUALITY_SUFFIX;
   return `${styleExpansion}${raw.trim()}${suffix}`;
 }
 
-// ── LAYER 5 — Preservation Guarantee ──────────────────────────────────────────
+// ── Preservation Lock ────────────────────────────────────────────────────────
 
 const HARD_LOCK_SIGNALS = [
   "preserve",
@@ -197,36 +203,23 @@ const HARD_LOCK_SIGNALS = [
   "do not modify",
 ];
 
-/**
- * Detect if the user requested explicit preservation of specific elements.
- * If true → HARD PRESERVATION LOCK: no modification to protected elements.
- */
 function detectPreservationLock(prompt: string): boolean {
   const lower = prompt.toLowerCase();
   return HARD_LOCK_SIGNALS.some((s) => lower.includes(s));
 }
 
-// ── LAYER 4 — Controlled Prompt Expansion ────────────────────────────────────
-// Builds a structured FLUX prompt:
-//   [Preservation Layer] + [Core Instruction] + [Style Layer]
-// Max 1 primary style + 2 secondary style tokens to avoid over-specification.
-
 function buildStructuredPrompt(
   prompt: string,
   hasPreservationLock: boolean,
 ): string {
-  // Preservation layer — always included for edit jobs
   const preservationLayer = hasPreservationLock
     ? "STRICT PRESERVATION — do not alter face, clothing, logos, text, or pose: "
     : "Preserve face identity, clothing textures, logos, and pose — ";
-
-  // Core instruction with style expansion (LAYER 3)
   const coreExpanded = enhancePrompt(prompt);
-
   return `${preservationLayer}${coreExpanded}`;
 }
 
-// ── Response validation ────────────────────────────────────────────────────────
+// ── Response validation ───────────────────────────────────────────────────────
 
 function validateImageResponse(result: string): void {
   if (!RESPONSE_PATTERN.test(result)) {
@@ -236,7 +229,32 @@ function validateImageResponse(result: string): void {
   }
 }
 
-// ── Pollinations fetch with retry + observability ──────────────────────────────
+// ── LAYER 6: Near-identical output detection ──────────────────────────────────
+// Detects when Gemini returns a visually unchanged image.
+// Check 1 (exact): already handled upstream (outputBase64 === inputBase64).
+// Check 2 (size + prefix): if size differs < 1.5% AND first 400 chars match → same image.
+
+function isNearIdenticalOutput(
+  inputBase64: string,
+  outputBase64: string,
+): boolean {
+  if (outputBase64 === inputBase64) return true;
+
+  const sizeDiff = Math.abs(outputBase64.length - inputBase64.length);
+  const sizeRatio = sizeDiff / Math.max(inputBase64.length, 1);
+
+  if (sizeRatio < 0.015) {
+    // Sizes are nearly identical — check base64 content prefix
+    const prefixLen = Math.min(400, inputBase64.length, outputBase64.length);
+    if (inputBase64.slice(0, prefixLen) === outputBase64.slice(0, prefixLen)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// ── Pollinations fetch ────────────────────────────────────────────────────────
 
 const POLLINATIONS_BASE = "https://image.pollinations.ai/prompt";
 
@@ -265,8 +283,10 @@ async function pollinationsFetch(
       });
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "TimeoutError") {
-        logger.warn({ attempt: attempt + 1, provider: "pollinations" }, "[ai] provider timeout");
-        // Timeouts are not retried — provider is busy; surface clean message
+        logger.warn(
+          { attempt: attempt + 1, provider: "pollinations" },
+          "[ai] provider timeout",
+        );
         throw new Error(sanitizeProviderError(err, context));
       }
       lastErr = err instanceof Error ? err : new Error(String(err));
@@ -278,14 +298,17 @@ async function pollinationsFetch(
       const text = await response.text().catch(() => "");
       lastErr = new Error(`HTTP ${response.status}: ${text.slice(0, 80)}`);
       logger.warn(
-        { attempt: attempt + 1, status: response.status, provider: "pollinations" },
+        {
+          attempt: attempt + 1,
+          status: response.status,
+          provider: "pollinations",
+        },
         "[ai] retry attempt",
       );
       if (attempt < MAX_POLLINATIONS_RETRIES) continue;
       break;
     }
 
-    // Non-retryable HTTP error or success
     return response;
   }
 
@@ -293,10 +316,12 @@ async function pollinationsFetch(
   throw new Error(sanitizeProviderError(lastErr, context));
 }
 
-// ── TEXT-TO-IMAGE: Pollinations.ai ────────────────────────────────────────────
-// Free, no auth required. Uses FLUX model. Returns binary JPEG.
+// ── TEXT-TO-IMAGE ─────────────────────────────────────────────────────────────
 
-export async function generateImage(prompt: string): Promise<string> {
+export async function generateImage(
+  prompt: string,
+  userId?: string,
+): Promise<string> {
   const enhanced = enhancePrompt(prompt);
   const seed = Math.floor(Math.random() * 2_000_000_000);
 
@@ -314,30 +339,46 @@ export async function generateImage(prompt: string): Promise<string> {
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     const raw = `HTTP ${response.status}: ${text.slice(0, 80)}`;
-    logger.error({ status: response.status, provider: "pollinations" }, "[ai] provider unavailable");
+    logger.error(
+      { status: response.status, provider: "pollinations" },
+      "[ai] provider unavailable",
+    );
     throw new Error(sanitizeProviderError(new Error(raw), "generate"));
   }
 
   const buffer = await response.arrayBuffer();
   if (buffer.byteLength < 500) {
-    throw new Error("Image generation returned an empty response — please try again.");
+    throw new Error(
+      "Image generation returned an empty response — please try again.",
+    );
   }
 
   const base64 = Buffer.from(buffer).toString("base64");
   const ct = response.headers.get("content-type") ?? "image/jpeg";
   const mime = ct.split(";")[0].trim();
-
   const result = `data:${mime};base64,${base64}`;
   validateImageResponse(result);
 
-  logger.info(
-    { bytes: buffer.byteLength, mime },
-    "[imageGen] generation complete",
-  );
+  logger.info({ bytes: buffer.byteLength, mime }, "[imageGen] generation complete");
+
+  // LAYER 7: Persist to history
+  if (userId) {
+    saveToHistory({
+      userId,
+      type: "generate",
+      prompt,
+      mode: "IMAGE_GENERATION",
+      intensity: "MEDIUM",
+      b64Image: result,
+    }).catch((err) =>
+      logger.warn({ err }, "[imageHistory] Failed to save generate result"),
+    );
+  }
+
   return result;
 }
 
-// ── IMAGE INPUT: parse and validate ───────────────────────────────────────────
+// ── IMAGE INPUT: parse and validate ──────────────────────────────────────────
 
 interface ParsedImage {
   mimeType: AcceptedMime;
@@ -345,7 +386,6 @@ interface ParsedImage {
 }
 
 function parseAndValidateImage(imageDataUrl: string): ParsedImage {
-  // Hard failure if not a data URL
   const commaIdx = imageDataUrl.indexOf(",");
   if (commaIdx === -1) {
     throw new Error("No image supplied for editing");
@@ -356,7 +396,6 @@ function parseAndValidateImage(imageDataUrl: string): ParsedImage {
   const mimeMatch = header.match(/data:([^;]+);/);
   const mimeType = mimeMatch?.[1] as string | undefined;
 
-  // MIME validation — only png, jpeg, webp accepted
   if (!mimeType || !(ACCEPTED_MIMES as readonly string[]).includes(mimeType)) {
     logger.warn({ mimeType }, "[imageEdit] edit rejected — unsupported MIME type");
     throw new Error(
@@ -364,40 +403,33 @@ function parseAndValidateImage(imageDataUrl: string): ParsedImage {
     );
   }
 
-  // Size limit — reject payloads > 10 MB decoded
   const decodedBytes = Math.floor(base64.length * 0.75);
   if (decodedBytes > MAX_IMAGE_BYTES) {
     logger.warn(
       { decodedBytes },
       "[imageEdit] edit rejected — image exceeds 10 MB size limit",
     );
-    throw Object.assign(new Error("Image too large — maximum size is 10 MB"), {
-      statusCode: 413,
-    });
+    throw Object.assign(
+      new Error("Image too large — maximum size is 10 MB"),
+      { statusCode: 413 },
+    );
   }
 
   return { mimeType: mimeType as AcceptedMime, base64 };
 }
 
-// ── TIER 1: True img2img via Gemini image model ────────────────────────────────
-// Sends the uploaded image as input and requests an image output from Gemini.
-// Uses intent-aware instructions (LAYER 1) and complexity-based timeout (LAYER 8).
-// Returns the result as a data URL, or null if this path is unavailable.
+// ── TIER 1: Gemini img2img ────────────────────────────────────────────────────
+// Uses mode+intensity aware instructions (LAYER 4 cinematic lighting engine).
+// Returns the result as a data URL, or null to trigger fallback.
 
 async function tryGeminiImg2Img(
   parsed: ParsedImage,
-  prompt: string,
-  intent: ImageIntent,
+  instruction: string,
   timeoutMs: number,
 ): Promise<string | null> {
   try {
     const { ai } = await import("@workspace/integrations-gemini-ai");
 
-    // LAYER 1 + LAYER 2: Use intent-scoped instruction for precise editing
-    const editInstruction = buildEditInstruction(intent, prompt);
-
-    // FIX: capture timeoutId so we can cancel it if Gemini wins the race,
-    // preventing a spurious [ai] provider timeout log after successful responses.
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     const result = await Promise.race([
@@ -408,7 +440,7 @@ async function tryGeminiImg2Img(
             role: "user",
             parts: [
               { inlineData: { mimeType: parsed.mimeType, data: parsed.base64 } },
-              { text: editInstruction },
+              { text: instruction },
             ],
           },
         ],
@@ -422,10 +454,8 @@ async function tryGeminiImg2Img(
       }),
     ]);
 
-    // Gemini won the race — cancel the pending timeout so it does not fire later
     if (timeoutId !== undefined) clearTimeout(timeoutId);
 
-    // Look for image output in response parts
     const parts = result.candidates?.[0]?.content?.parts as Array<{
       inlineData?: { mimeType?: string; data?: string };
     }> | undefined;
@@ -436,14 +466,11 @@ async function tryGeminiImg2Img(
           const outputMime = part.inlineData.mimeType;
           const outputBase64 = part.inlineData.data;
 
-          // LAYER 4: Output ≠ Input validation.
-          // Gemini sometimes echoes the input image unchanged (content policy block,
-          // unsupported edit, or model limitation). Treat echo as a failure so the
-          // pipeline falls through to retry / Tier 2 instead of returning the original.
-          if (outputBase64 === parsed.base64) {
+          // LAYER 6: Near-identical output detection
+          if (isNearIdenticalOutput(parsed.base64, outputBase64)) {
             logger.warn(
               { provider: "gemini", outputBytes: outputBase64.length },
-              "[imageEdit] Gemini returned echo of input — not a transformation, falling back",
+              "[imageEdit] Gemini returned near-identical output — falling back",
             );
             return null;
           }
@@ -451,37 +478,31 @@ async function tryGeminiImg2Img(
           const dataUrl = `data:${outputMime};base64,${outputBase64}`;
           validateImageResponse(dataUrl);
           logger.info(
-            { outputMime, bytes: outputBase64.length, intent: editInstruction.slice(0, 60) },
-            "[imageEdit] using true img2img",
+            { outputMime, bytes: outputBase64.length, instruction: instruction.slice(0, 60) },
+            "[imageEdit] Gemini img2img success",
           );
           return dataUrl;
         }
       }
     }
 
-    // Response contained no image output — model returned text only
-    logger.info("[imageEdit] Gemini img2img returned no image — trying grounded fallback");
+    logger.info("[imageEdit] Gemini img2img returned no image — fallback");
     return null;
   } catch (err) {
     logger.warn(
       { err: err instanceof Error ? err.message : String(err), provider: "gemini" },
-      "[imageEdit] Gemini img2img unavailable — trying grounded fallback",
+      "[imageEdit] Gemini img2img unavailable — fallback",
     );
     return null;
   }
 }
 
-// ── TIER 2: Gemini vision description + FLUX regeneration ─────────────────────
-// Gemini analyzes the uploaded image to extract a faithful description,
-// which is combined with the edit prompt for grounded FLUX generation.
-// Hard failure if Gemini is unavailable (no silent prompt-only fallback).
+// ── TIER 2: Gemini vision describe + FLUX regeneration ───────────────────────
 
 async function describeImageForEdit(parsed: ParsedImage): Promise<string> {
   const DESCRIBE_TIMEOUT_MS = 25_000;
   const { ai } = await import("@workspace/integrations-gemini-ai");
 
-  // FIX: capture timeoutId so it can be cleared when Gemini responds before
-  // the deadline, preventing a spurious [ai] provider timeout log.
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
   const result = await Promise.race([
@@ -508,7 +529,6 @@ async function describeImageForEdit(parsed: ParsedImage): Promise<string> {
     }),
   ]);
 
-  // Gemini won — cancel stale timeout
   if (timeoutId !== undefined) clearTimeout(timeoutId);
 
   const description = ((result as { text?: string }).text ?? "").trim();
@@ -518,7 +538,7 @@ async function describeImageForEdit(parsed: ParsedImage): Promise<string> {
 
   logger.info(
     { descriptionLength: description.length },
-    "[imageEdit] using grounded fallback",
+    "[imageEdit] grounded fallback — description ready",
   );
   return description;
 }
@@ -541,7 +561,10 @@ async function regenerateWithFlux(editPrompt: string): Promise<string> {
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     const raw = `HTTP ${response.status}: ${text.slice(0, 80)}`;
-    logger.error({ status: response.status, provider: "pollinations" }, "[ai] provider unavailable");
+    logger.error(
+      { status: response.status, provider: "pollinations" },
+      "[ai] provider unavailable",
+    );
     throw new Error(sanitizeProviderError(new Error(raw), "edit"));
   }
 
@@ -554,53 +577,77 @@ async function regenerateWithFlux(editPrompt: string): Promise<string> {
   const ct = response.headers.get("content-type") ?? "image/jpeg";
   const mime = ct.split(";")[0].trim();
   const result = `data:${mime};base64,${base64}`;
-
   validateImageResponse(result);
   logger.info({ bytes: buffer.byteLength, mime }, "[imageGen] edit complete");
   return result;
 }
 
-// ── EditResult — returned by editImage ────────────────────────────────────────
+// ── EditResult ────────────────────────────────────────────────────────────────
 
 export interface EditResult {
   b64Image: string;
   job: ReturnType<typeof jobSummary>;
+  mode: string;
+  intensity: string;
+}
+
+// ── LAYER 5: Intensity → complexity mapping ───────────────────────────────────
+// Determines whether to retry Tier 1 with a stronger prompt or go straight to Tier 2.
+
+function shouldRetryTier1(
+  intensity: EditIntensity,
+  complexity: ReturnType<typeof classifyComplexity>,
+): boolean {
+  // Only HIGH/EXTREME or HEAVY complexity retries with stronger prompt
+  return intensity === "HIGH" || intensity === "EXTREME" || complexity === "HEAVY";
 }
 
 // ── editImage: full orchestration pipeline ────────────────────────────────────
-// LAYER 0 (complexity) → LAYER 1 (intent) → LAYER 4+5 (prompt) →
-// LAYER 6 (retry) → LAYER 8 (routing) → LAYER 7 (observability)
 
 export async function editImage(
   imageBase64: string,
   prompt: string,
+  userId?: string,
 ): Promise<EditResult> {
-  // Hard failure: image is required for edit operations
   if (!imageBase64 || imageBase64.trim().length < 10) {
     logger.warn("[imageEdit] edit rejected — no image supplied");
     throw new Error("No image supplied for editing");
   }
 
-  // Parse + validate MIME type and size
   const parsed = parseAndValidateImage(imageBase64);
 
-  // ── LAYER 0: Classify complexity and job type ─────────────────────────────
-  const intent = classifyImageIntent(prompt, true);
+  // ── LAYER 0: Classify complexity and job type ──────────────────────────────
+  const intent: ImageIntent = classifyImageIntent(prompt, true);
   const complexity = classifyComplexity(prompt);
   const jobType = classifyJobType(intent, true);
   const timeoutMs = complexityTimeout(complexity);
 
-  // ── LAYER 5: Preservation lock detection ──────────────────────────────────
-  const hasPreservationLock = detectPreservationLock(prompt);
+  // ── LAYER 1+2: Mode + intensity classification ─────────────────────────────
+  const mode: EditMode = classifyEditMode(prompt, true);
+  const intensity: EditIntensity = detectEditIntensity(prompt, mode);
 
-  // ── LAYER 4: Build structured prompt ──────────────────────────────────────
+  // ── LAYER 4: Build cinematic/mode-aware instruction (replaces generic prompt) ─
+  const primaryInstruction = buildStrongInstruction(mode, intensity, prompt);
+
+  // Escalated instruction for LAYER 6 retry (stronger for non-EXTREME → push to EXTREME)
+  const escalatedIntensity: EditIntensity =
+    intensity === "EXTREME" ? "EXTREME" : "EXTREME";
+  const escalatedInstruction = buildStrongInstruction(
+    mode,
+    escalatedIntensity,
+    prompt +
+      " — IMPORTANT: this edit MUST be visually transformative. Make a strong, clearly visible change.",
+  );
+
+  // Legacy preservation lock (still respected)
+  const hasPreservationLock = detectPreservationLock(prompt);
   const expandedPrompt = buildStructuredPrompt(prompt, hasPreservationLock);
 
-  // ── LAYER 1: Create job (status = queued) ─────────────────────────────────
+  // Create job
   const job: ImageJob = createJob({
     jobType,
     complexity,
-    intent: getIntentLabel(intent),
+    intent: getEditModeLabel(mode),
     prompt,
     expandedPrompt,
   });
@@ -608,34 +655,81 @@ export async function editImage(
   advanceJob(
     job,
     "processing",
-    `Intent: ${getIntentLabel(intent)} | Complexity: ${complexity}${hasPreservationLock ? " | HARD LOCK active" : ""}`,
+    `Mode: ${getEditModeLabel(mode)} | Intensity: ${intensity} | Complexity: ${complexity}${hasPreservationLock ? " | LOCK" : ""}`,
   );
 
   try {
-    // ── LAYER 8: Model routing — Tier 1 (Gemini img2img) ──────────────────
-    advanceJob(job, "streaming", `Tier 1 — Gemini img2img (${timeoutMs}ms timeout)`);
+    // ── Tier 1: Gemini img2img with cinematic instruction ──────────────────
+    advanceJob(
+      job,
+      "streaming",
+      `Tier 1 — Gemini img2img | ${getEditModeLabel(mode)} | ${intensity} (${timeoutMs}ms)`,
+    );
 
-    let img2imgResult = await tryGeminiImg2Img(parsed, prompt, intent, timeoutMs);
+    let img2imgResult = await tryGeminiImg2Img(
+      parsed,
+      primaryInstruction,
+      timeoutMs,
+    );
 
     if (img2imgResult) {
       completeJob(job, "gemini-img2img");
-      return { b64Image: img2imgResult, job: jobSummary(job) };
+      // LAYER 7: persist to history
+      if (userId) {
+        saveToHistory({
+          userId,
+          type: "edit",
+          prompt,
+          mode: getEditModeLabel(mode),
+          intensity,
+          b64Image: img2imgResult,
+        }).catch((err) =>
+          logger.warn({ err }, "[imageHistory] Failed to save edit result"),
+        );
+      }
+      return {
+        b64Image: img2imgResult,
+        job: jobSummary(job),
+        mode: getEditModeLabel(mode),
+        intensity,
+      };
     }
 
-    // ── LAYER 6: Auto-retry once for STANDARD/HEAVY before Tier 2 fallback ─
-    if (complexity !== "SIMPLE") {
-      advanceJob(job, "retrying", "Tier 1 retry — Gemini img2img attempt 2", {
+    // ── LAYER 5+6: Conditional retry — only for HIGH/EXTREME/HEAVY ────────
+    if (shouldRetryTier1(intensity, complexity)) {
+      advanceJob(job, "retrying", "Tier 1 retry — escalated cinematic instruction", {
         retryCount: 1,
       });
-      img2imgResult = await tryGeminiImg2Img(parsed, prompt, intent, timeoutMs);
+      img2imgResult = await tryGeminiImg2Img(
+        parsed,
+        escalatedInstruction,
+        timeoutMs,
+      );
       if (img2imgResult) {
         completeJob(job, "gemini-img2img");
-        return { b64Image: img2imgResult, job: jobSummary(job) };
+        if (userId) {
+          saveToHistory({
+            userId,
+            type: "edit",
+            prompt,
+            mode: getEditModeLabel(mode),
+            intensity,
+            b64Image: img2imgResult,
+          }).catch((err) =>
+            logger.warn({ err }, "[imageHistory] Failed to save edit result"),
+          );
+        }
+        return {
+          b64Image: img2imgResult,
+          job: jobSummary(job),
+          mode: getEditModeLabel(mode),
+          intensity,
+        };
       }
     }
 
-    // ── LAYER 8: Tier 2 — Gemini vision describe + FLUX regeneration ──────
-    advanceJob(job, "streaming", "Tier 2 — Gemini vision describe → FLUX render", {
+    // ── Tier 2: Gemini vision describe + FLUX regeneration ────────────────
+    advanceJob(job, "streaming", "Tier 2 — Gemini vision → FLUX render", {
       modelUsed: "gemini-vision",
     });
 
@@ -648,21 +742,72 @@ export async function editImage(
       throw new Error("Image analysis failed. Please retry.");
     }
 
-    // LAYER 4: Combine image description + LAYER 4/5 structured prompt
-    const fluxPrompt = `${description}. Apply this edit: ${expandedPrompt}`;
+    // Build a mode-aware FLUX prompt
+    const fluxPrompt = buildFluxFallbackPrompt(description, prompt, mode, intensity);
 
     advanceJob(job, "streaming", "FLUX rendering", { modelUsed: "flux" });
     const fluxResult = await regenerateWithFlux(fluxPrompt);
 
     completeJob(job, "flux");
-    return { b64Image: fluxResult, job: jobSummary(job) };
-
+    if (userId) {
+      saveToHistory({
+        userId,
+        type: "edit",
+        prompt,
+        mode: getEditModeLabel(mode),
+        intensity,
+        b64Image: fluxResult,
+      }).catch((err) =>
+        logger.warn({ err }, "[imageHistory] Failed to save edit result"),
+      );
+    }
+    return {
+      b64Image: fluxResult,
+      job: jobSummary(job),
+      mode: getEditModeLabel(mode),
+      intensity,
+    };
   } catch (err) {
-    // Guard against double-fail if failJob was already called above
     if (job.status !== "failed") {
       const reason = err instanceof Error ? err.message : "Unknown error";
       failJob(job, reason);
     }
     throw err;
+  }
+}
+
+// ── LAYER 4: Mode-aware FLUX fallback prompt builder ─────────────────────────
+// Builds a FLUX prompt grounded to the image description + mode-specific enhancement.
+
+function buildFluxFallbackPrompt(
+  description: string,
+  userPrompt: string,
+  mode: EditMode,
+  intensity: EditIntensity,
+): string {
+  const strengthSuffix =
+    intensity === "HIGH" || intensity === "EXTREME"
+      ? ", dramatic directional lighting, strong HDR contrast, deep shadows, cinematic color grading, shallow depth of field, film grain, ultra realistic, 8k"
+      : ", professional lighting, sharp focus, highly detailed, ultra realistic, 8k";
+
+  switch (mode) {
+    case "CINEMATIC_EDIT":
+      return `${description}. Cinematic edit: ${userPrompt}. Dramatic 3-point studio lighting, HDR contrast, teal-orange film grade, anamorphic bokeh${strengthSuffix}`;
+
+    case "SCREENSHOT_CLEANUP":
+    case "TEXT_REMOVAL":
+      return `${description}. Clean professional photo version, all UI elements and text removed, natural reconstruction${strengthSuffix}`;
+
+    case "AGGRESSIVE_RECONSTRUCTION":
+      return `${description}. Fully reconstructed cinematic version: ${userPrompt}. Hollywood lighting, dramatic shadows, premium film grade${strengthSuffix}`;
+
+    case "WALLPAPER_UPGRADE":
+      return `${description}. Premium wallpaper version: ${userPrompt}. Cinematic depth, dramatic lighting, epic composition${strengthSuffix}`;
+
+    case "STYLE_TRANSFER":
+      return `${description}. Style transfer: ${userPrompt}${strengthSuffix}`;
+
+    default:
+      return `${description}. Apply this edit: ${enhancePrompt(userPrompt)}`;
   }
 }

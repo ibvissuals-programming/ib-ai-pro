@@ -75,7 +75,7 @@ router.post(
     }
 
     try {
-      const b64Image = await generateImage(parsed.data.prompt);
+      const b64Image = await generateImage(parsed.data.prompt, req.user?.userId);
       deductRequestCredits(req);
       appendCreditHeaders(req, res);
       res.json({ b64Image, status: "success" });
@@ -115,10 +115,10 @@ router.post(
     }
 
     try {
-      const result: EditResult = await editImage(parsed.data.image, parsed.data.prompt);
+      const result: EditResult = await editImage(parsed.data.image, parsed.data.prompt, req.user?.userId);
       deductRequestCredits(req);
       appendCreditHeaders(req, res);
-      res.json({ b64Image: result.b64Image, status: "success", job: result.job });
+      res.json({ b64Image: result.b64Image, status: "success", job: result.job, mode: result.mode, intensity: result.intensity });
     } catch (err: unknown) {
       logger.error({ err }, "[imageGen] edit failed");
       const message = toRouteError(err, "edit");

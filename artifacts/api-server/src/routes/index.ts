@@ -13,6 +13,7 @@ import chatRouter from "./chat";
 import imageAnalysisRouter from "./imageAnalysis";
 import creditsRouter from "./credits";
 import imageGenRouter from "./imageGen";
+import imageHistoryRouter from "./imageHistory";
 import systemRouter from "./system";
 
 const router: IRouter = Router();
@@ -24,5 +25,6 @@ router.use(chatRouter);
 router.use(imageAnalysisRouter);
 router.use(creditsRouter);
 router.use(imageGenRouter);
+router.use(imageHistoryRouter);
 
 export default router;
