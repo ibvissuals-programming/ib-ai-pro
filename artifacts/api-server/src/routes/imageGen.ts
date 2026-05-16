@@ -16,9 +16,7 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { generateImage, editImage, type EditResult } from "../services/imageGenService";
 import { logger } from "../lib/logger";
-import { requireNormalAuth } from "../middleware/requireAuth";
-import { creditGuard, deductRequestCredits, appendCreditHeaders } from "../middleware/creditGuard";
-import { rateLimit } from "../middleware/rateLimit";
+import { policyEngine, deductRequestCredits, appendCreditHeaders } from "../middleware/policyEngine";
 import { CREDIT_COSTS } from "../lib/userStore";
 
 const router = Router();
@@ -66,9 +64,7 @@ function toRouteError(err: unknown, context: "generate" | "edit"): string {
 
 router.post(
   "/image/generate",
-  requireNormalAuth,
-  rateLimit(10, 60_000, "image_generate"),
-  creditGuard(CREDIT_COSTS.image_generate),
+  policyEngine({ cost: CREDIT_COSTS.image_generate, rateKey: "image_generate", rateMax: 10, rateWindowMs: 60_000 }),
   async (req: Request, res: Response) => {
     const parsed = GenerateSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -95,10 +91,8 @@ router.post(
 
 router.post(
   "/image/edit",
-  requireNormalAuth,
-  rateLimit(10, 60_000, "image_edit"),
   (req: Request, res: Response, next) => {
-    // 413 guard: check base64 payload size before creditGuard or heavy processing
+    // 413 guard: fast-reject oversized payloads before policy engine processing
     const body = req.body as { image?: unknown };
     if (typeof body.image === "string" && body.image.length > MAX_IMAGE_B64_CHARS) {
       logger.warn(
@@ -110,7 +104,7 @@ router.post(
     }
     next();
   },
-  creditGuard(CREDIT_COSTS.image_edit),
+  policyEngine({ cost: CREDIT_COSTS.image_edit, rateKey: "image_edit", rateMax: 10, rateWindowMs: 60_000 }),
   async (req: Request, res: Response) => {
     const parsed = EditSchema.safeParse(req.body);
     if (!parsed.success) {

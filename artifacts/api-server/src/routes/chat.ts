@@ -11,8 +11,7 @@ import { z } from "zod";
 import { createChatStream, type ChatMessage } from "../services/llm";
 import { SYSTEM_PROMPT } from "../prompts/system";
 import { logger } from "../lib/logger";
-import { requireNormalAuth } from "../middleware/requireAuth";
-import { creditGuard, deductRequestCredits } from "../middleware/creditGuard";
+import { policyEngine, deductRequestCredits } from "../middleware/policyEngine";
 import { CREDIT_COSTS } from "../lib/userStore";
 
 const router = Router();
@@ -140,8 +139,7 @@ function buildContext(raw: RawMessage[]): ChatMessage[] {
 
 router.post(
   "/chat",
-  requireNormalAuth,
-  creditGuard(CREDIT_COSTS.chat),
+  policyEngine({ cost: CREDIT_COSTS.chat, rateKey: "chat", rateMax: 30, rateWindowMs: 60_000 }),
   async (req: Request, res: Response) => {
     const parsed = ChatRequestSchema.safeParse(req.body);
 

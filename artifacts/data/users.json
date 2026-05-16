@@ -160,5 +160,14 @@
     "credits": 0,
     "lastReset": 1778933833645,
     "createdAt": 1778933833645
+  },
+  {
+    "id": "804ce7cb-4dfb-4a54-98ea-d97b5f868597",
+    "username": "policytest456",
+    "passwordHash": "d356de1995806bc58235d2a10a700568:7bc67281fd133156ca2fe6a1d2c253efa62ad50ace02e18d4924c2a92b5aded8ccaa6a5f93f024bc57b34222f3402a5bf5f08535ab8d923a11ebf9d325c2a2c9",
+    "role": "free",
+    "credits": 0,
+    "lastReset": 1778935990243,
+    "createdAt": 1778935990243
   }
 ]

@@ -6,8 +6,7 @@ import { z } from "zod";
 import { ai } from "@workspace/integrations-gemini-ai";
 import { assertGeminiProvider } from "../lib/aiGuard";
 import { logger } from "../lib/logger";
-import { requireNormalAuth } from "../middleware/requireAuth";
-import { creditGuard, deductRequestCredits, appendCreditHeaders } from "../middleware/creditGuard";
+import { policyEngine, deductRequestCredits, appendCreditHeaders } from "../middleware/policyEngine";
 import { CREDIT_COSTS } from "../lib/credits";
 
 const router = Router();
@@ -65,8 +64,7 @@ Make each prompt specific, vivid, and directly informed by what is visible in th
 
 router.post(
   "/analyze-image",
-  requireNormalAuth,
-  creditGuard(CREDIT_COSTS.image_analysis),
+  policyEngine({ cost: CREDIT_COSTS.image_analysis, rateKey: "image_analysis", rateMax: 10, rateWindowMs: 60_000 }),
   async (req: Request, res: Response) => {
     const parsed = AnalyzeImageSchema.safeParse(req.body);
 
