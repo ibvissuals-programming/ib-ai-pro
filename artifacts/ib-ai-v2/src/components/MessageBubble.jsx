@@ -203,6 +203,23 @@ function EditedImageCard({ src }) {
   );
 }
 
+// Shown when an edited image was stripped from storage to protect the
+// localStorage quota.  Displayed only after a page reload.
+function ExpiredImageCard() {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-1.5 text-[10px] text-primary/70 font-medium uppercase tracking-widest">
+        <Wand2 size={10} />
+        Edited Image
+      </div>
+      <div className="flex items-center justify-center gap-2 px-4 py-5 rounded-xl border border-border/40 bg-black/10 text-muted-foreground/50 text-xs select-none">
+        <ImageIcon size={13} className="shrink-0" />
+        Edited images are not stored after reload — download before closing
+      </div>
+    </div>
+  );
+}
+
 // ─── Message content branching ────────────────────────────────────────────────
 
 function MessageContent({ message }) {
@@ -241,6 +258,12 @@ function MessageContent({ message }) {
 
   // Assistant: edited image returned from /api/image/edit
   if (message.type === 'image-edit-result') {
+    // contentExpired is set by the storage layer when the payload was stripped
+    // before persisting to localStorage (quota protection).  After a page
+    // reload the data URL is gone; show a polite placeholder instead.
+    if (message.contentExpired || !message.content) {
+      return <ExpiredImageCard />;
+    }
     return <EditedImageCard src={message.content} />;
   }
 
