@@ -480,6 +480,10 @@ async function describeImageForEdit(parsed: ParsedImage): Promise<string> {
   const DESCRIBE_TIMEOUT_MS = 25_000;
   const { ai } = await import("@workspace/integrations-gemini-ai");
 
+  // FIX: capture timeoutId so it can be cleared when Gemini responds before
+  // the deadline, preventing a spurious [ai] provider timeout log.
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
   const result = await Promise.race([
     ai.models.generateContent({
       model: "gemini-2.5-flash",
@@ -496,13 +500,16 @@ async function describeImageForEdit(parsed: ParsedImage): Promise<string> {
       ],
       config: { temperature: 0.2, maxOutputTokens: 250 },
     }),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => {
+    new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
         logger.warn({ provider: "gemini" }, "[ai] provider timeout");
         reject(new Error("Gemini describe timeout"));
-      }, DESCRIBE_TIMEOUT_MS),
-    ),
+      }, DESCRIBE_TIMEOUT_MS);
+    }),
   ]);
+
+  // Gemini won — cancel stale timeout
+  if (timeoutId !== undefined) clearTimeout(timeoutId);
 
   const description = ((result as { text?: string }).text ?? "").trim();
   if (!description) {

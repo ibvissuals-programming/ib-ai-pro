@@ -92,5 +92,11 @@ export async function editImage(imageBase64, prompt) {
     throw new Error(data.error ?? `Server error ${res.status}`);
   }
 
+  // Guard: a 200 response with no b64Image is a silent failure — the loader
+  // would disappear with no image and no error shown. Throw explicitly instead.
+  if (!data.b64Image) {
+    throw new Error('Image edit returned no result. Please try again.');
+  }
+
   return data;
 }
