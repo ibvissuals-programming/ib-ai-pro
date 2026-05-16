@@ -157,7 +157,7 @@
     "username": "aiuser",
     "passwordHash": "4e9b5cdeef916debe338b1e24475d2f6:adfad7ec0a9a4d407e03bd6bc255e5ac9ad7a4c00772ce0f4d13ffe3e2449170999e8b1a1b3aefab634d2f71a6002bb02e88fb8ad0fb2a24c5d77e48b3c75b3b",
     "role": "free",
-    "credits": 1,
+    "credits": 0,
     "lastReset": 1778933833645,
     "createdAt": 1778933833645
   }

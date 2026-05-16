@@ -9,8 +9,8 @@
  *
  * Auth: requireNormalAuth enforced — recovery sessions are blocked (must change
  *       password first). Image uploads validated: MIME + 10 MB size limit.
- * Credits: image_generate = 3, image_edit = 5 (deducted after success).
- * Rate limit: 10 generate / 10 edit per minute per IP.
+ * Credits: 1 per operation (deducted after success only). CEO role = unlimited.
+ * Rate limit: 10 generate / 10 edit per minute per IP (CEO bypassed).
  */
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";

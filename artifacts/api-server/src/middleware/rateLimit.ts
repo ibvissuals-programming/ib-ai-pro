@@ -43,6 +43,12 @@ export function rateLimit(
   routeKey: string,
 ) {
   return (req: Request, res: Response, next: NextFunction): void => {
+    // CEO role bypasses rate limits entirely (dev/admin testing)
+    if ((req as Request & { user?: { role?: string } }).user?.role === "ceo") {
+      next();
+      return;
+    }
+
     // Prefer X-Forwarded-For when behind a proxy (trust proxy set in app.ts)
     const raw = req.ip || req.socket?.remoteAddress || "unknown";
     const ip = raw.replace(/^::ffff:/, ""); // normalise IPv4-mapped IPv6
