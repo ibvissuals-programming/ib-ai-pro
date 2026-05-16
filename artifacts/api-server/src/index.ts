@@ -3,11 +3,9 @@ import { logger } from "./lib/logger";
 import { loadUserStore, repairCeoAccount } from "./lib/userStore";
 import { logProviderHealth } from "./lib/env";
 import { initImageStore } from "./services/imageHistoryStore";
+import { setBootDegraded } from "./lib/bootState";
 
 // ── Process-level failure guards — registered FIRST ───────────────────────────
-// Catch any unhandled error that escapes normal try/catch so we get a log
-// entry instead of a silent crash. We do NOT exit — live requests continue.
-
 process.on("uncaughtException", (err: Error) => {
   logger.error(
     { err: { name: err.name, message: err.message } },
@@ -50,7 +48,11 @@ try {
   await loadUserStore();
   logger.info("[system] Auth system loaded");
 } catch (err) {
-  logger.error({ err }, "[system] Auth system failed to load — starting with empty store");
+  setBootDegraded();
+  logger.error(
+    { err },
+    "[system] Auth system failed to load — starting with empty store",
+  );
 }
 
 // ── Step 3: Repair CEO account ────────────────────────────────────────────────
@@ -58,31 +60,69 @@ try {
 try {
   await repairCeoAccount();
 } catch (err) {
-  logger.error({ err }, "[system] CEO repair failed — continuing without CEO account");
+  setBootDegraded();
+  logger.error(
+    { err },
+    "[system] CEO repair failed — continuing without CEO account",
+  );
 }
 
 // ── Step 4: Initialize image persistence system ───────────────────────────────
-// LAYER 3: Image pipeline must not crash server. Creates data dirs eagerly.
 
 logger.info("[system] Initializing image system…");
 try {
   await initImageStore();
   logger.info("[system] Image system ready");
 } catch (err) {
-  logger.warn({ err }, "[system] Image system init failed — history disabled (safe mode)");
+  setBootDegraded();
+  logger.warn(
+    { err },
+    "[system] Image system init failed — history disabled (safe mode)",
+  );
 }
 
 // ── Step 5: Startup self-check ────────────────────────────────────────────────
 
 logger.info("[system] startup checks passed");
 
-// ── Step 6: Start HTTP server ─────────────────────────────────────────────────
+// ── Step 6: Bind HTTP server — retry on EADDRINUSE ───────────────────────────
+// If a zombie process still holds the port (e.g. from a previous workflow run
+// that was not cleanly terminated) we wait up to 10 s for it to be released
+// before giving up. This survives the Replit "all workflows restart at once"
+// scenario where the old PID may still be alive for a few seconds.
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "[system] Error listening on port");
-    process.exit(1);
+const MAX_BIND_ATTEMPTS = 10;
+const BIND_RETRY_MS = 1000;
+
+let bound = false;
+
+for (let attempt = 1; attempt <= MAX_BIND_ATTEMPTS; attempt++) {
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const server = app.listen(port);
+      server.once("listening", resolve);
+      server.once("error", reject);
+    });
+    bound = true;
+    break;
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EADDRINUSE" && attempt < MAX_BIND_ATTEMPTS) {
+      logger.warn(
+        { port, attempt, maxAttempts: MAX_BIND_ATTEMPTS },
+        "[system] Port in use — waiting for zombie to release, retrying…",
+      );
+      await new Promise((r) => setTimeout(r, BIND_RETRY_MS));
+    } else {
+      logger.error(
+        { err, port, attempt },
+        "[system] Fatal: could not bind port — giving up",
+      );
+      process.exit(1);
+    }
   }
+}
 
+if (bound) {
   logger.info({ port }, "[system] Server listening");
-});
+}
