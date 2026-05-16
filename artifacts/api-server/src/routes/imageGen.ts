@@ -36,7 +36,7 @@ const EditSchema = z.object({
   prompt: z
     .string()
     .min(1, "Edit instruction is required")
-    .max(500, "Prompt too long"),
+    .max(2000, "Prompt too long"),
 });
 
 // ── User-safe error sanitizer for route layer ─────────────────────────────────
