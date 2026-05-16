@@ -142,5 +142,14 @@
     "credits": 4,
     "lastReset": 1778861476941,
     "createdAt": 1778861476941
+  },
+  {
+    "id": "dde26197-6b43-48aa-9914-d2102193d2d8",
+    "username": "smoketest99",
+    "passwordHash": "ade79e48ae1ddb87115862d35e166114:fe09a40361af266e2d93015a0d27d9d8d0594539540b94224766c403c6235e4b9f596e25ad3f33f251611a9d8149ca8b7355820198af675e75f44fda2b0100d0",
+    "role": "free",
+    "credits": 40,
+    "lastReset": 1778930820339,
+    "createdAt": 1778930820339
   }
 ]
