@@ -6,7 +6,7 @@ export type ChatMessage = {
   content: string;
 };
 
-export const CHAT_MODEL = "llama3-8b-8192";
+export const CHAT_MODEL = "llama-3.1-8b-instant";
 const GEMINI_FALLBACK_MODEL = "gemini-2.5-flash";
 
 const MAX_RETRIES = 3;
@@ -144,7 +144,7 @@ async function createGeminiStream(messages: ChatMessage[]): Promise<AsyncIterabl
 /**
  * createChatStream()
  *
- * Attempts Groq (llama3-8b-8192) first.
+ * Attempts Groq (llama-3.1-8b-instant) first.
  * Falls back to Gemini (gemini-2.5-flash) automatically if Groq fails for any
  * reason (bad key, model error, network issue, quota exhaustion, etc.).
  *
@@ -155,19 +155,21 @@ export async function createChatStream(messages: ChatMessage[]): Promise<AsyncIt
   let groqErrMsg = "";
 
   // ── Try Groq first ───────────────────────────────────────────────────────────
+  logger.info({ model: CHAT_MODEL }, "[llm] GROQ REQUEST STARTED");
   try {
     const stream = await createGroqStream(messages);
-    logger.info("[llm] using Groq provider");
+    logger.info({ model: CHAT_MODEL }, "[llm] GROQ SUCCESS — primary provider active");
     return stream;
   } catch (groqErr) {
     groqErrMsg = groqErr instanceof Error ? groqErr.message : String(groqErr);
-    logger.warn({ err: groqErrMsg }, "[llm] Groq failed — falling back to Gemini");
+    logger.warn({ err: groqErrMsg, model: CHAT_MODEL }, "[llm] GROQ FAILED → FALLBACK GEMINI");
   }
 
   // ── Gemini fallback ──────────────────────────────────────────────────────────
+  logger.info({ model: GEMINI_FALLBACK_MODEL }, "[llm] GEMINI USED AS FALLBACK");
   try {
     const stream = await createGeminiStream(messages);
-    logger.info("[llm] using Gemini fallback provider");
+    logger.info({ model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini fallback stream ready");
     return stream;
   } catch (geminiErr) {
     const geminiErrMsg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
