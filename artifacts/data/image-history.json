@@ -20,5 +20,16 @@
     "timestamp": 1779116112779,
     "imageFile": "51243e5e-89e1-4892-b445-33275481f9ba.jpg",
     "mimeType": "image/jpeg"
+  },
+  {
+    "id": "c975b80b-df9c-4d9a-835a-0ee6496c23a3",
+    "userId": "6fa3f924-7dfe-4514-bb30-9286646b7cf5",
+    "type": "generate",
+    "prompt": "a simple red circle",
+    "mode": "IMAGE_GENERATION",
+    "intensity": "MEDIUM",
+    "timestamp": 1779132554528,
+    "imageFile": "c975b80b-df9c-4d9a-835a-0ee6496c23a3.jpg",
+    "mimeType": "image/jpeg"
   }
 ]
