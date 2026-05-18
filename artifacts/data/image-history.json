@@ -1,1 +1,13 @@
-[]
+[
+  {
+    "id": "69fa9a0d-f17e-437f-9d8f-3c3909e54926",
+    "userId": "e66361c6-3db4-4309-af86-dd009485add3",
+    "type": "edit",
+    "prompt": "Edit this image naturally while preserving the original identity of the subject.\n\nMake only the following improvements:\n- Enhance lighting for a cinematic, balanced look\n- Improve facial clarity and skin texture slightly (natural, not plastic)\n- Sharpen details without changing facial structure\n- Fix background lighting to look more professional and clean\n- Keep all facial features and identity exactly the same\n\nDO NOT:\n- Change the person’s face\n- Add new facial features\n- Over-smooth skin\n- Change identity or style of the subject\n\nResult should look like a professional, high-quality portrait photo with subtle enhancement only.",
+    "mode": "Background Transformation",
+    "intensity": "LOW",
+    "timestamp": 1779115305915,
+    "imageFile": "69fa9a0d-f17e-437f-9d8f-3c3909e54926.png",
+    "mimeType": "image/png"
+  }
+]

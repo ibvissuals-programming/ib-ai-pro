@@ -231,21 +231,23 @@ function validateImageResponse(result: string): void {
 
 // ── LAYER 6: Near-identical output detection ──────────────────────────────────
 // Detects when Gemini returns a visually unchanged image.
-// Check 1 (exact): already handled upstream (outputBase64 === inputBase64).
-// Check 2 (size + prefix): if size differs < 1.5% AND first 400 chars match → same image.
+// Check 1 (exact): byte-for-byte match → same image.
+// Check 2 (size + prefix): size differs < 3% AND first 800 chars match → near-duplicate.
 
 function isNearIdenticalOutput(
   inputBase64: string,
   outputBase64: string,
 ): boolean {
+  // Exact byte match — Gemini returned the original unchanged
   if (outputBase64 === inputBase64) return true;
 
   const sizeDiff = Math.abs(outputBase64.length - inputBase64.length);
   const sizeRatio = sizeDiff / Math.max(inputBase64.length, 1);
 
-  if (sizeRatio < 0.015) {
-    // Sizes are nearly identical — check base64 content prefix
-    const prefixLen = Math.min(400, inputBase64.length, outputBase64.length);
+  // Tightened from 1.5% → 3%: catch more near-duplicate re-encodings
+  if (sizeRatio < 0.03) {
+    // Sizes nearly identical — check a larger prefix window (800 chars)
+    const prefixLen = Math.min(800, inputBase64.length, outputBase64.length);
     if (inputBase64.slice(0, prefixLen) === outputBase64.slice(0, prefixLen)) {
       return true;
     }
@@ -420,13 +422,24 @@ function parseAndValidateImage(imageDataUrl: string): ParsedImage {
 
 // ── TIER 1: Gemini img2img ────────────────────────────────────────────────────
 // Uses mode+intensity aware instructions (LAYER 4 cinematic lighting engine).
+// Model: gemini-2.0-flash-preview-image-generation — Google's dedicated img2img
+//        editing model. Accepts image input and outputs a MODIFIED image.
+//        gemini-2.5-flash-image is text-to-image only and does not support
+//        image input editing — never use it here.
 // Returns the result as a data URL, or null to trigger fallback.
+
+const GEMINI_IMG2IMG_MODEL = "gemini-2.0-flash-preview-image-generation";
 
 async function tryGeminiImg2Img(
   parsed: ParsedImage,
   instruction: string,
   timeoutMs: number,
 ): Promise<string | null> {
+  logger.info(
+    { model: GEMINI_IMG2IMG_MODEL, instruction: instruction.slice(0, 80) },
+    "[imageEdit] IMAGE PASSED THROUGH MODEL — Tier 1 Gemini img2img started",
+  );
+
   try {
     const { ai } = await import("@workspace/integrations-gemini-ai");
 
@@ -434,7 +447,7 @@ async function tryGeminiImg2Img(
 
     const result = await Promise.race([
       ai.models.generateContent({
-        model: "gemini-2.5-flash-image",
+        model: GEMINI_IMG2IMG_MODEL,
         contents: [
           {
             role: "user",
@@ -448,7 +461,7 @@ async function tryGeminiImg2Img(
       }),
       new Promise<never>((_, reject) => {
         timeoutId = setTimeout(() => {
-          logger.warn({ provider: "gemini", timeoutMs }, "[ai] provider timeout");
+          logger.warn({ provider: "gemini", model: GEMINI_IMG2IMG_MODEL, timeoutMs }, "[ai] provider timeout");
           reject(new Error("Gemini img2img timeout"));
         }, timeoutMs);
       }),
@@ -467,10 +480,11 @@ async function tryGeminiImg2Img(
           const outputBase64 = part.inlineData.data;
 
           // LAYER 6: Near-identical output detection
+          // Threshold tightened: catch exact copies and near-duplicates up to 3% size diff
           if (isNearIdenticalOutput(parsed.base64, outputBase64)) {
             logger.warn(
-              { provider: "gemini", outputBytes: outputBase64.length },
-              "[imageEdit] Gemini returned near-identical output — falling back",
+              { provider: "gemini", model: GEMINI_IMG2IMG_MODEL, outputBytes: outputBase64.length },
+              "[imageEdit] NO-OP DETECTED → FIXING PIPELINE — near-identical output, retrying with stronger instruction",
             );
             return null;
           }
@@ -478,20 +492,29 @@ async function tryGeminiImg2Img(
           const dataUrl = `data:${outputMime};base64,${outputBase64}`;
           validateImageResponse(dataUrl);
           logger.info(
-            { outputMime, bytes: outputBase64.length, instruction: instruction.slice(0, 60) },
-            "[imageEdit] Gemini img2img success",
+            {
+              model: GEMINI_IMG2IMG_MODEL,
+              outputMime,
+              inputBytes: parsed.base64.length,
+              outputBytes: outputBase64.length,
+              instruction: instruction.slice(0, 80),
+            },
+            "[imageEdit] IMAGE EDIT APPLIED — Gemini img2img transformation confirmed",
           );
           return dataUrl;
         }
       }
     }
 
-    logger.info("[imageEdit] Gemini img2img returned no image — fallback");
+    logger.warn(
+      { model: GEMINI_IMG2IMG_MODEL },
+      "[imageEdit] Gemini img2img returned no image parts — triggering Tier 2 fallback",
+    );
     return null;
   } catch (err) {
     logger.warn(
-      { err: err instanceof Error ? err.message : String(err), provider: "gemini" },
-      "[imageEdit] Gemini img2img unavailable — fallback",
+      { err: err instanceof Error ? err.message : String(err), model: GEMINI_IMG2IMG_MODEL },
+      "[imageEdit] Gemini img2img unavailable — triggering Tier 2 fallback",
     );
     return null;
   }
@@ -695,8 +718,9 @@ export async function editImage(
       };
     }
 
-    // ── LAYER 5+6: Conditional retry — only for HIGH/EXTREME/HEAVY ────────
-    if (shouldRetryTier1(intensity, complexity)) {
+    // ── LAYER 5+6: Always retry Tier 1 on near-identical / for HIGH/EXTREME/HEAVY ──
+    // Any no-op detection triggers a retry with escalated instruction regardless of intensity.
+    if (true || shouldRetryTier1(intensity, complexity)) {
       advanceJob(job, "retrying", "Tier 1 retry — escalated cinematic instruction", {
         retryCount: 1,
       });
@@ -729,6 +753,10 @@ export async function editImage(
     }
 
     // ── Tier 2: Gemini vision describe + FLUX regeneration ────────────────
+    logger.warn(
+      { mode: getEditModeLabel(mode), intensity, complexity },
+      "[imageEdit] Tier 1 exhausted — falling back to Tier 2 (Gemini vision → FLUX render)",
+    );
     advanceJob(job, "streaming", "Tier 2 — Gemini vision → FLUX render", {
       modelUsed: "gemini-vision",
     });
