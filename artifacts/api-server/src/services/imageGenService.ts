@@ -28,6 +28,11 @@
  * LAYER 5: Same-model retry with EXTREME instruction on no-op detection
  * LAYER 6: Similarity validation — reject near-identical outputs
  * LAYER 7: Persistent image history — saved after every successful operation
+ * LAYER 8: Quality Enforcement Verifier — post-edit Gemini vision check for
+ *           identity drift, scene regeneration, background replacement.
+ *           Mode-aware tiers: STRICT / IDENTITY / LOOSE.
+ *           Verifier failure → pass-through (never blocks on infra noise).
+ *           Quality failure → preservation retry → second fail → hard reject.
  */
 import { logger } from "../lib/logger";
 import {
@@ -579,6 +584,243 @@ async function tryGeminiImg2Img(
   return null;
 }
 
+// ── LAYER 8: Quality Enforcement Verifier ────────────────────────────────────
+//
+// After every successful img2img call, compare input vs output using Gemini
+// vision to detect identity drift, scene regeneration, or structural changes.
+//
+// Verification is mode-aware (3 tiers):
+//   STRICT   — SUBTLE_ENHANCEMENT, CINEMATIC_EDIT, COLOR_MOOD_EDIT, WALLPAPER_UPGRADE
+//              Checks: identity, pose, background, objects, composition
+//              Allows: lighting, color grading, sharpness, exposure
+//
+//   IDENTITY — SCREENSHOT_CLEANUP, TEXT_REMOVAL, OBJECT_MANIPULATION
+//              Checks: identity (if person), pose, overall scene structure
+//              Allows: text/overlay removal, object edits per instruction
+//
+//   LOOSE    — BACKGROUND_TRANSFORMATION, STYLE_TRANSFER, AGGRESSIVE_RECONSTRUCTION
+//              Checks: face/identity only (if person present)
+//              Allows: background, style, composition, artistic changes
+//
+// VERIFIER ERROR POLICY:
+//   If Gemini fails to respond (network error / timeout / unparseable output):
+//   → log warning, mark skipped=true, treat as PASS — never block on infra noise
+//
+// QUALITY FAILURE POLICY:
+//   Attempt 1 output fails quality check → trigger Attempt 2 with preservation prompt
+//   Attempt 2 output also fails           → hard FAIL with rejection message
+
+const VERIFY_TIMEOUT_MS = 20_000;
+const GEMINI_VERIFY_MODEL = "gemini-2.5-flash";
+
+type VerificationTier = "STRICT" | "IDENTITY" | "LOOSE";
+
+interface VerificationResult {
+  valid: boolean;
+  issues: string[];
+  tier: VerificationTier;
+  skipped: boolean;
+  skipReason?: string;
+}
+
+function getVerificationTier(mode: EditMode): VerificationTier {
+  switch (mode) {
+    case "SUBTLE_ENHANCEMENT":
+    case "CINEMATIC_EDIT":
+    case "COLOR_MOOD_EDIT":
+    case "WALLPAPER_UPGRADE":
+      return "STRICT";
+
+    case "SCREENSHOT_CLEANUP":
+    case "TEXT_REMOVAL":
+    case "OBJECT_MANIPULATION":
+      return "IDENTITY";
+
+    case "BACKGROUND_TRANSFORMATION":
+    case "STYLE_TRANSFER":
+    case "AGGRESSIVE_RECONSTRUCTION":
+      return "LOOSE";
+
+    default:
+      return "STRICT";
+  }
+}
+
+function buildVerificationPrompt(
+  tier: VerificationTier,
+  modeLabel: string,
+  userPrompt: string,
+): string {
+  const tierRules: Record<VerificationTier, string> = {
+    STRICT: `STRICT CHECKS — all must pass:
+1. FACE/IDENTITY: If a person is present, they must be the same person (same face shape, skin tone). Any face swap or identity change = INVALID.
+2. BACKGROUND: The background layout must be the same environment. A replaced or regenerated background = INVALID.
+3. OBJECTS: Same main objects must be present in approximately the same positions. Inserted or removed objects = INVALID.
+4. POSE: Subject's pose must be preserved. Changed pose = INVALID.
+5. COMPOSITION: Same framing and crop. Drastically different angle = INVALID.
+Allowed: lighting changes, color grading, sharpness adjustment, exposure correction, color tone shifts.`,
+
+    IDENTITY: `IDENTITY CHECKS — must pass:
+1. FACE/IDENTITY: If a person is present, they must be recognizably the same person. Identity drift = INVALID.
+2. SCENE STRUCTURE: The overall environment must be recognizably the same. A completely different scene = INVALID.
+3. POSE: Subject's pose must be preserved.
+Allowed: lighting, color, sharpness, text/overlay removal, object changes matching the instruction.`,
+
+    LOOSE: `LOOSE CHECKS — only the most critical:
+1. FACE/IDENTITY: If a person is present, they must be recognizably the same person. Complete face replacement = INVALID.
+Allowed: style changes, background replacement, composition changes, artistic reinterpretation — all acceptable for this edit type.`,
+  };
+
+  return `You are a strict image edit quality validator for a professional photo system.
+
+IMAGE 1 = original input image.
+IMAGE 2 = edited output image.
+
+EDIT MODE: ${modeLabel}
+USER INSTRUCTION: "${userPrompt.slice(0, 200)}"
+
+Apply these validation rules:
+${tierRules[tier]}
+
+IMPORTANT: Do not fail an edit because it looks more polished or AI-enhanced in style. Only fail if the specific structural checks above are violated.
+
+Respond with EXACTLY one JSON line:
+{"valid":true,"issues":[]}
+or
+{"valid":false,"issues":["specific issue"]}
+
+Valid issue examples: "face changed", "identity drift", "background replaced with new scene", "main subject replaced", "pose changed", "scene completely regenerated", "different person present"
+
+Output ONLY the JSON. No markdown. No explanation.`;
+}
+
+async function verifyEditOutput(
+  inputParsed: ParsedImage,
+  outputDataUrl: string,
+  mode: EditMode,
+  userPrompt: string,
+): Promise<VerificationResult> {
+  const tier      = getVerificationTier(mode);
+  const modeLabel = getEditModeLabel(mode);
+
+  const commaIdx = outputDataUrl.indexOf(",");
+  if (commaIdx === -1) {
+    return { valid: false, issues: ["output image format invalid"], tier, skipped: false };
+  }
+  const outputBase64    = outputDataUrl.slice(commaIdx + 1);
+  const outputMimeMatch = outputDataUrl.slice(0, commaIdx).match(/data:([^;]+);/);
+  const outputMime      = (outputMimeMatch?.[1] ?? "image/jpeg") as AcceptedMime;
+
+  logger.info(
+    {
+      tier,
+      mode: modeLabel,
+      inputBytes: inputParsed.base64.length,
+      outputBytes: outputBase64.length,
+      verifyModel: GEMINI_VERIFY_MODEL,
+    },
+    "[imageQuality] LAYER 8 verifier invoked",
+  );
+
+  const verificationPrompt = buildVerificationPrompt(tier, modeLabel, userPrompt);
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    const { ai } = await import("@workspace/integrations-gemini-ai");
+
+    const result = await Promise.race([
+      ai.models.generateContent({
+        model: GEMINI_VERIFY_MODEL,
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { inlineData: { mimeType: inputParsed.mimeType, data: inputParsed.base64 } },
+              { inlineData: { mimeType: outputMime, data: outputBase64 } },
+              { text: verificationPrompt },
+            ],
+          },
+        ],
+        config: { temperature: 0.1, maxOutputTokens: 200 },
+      }),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(`Verifier timeout after ${VERIFY_TIMEOUT_MS}ms`)),
+          VERIFY_TIMEOUT_MS,
+        );
+      }),
+    ]);
+
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+
+    const rawText = ((result as { text?: string }).text ?? "").trim();
+    // Strip markdown fences if the model wraps output
+    const jsonStr = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+
+    let parsed: { valid: boolean; issues: unknown };
+    try {
+      parsed = JSON.parse(jsonStr) as { valid: boolean; issues: unknown };
+    } catch {
+      logger.warn(
+        { rawText: rawText.slice(0, 300) },
+        "[imageQuality] verifier response not parseable — treating as PASS",
+      );
+      return { valid: true, issues: [], tier, skipped: true, skipReason: "json parse error" };
+    }
+
+    const valid  = parsed.valid === true;
+    const issues = Array.isArray(parsed.issues)
+      ? (parsed.issues as unknown[]).map(String)
+      : [];
+
+    logger.info(
+      { valid, issues, tier, mode: modeLabel },
+      valid
+        ? "[imageQuality] PASS — edit meets quality standards"
+        : "[imageQuality] FAIL — quality violation detected",
+    );
+
+    return { valid, issues, tier, skipped: false };
+
+  } catch (err) {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+    const reason = err instanceof Error ? err.message : String(err);
+    logger.warn(
+      { reason, tier, mode: modeLabel },
+      "[imageQuality] verifier error — treating as PASS to avoid blocking valid edits",
+    );
+    return { valid: true, issues: [], tier, skipped: true, skipReason: reason };
+  }
+}
+
+// Builds a minimal preservation-focused instruction for the quality retry.
+// Used when Attempt 1 produced an image that passed img2img validation but
+// failed the quality check (identity drift, background replaced, etc.).
+function buildPreservationInstruction(
+  mode: EditMode,
+  userPrompt: string,
+  qualityIssues: string[],
+): string {
+  const issueContext =
+    qualityIssues.length > 0
+      ? ` The previous attempt introduced these problems: ${qualityIssues.join(", ")}. These MUST NOT appear in the output.`
+      : "";
+
+  return (
+    `STRICT PRESERVATION EDIT — make only the minimal change requested and nothing else.\n` +
+    `Edit type: ${getEditModeLabel(mode)}.\n` +
+    `Instruction: "${userPrompt.slice(0, 150)}"\n` +
+    `${issueContext}\n` +
+    `ABSOLUTE RULES:\n` +
+    `- Keep the exact same face and identity\n` +
+    `- Keep the exact same pose\n` +
+    `- Keep the exact same background and environment\n` +
+    `- Keep all the same objects\n` +
+    `- ONLY adjust lighting, color tone, sharpness, or exposure\n` +
+    `- Do NOT replace, regenerate, or restructure ANY element`
+  );
+}
+
 // ── EditResult ────────────────────────────────────────────────────────────────
 
 export interface EditResult {
@@ -586,22 +828,36 @@ export interface EditResult {
   job: ReturnType<typeof jobSummary>;
   mode: string;
   intensity: string;
+  qualityVerified: boolean;
+  qualityIssues: string[];
 }
 
-// ── editImage: deterministic single-model img2img pipeline ───────────────────
+// ── editImage: quality-enforced single-model img2img pipeline ────────────────
 //
 // CONTRACT:
-//   - Input image is ALWAYS attached as inlineData conditioning (never dropped).
-//   - Only gemini-2.0-flash-preview-image-generation is used.
-//   - Attempt 1: primary instruction.
-//   - Attempt 2: same model, EXTREME escalated instruction (no-op recovery only).
-//   - On failure after both attempts: throw immediately. No fallback. No generation.
+//   - Input image ALWAYS attached as inlineData conditioning (never dropped).
+//   - Only gemini-2.0-flash-preview-image-generation is used for editing.
+//   - gemini-2.5-flash is used for post-edit quality verification only (no image output).
+//
+// PIPELINE FLOW:
+//   Attempt 1 (primary instruction)
+//     → null (no-op)         → Attempt 2 [escalated EXTREME, no quality retry]
+//     → image                → LAYER 8 quality verify
+//         → PASS             → succeedEdit ✓
+//         → FAIL             → Attempt 2 [preservation instruction, quality retry]
+//         → verifier error   → succeedEdit with warning (pass-through)
+//
+//   Attempt 2 (escalated OR preservation, depending on trigger)
+//     → null                 → FAIL immediately
+//     → image                → LAYER 8 quality verify
+//         → PASS             → succeedEdit ✓
+//         → FAIL             → FAIL (quality enforcement rejection)
+//         → verifier error   → succeedEdit with warning
 //
 // WHAT THIS FUNCTION WILL NEVER DO:
-//   - Call a second model.
+//   - Use a second img2img model.
 //   - Describe the image and regenerate from text.
-//   - Use FLUX or any external text-to-image provider as a substitute.
-//   - Return a synthetically generated image when an edit was requested.
+//   - Use FLUX or any text-to-image provider as a substitute for editing.
 
 export async function editImage(
   imageBase64: string,
@@ -624,33 +880,34 @@ export async function editImage(
       imageBytes: parsed.base64.length,
       imageAttached: true,
       model: GEMINI_IMG2IMG_MODEL,
+      verifyModel: GEMINI_VERIFY_MODEL,
     },
-    "[imageEdit] pipeline entered — IMG2IMG ONLY, single model, image validated and attached",
+    "[imageEdit] pipeline entered — IMG2IMG ONLY + LAYER 8 quality enforcement",
   );
 
   // ── LAYER 0: Classify complexity and job type ──────────────────────────────
-  const intent: ImageIntent = classifyImageIntent(prompt, true);
-  const complexity           = classifyComplexity(prompt);
-  const jobType              = classifyJobType(intent, true);
-  const timeoutMs            = complexityTimeout(complexity);
+  const intent: ImageIntent  = classifyImageIntent(prompt, true);
+  const complexity            = classifyComplexity(prompt);
+  const jobType               = classifyJobType(intent, true);
+  const timeoutMs             = complexityTimeout(complexity);
 
   // ── LAYER 1+2: Mode + intensity classification ─────────────────────────────
-  const mode: EditMode        = classifyEditMode(prompt, true);
+  const mode: EditMode           = classifyEditMode(prompt, true);
   const intensity: EditIntensity = detectEditIntensity(prompt, mode);
+  const verifyTier               = getVerificationTier(mode);
 
-  // ── LAYER 4: Build cinematic/mode-aware instruction ────────────────────────
+  // ── LAYER 4: Build instructions ────────────────────────────────────────────
   const primaryInstruction = buildStrongInstruction(mode, intensity, prompt);
 
-  // Escalated instruction for same-model no-op retry (Attempt 2)
+  // Escalated instruction — same model, stronger prompt, used for no-op recovery
   const escalatedInstruction = buildStrongInstruction(
     mode,
     "EXTREME",
-    prompt +
-      " — IMPORTANT: this edit MUST be visually transformative. Make a strong, clearly visible change.",
+    prompt + " — IMPORTANT: this edit MUST be visually transformative. Make a strong, clearly visible change.",
   );
 
-  const hasPreservationLock  = detectPreservationLock(prompt);
-  const expandedPrompt       = buildStructuredPrompt(prompt, hasPreservationLock);
+  const hasPreservationLock = detectPreservationLock(prompt);
+  const expandedPrompt      = buildStructuredPrompt(prompt, hasPreservationLock);
 
   const job: ImageJob = createJob({
     jobType,
@@ -663,10 +920,11 @@ export async function editImage(
   advanceJob(
     job,
     "processing",
-    `Mode: ${getEditModeLabel(mode)} | Intensity: ${intensity} | Complexity: ${complexity}${hasPreservationLock ? " | LOCK" : ""}`,
+    `Mode: ${getEditModeLabel(mode)} | Intensity: ${intensity} | Complexity: ${complexity} | VerifyTier: ${verifyTier}${hasPreservationLock ? " | LOCK" : ""}`,
   );
 
-  const succeedEdit = (b64Image: string): EditResult => {
+  // ── succeedEdit: completes job, persists history, builds return value ───────
+  const succeedEdit = (b64Image: string, qv?: VerificationResult): EditResult => {
     completeJob(job, "gemini-img2img");
     if (userId) {
       saveToHistory({
@@ -678,13 +936,29 @@ export async function editImage(
         b64Image,
       }).catch((err) => logger.warn({ err }, "[imageHistory] Failed to save edit result"));
     }
-    return { b64Image, job: jobSummary(job), mode: getEditModeLabel(mode), intensity };
+    return {
+      b64Image,
+      job: jobSummary(job),
+      mode: getEditModeLabel(mode),
+      intensity,
+      qualityVerified: qv ? (!qv.skipped && qv.valid) : false,
+      qualityIssues:   qv?.issues ?? [],
+    };
   };
+
+  // ── Attempt 2 trigger tracking ─────────────────────────────────────────────
+  // "no-op"        — Attempt 1 returned null (no image parts / near-identical)
+  //                  or threw an API error. Attempt 2 uses escalated instruction.
+  // "quality-fail" — Attempt 1 returned an image that failed LAYER 8 quality
+  //                  check. Attempt 2 uses preservation instruction.
+  type Attempt2Trigger = "no-op" | "quality-fail";
+  let attempt2Trigger: Attempt2Trigger = "no-op";
+  let qualityRetryIssues: string[] = [];
 
   const attemptErrors: string[] = [];
 
   try {
-    // ── Attempt 1: Primary model, primary instruction ──────────────────────────
+    // ── Attempt 1: primary instruction ────────────────────────────────────────
     advanceJob(
       job,
       "streaming",
@@ -701,39 +975,110 @@ export async function editImage(
         { attempt: 1, model: GEMINI_IMG2IMG_MODEL, error: msg1 },
         "[imageEdit] Attempt 1 HARD FAIL — real API error",
       );
+      // Keep attempt2Trigger = "no-op"
     }
-    if (r1) return succeedEdit(r1);
 
-    // ── Attempt 2: Same model, EXTREME escalated instruction ──────────────────
-    // Triggered only when Attempt 1 returned null (no-op / no image parts).
-    // This is NOT a fallback to a different model — it is a prompt-level retry
-    // on the identical model to recover from near-identical or empty output.
-    advanceJob(
-      job,
-      "retrying",
-      `Attempt 2 — ${GEMINI_IMG2IMG_MODEL} | EXTREME escalated (no-op recovery)`,
-      { retryCount: 1 },
-    );
+    if (r1) {
+      // ── LAYER 8: Quality verification on Attempt 1 output ───────────────────
+      advanceJob(job, "streaming", "Attempt 1 image received — running LAYER 8 quality check");
+      const qv1 = await verifyEditOutput(parsed, r1, mode, prompt);
+
+      if (qv1.skipped) {
+        logger.warn(
+          { skipReason: qv1.skipReason },
+          "[imageQuality] verifier skipped on Attempt 1 — passing through",
+        );
+        return succeedEdit(r1, qv1);
+      }
+
+      if (qv1.valid) {
+        return succeedEdit(r1, qv1);
+      }
+
+      // Quality check failed — trigger preservation retry
+      qualityRetryIssues = qv1.issues;
+      attempt2Trigger    = "quality-fail";
+      logger.warn(
+        { issues: qv1.issues, tier: qv1.tier, mode: getEditModeLabel(mode) },
+        "[imageQuality] Attempt 1 REJECTED by quality verifier — preservation retry triggered",
+      );
+    }
+    // r1 === null (no-op) falls through with attempt2Trigger = "no-op"
+
+    // ── Attempt 2: escalated (no-op path) OR preservation (quality-fail path) ──
+    const attempt2Instruction =
+      attempt2Trigger === "quality-fail"
+        ? buildPreservationInstruction(mode, prompt, qualityRetryIssues)
+        : escalatedInstruction;
+
+    const attempt2Label =
+      attempt2Trigger === "quality-fail"
+        ? `Attempt 2 — ${GEMINI_IMG2IMG_MODEL} | PRESERVATION retry (quality enforcement)`
+        : `Attempt 2 — ${GEMINI_IMG2IMG_MODEL} | EXTREME escalated (no-op recovery)`;
+
+    advanceJob(job, "retrying", attempt2Label, { retryCount: 1 });
 
     let r2: string | null = null;
     try {
-      r2 = await tryGeminiImg2Img(parsed, escalatedInstruction, timeoutMs);
+      r2 = await tryGeminiImg2Img(parsed, attempt2Instruction, timeoutMs);
     } catch (err2) {
       const msg2 = err2 instanceof Error ? err2.message : String(err2);
-      attemptErrors.push(`Attempt 2 [${GEMINI_IMG2IMG_MODEL} escalated]: ${msg2}`);
+      attemptErrors.push(`Attempt 2 [${GEMINI_IMG2IMG_MODEL}]: ${msg2}`);
       logger.error(
-        { attempt: 2, model: GEMINI_IMG2IMG_MODEL, error: msg2 },
+        { attempt: 2, model: GEMINI_IMG2IMG_MODEL, trigger: attempt2Trigger, error: msg2 },
         "[imageEdit] Attempt 2 HARD FAIL — real API error",
       );
     }
-    if (r2) return succeedEdit(r2);
+
+    if (r2) {
+      // ── LAYER 8: Quality verification on Attempt 2 output ───────────────────
+      advanceJob(job, "streaming", "Attempt 2 image received — running LAYER 8 quality check");
+      const qv2 = await verifyEditOutput(parsed, r2, mode, prompt);
+
+      if (qv2.skipped) {
+        logger.warn(
+          { skipReason: qv2.skipReason, trigger: attempt2Trigger },
+          "[imageQuality] verifier skipped on Attempt 2 — passing through",
+        );
+        return succeedEdit(r2, qv2);
+      }
+
+      if (qv2.valid) {
+        return succeedEdit(r2, qv2);
+      }
+
+      // Attempt 2 also failed quality — hard reject
+      const rejectionReason =
+        `Quality enforcement rejection: both attempts introduced protected-element changes ` +
+        `(${qv2.issues.join(", ")}). ` +
+        `Tier: ${qv2.tier}. Trigger: ${attempt2Trigger}.`;
+
+      logger.error(
+        {
+          issues: qv2.issues,
+          tier: qv2.tier,
+          trigger: attempt2Trigger,
+          attempt1Issues: qualityRetryIssues,
+          mode: getEditModeLabel(mode),
+        },
+        "[imageQuality] QUALITY ENFORCEMENT REJECTION — both attempts failed quality check",
+      );
+
+      failJob(job, rejectionReason);
+      throw new Error(
+        `Image editing rejected — the model altered protected elements (${qv2.issues.join(", ")}) ` +
+        `that must be preserved. Please use a more specific instruction or try a different image.`,
+      );
+    }
 
     // ── ALL ATTEMPTS EXHAUSTED — FAIL IMMEDIATELY ─────────────────────────────
     // No fallback. No text-to-image. No second model. Hard stop.
     const failReason =
       attemptErrors.length > 0
         ? `img2img failed after 2 attempts:\n${attemptErrors.join("\n")}`
-        : "img2img returned no image output after 2 attempts (no-op or near-identical) — please retry with a clearer instruction.";
+        : attempt2Trigger === "quality-fail"
+          ? "quality retry returned no image output — model could not produce a structure-preserving edit."
+          : "img2img returned no image output after 2 attempts (no-op or near-identical) — please retry with a clearer instruction.";
 
     logger.error(
       {
@@ -741,8 +1086,9 @@ export async function editImage(
         mode: getEditModeLabel(mode),
         intensity,
         complexity,
+        attempt2Trigger,
         attemptErrors,
-        fallback: "NONE — text-to-image fallback permanently removed",
+        fallback: "NONE — permanently removed",
       },
       "[imageEdit] IMG2IMG FAILED — no fallback, returning error to caller",
     );
@@ -751,8 +1097,11 @@ export async function editImage(
     throw new Error(
       attemptErrors.length > 0
         ? `Image editing failed — ${failReason}`
-        : "Image editing failed after 2 attempts — model returned no visible change. Please retry with a clearer instruction.",
+        : attempt2Trigger === "quality-fail"
+          ? "Image editing failed — could not produce a structure-preserving result. Please try a more specific instruction."
+          : "Image editing failed after 2 attempts — model returned no visible change. Please retry with a clearer instruction.",
     );
+
   } catch (err) {
     if (job.status !== "failed") {
       const reason = err instanceof Error ? err.message : "Unknown error";
