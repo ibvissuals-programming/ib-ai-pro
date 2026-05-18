@@ -144,6 +144,7 @@ router.post(
     rateKey: "chat",
     rateMax: 30,
     rateWindowMs: 60_000,
+    allowRecovery: true,
   }),
   async (req: Request, res: Response) => {
     const parsed = ChatRequestSchema.safeParse(req.body);
