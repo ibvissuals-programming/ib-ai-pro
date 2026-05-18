@@ -178,23 +178,13 @@ router.post(
       res.write("data: [DONE]\n\n");
       streamSucceeded = true;
     } catch (err: unknown) {
-      logger.error({ err }, "LLM stream error");
-
-      const errorMessage =
-        err instanceof Error
-          ? {
-              message: err.message,
-              name: err.name,
-              stack: err.stack,
-            }
-          : {
-              message: String(err),
-            };
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logger.error({ err: errMsg }, "LLM stream error");
 
       res.write(
         sseEvent({
           error: true,
-          code: errorMessage,
+          code: errMsg,
         })
       );
     } finally {

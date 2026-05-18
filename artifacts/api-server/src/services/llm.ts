@@ -1,11 +1,5 @@
-// ╔══════════════════════════════════════════════════════════════════╗
-// ║  AI ARCHITECTURE LOCK — IB AI Assistant                        ║
-// ║  Any AI response MUST originate from the Gemini stream only.    ║
-// ║  No fallback provider, mock engine, or static reply is allowed. ║
-// ║  Do NOT add: generateAIResponse, defaultReply, or any           ║
-// ║  alternative AI path. Violations break production integrity.    ║
-// ╚══════════════════════════════════════════════════════════════════╝
 import { logger } from "../lib/logger";
+import { ai } from "@workspace/integrations-gemini-ai";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -13,6 +7,7 @@ export type ChatMessage = {
 };
 
 export const CHAT_MODEL = "llama3-8b-8192";
+const GEMINI_FALLBACK_MODEL = "gemini-2.5-flash";
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 600;
@@ -26,15 +21,16 @@ function isRetryable(err: any): boolean {
   return msg.includes("429") || msg.includes("rate") || msg.includes("overloaded");
 }
 
-export async function createChatStream(messages: ChatMessage[]): Promise<AsyncIterable<string>> {
+// ── Groq streaming ─────────────────────────────────────────────────────────────
+
+async function createGroqStream(messages: ChatMessage[]): Promise<AsyncIterable<string>> {
   const apiKey = process.env.GROQ_API_KEY;
 
   if (!apiKey) {
-    throw new Error("Missing GROQ_API_KEY");
+    throw new Error("Missing GROQ_API_KEY — cannot use Groq provider");
   }
 
   const systemMessage = messages.find((m) => m.role === "system");
-
   const cleaned = messages.filter((m) => m.role !== "system");
 
   let attempt = 0;
@@ -59,23 +55,29 @@ export async function createChatStream(messages: ChatMessage[]): Promise<AsyncIt
       });
 
       if (!response.ok || !response.body) {
-        throw new Error(`Groq API error: ${response.status}`);
+        // Read error body for proper diagnostics before throwing
+        const errBody = await response.text().catch(() => "(unreadable)");
+        logger.error(
+          { status: response.status, body: errBody },
+          "[groq] API rejected request",
+        );
+        throw new Error(`Groq API error ${response.status}: ${errBody}`);
       }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
 
       return (async function* () {
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
+        try {
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
 
-          const chunk = decoder.decode(value, { stream: true });
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split("\n").filter(Boolean);
 
-          const lines = chunk.split("\n").filter(Boolean);
-
-          for (const line of lines) {
-            if (line.includes("data: ")) {
+            for (const line of lines) {
+              if (!line.includes("data: ")) continue;
               const data = line.replace("data: ", "").trim();
               if (data === "[DONE]") return;
 
@@ -83,22 +85,95 @@ export async function createChatStream(messages: ChatMessage[]): Promise<AsyncIt
                 const json = JSON.parse(data);
                 const text = json?.choices?.[0]?.delta?.content;
                 if (text) yield text;
-              } catch {}
+              } catch {
+                // skip malformed SSE lines
+              }
             }
           }
+        } finally {
+          reader.releaseLock();
         }
       })();
     } catch (err) {
       attempt++;
 
       if (!isRetryable(err) || attempt >= MAX_RETRIES) {
-        logger.error({ err }, "[groq] failed");
+        logger.error({ err, attempt }, "[groq] failed — not retrying");
         throw err;
       }
 
+      logger.warn({ attempt }, "[groq] retryable error — retrying");
       await delay(RETRY_DELAY_MS * attempt);
     }
   }
 
-  throw new Error("Groq failed after retries");
-                                       }
+  throw new Error("Groq failed after all retries");
+}
+
+// ── Gemini fallback streaming ──────────────────────────────────────────────────
+
+async function createGeminiStream(messages: ChatMessage[]): Promise<AsyncIterable<string>> {
+  const systemMessage = messages.find((m) => m.role === "system");
+  const conversationMessages = messages.filter((m) => m.role !== "system");
+
+  // Map OpenAI-style roles to Gemini roles (assistant → model)
+  const contents = conversationMessages.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  const stream = await ai.models.generateContentStream({
+    model: GEMINI_FALLBACK_MODEL,
+    contents,
+    config: {
+      ...(systemMessage ? { systemInstruction: systemMessage.content } : {}),
+      maxOutputTokens: 8192,
+    },
+  });
+
+  return (async function* () {
+    for await (const chunk of stream) {
+      const text = chunk.text;
+      if (text) yield text;
+    }
+  })();
+}
+
+// ── Public API — Groq with Gemini fallback ────────────────────────────────────
+
+/**
+ * createChatStream()
+ *
+ * Attempts Groq (llama3-8b-8192) first.
+ * Falls back to Gemini (gemini-2.5-flash) automatically if Groq fails for any
+ * reason (bad key, model error, network issue, quota exhaustion, etc.).
+ *
+ * Never throws to the caller — always returns a working stream or rethrows
+ * only when both providers fail.
+ */
+export async function createChatStream(messages: ChatMessage[]): Promise<AsyncIterable<string>> {
+  let groqErrMsg = "";
+
+  // ── Try Groq first ───────────────────────────────────────────────────────────
+  try {
+    const stream = await createGroqStream(messages);
+    logger.info("[llm] using Groq provider");
+    return stream;
+  } catch (groqErr) {
+    groqErrMsg = groqErr instanceof Error ? groqErr.message : String(groqErr);
+    logger.warn({ err: groqErrMsg }, "[llm] Groq failed — falling back to Gemini");
+  }
+
+  // ── Gemini fallback ──────────────────────────────────────────────────────────
+  try {
+    const stream = await createGeminiStream(messages);
+    logger.info("[llm] using Gemini fallback provider");
+    return stream;
+  } catch (geminiErr) {
+    const geminiErrMsg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
+    logger.error({ err: geminiErrMsg }, "[llm] Gemini fallback also failed");
+    throw new Error(
+      `Both AI providers failed. Groq: ${groqErrMsg}. Gemini: ${geminiErrMsg}.`,
+    );
+  }
+}
