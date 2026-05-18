@@ -16,6 +16,8 @@
  *   getAuthHeaders()           → { Authorization: 'Bearer ...' } | {}
  */
 
+import { fetchWithTimeout, AUTH_TIMEOUT_MS } from '../utils/apiClient';
+
 const IB_TOKEN_KEY = 'ib_token';
 const IB_USER_KEY = 'ib_cached_user';
 
@@ -91,7 +93,6 @@ async function safeParseJson(res) {
 
   const ct = res.headers?.get?.('content-type') ?? '';
   if (ct && !ct.includes('application/json') && !ct.includes('text/plain')) {
-    // Non-JSON content-type (e.g. HTML error page) — surface a clear message
     return { error: 'Invalid server response (unexpected content type)' };
   }
 
@@ -104,13 +105,20 @@ async function safeParseJson(res) {
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
+/**
+ * POST to a backend auth endpoint with a timeout.
+ * Uses fetchWithTimeout so requests never hang indefinitely.
+ */
 async function post(path, body, extraHeaders) {
-  const res = await fetch(`${BASE}/api${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...extraHeaders },
-    body: JSON.stringify(body),
-  });
-  return res;
+  return fetchWithTimeout(
+    `${BASE}/api${path}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...extraHeaders },
+      body: JSON.stringify(body),
+    },
+    AUTH_TIMEOUT_MS,
+  );
 }
 
 /**
@@ -181,14 +189,18 @@ export async function login(username, password) {
  */
 export async function recoveryLogin(username, recoveryKey) {
   try {
-    const res = await fetch(`${BASE}/api/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-ceo-recovery-key': recoveryKey,
+    const res = await fetchWithTimeout(
+      `${BASE}/api/auth/login`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-ceo-recovery-key': recoveryKey,
+        },
+        body: JSON.stringify({ username }),
       },
-      body: JSON.stringify({ username }),
-    });
+      AUTH_TIMEOUT_MS,
+    );
     const data = await safeParseJson(res);
     if (!res.ok) {
       return { success: false, error: data.error || 'Invalid recovery key' };
@@ -215,19 +227,22 @@ export async function changePassword(newPassword) {
   if (!token) return { success: false, error: 'Not authenticated' };
 
   try {
-    const res = await fetch(`${BASE}/api/auth/change-password`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
+    const res = await fetchWithTimeout(
+      `${BASE}/api/auth/change-password`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ newPassword }),
       },
-      body: JSON.stringify({ newPassword }),
-    });
+      AUTH_TIMEOUT_MS,
+    );
     const data = await safeParseJson(res);
     if (!res.ok) {
       return { success: false, error: data.error || 'Password change failed' };
     }
-    // If the server issued a fresh normal token (after recovery session), save it
     if (data.token) {
       saveToken(data.token);
     }
@@ -270,12 +285,12 @@ export async function verifySession() {
   if (!token) return null;
 
   try {
-    const res = await fetch(`${BASE}/api/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await fetchWithTimeout(
+      `${BASE}/api/auth/me`,
+      { headers: { Authorization: `Bearer ${token}` } },
+      AUTH_TIMEOUT_MS,
+    );
     if (!res.ok) {
-      // 403 = recovery session (password change required) — keep token but return null
-      // so the app can redirect to the password-change flow
       if (res.status === 403) {
         return null;
       }
@@ -289,7 +304,6 @@ export async function verifySession() {
     }
     return loadCachedUser();
   } catch {
-    // Network failure — return cached user so app stays usable offline
     return loadCachedUser();
   }
 }

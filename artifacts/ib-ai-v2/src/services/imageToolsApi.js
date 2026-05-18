@@ -1,21 +1,10 @@
 import { getAuthHeaders } from '../auth/authService';
+import { safeJson, fetchWithTimeout, IMAGE_GEN_MS } from '../utils/apiClient';
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 const GENERATE_URL = `${BASE}/api/image/generate`;
-const EDIT_URL = `${BASE}/api/image/edit`;
-const HISTORY_URL = `${BASE}/api/image/history`;
-const TIMEOUT_MS = 90_000;
-
-async function fetchWithTimeout(url, options) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, { ...options, signal: controller.signal });
-    return res;
-  } finally {
-    clearTimeout(timer);
-  }
-}
+const EDIT_URL     = `${BASE}/api/image/edit`;
+const HISTORY_URL  = `${BASE}/api/image/history`;
 
 function handleErrorResponse(res, data, context) {
   if (res.status === 401) throw new Error('Authentication required. Please log in again.');
@@ -36,17 +25,21 @@ function handleErrorResponse(res, data, context) {
 export async function generateImage(prompt) {
   let res;
   try {
-    res = await fetchWithTimeout(GENERATE_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-      body: JSON.stringify({ prompt }),
-    });
+    res = await fetchWithTimeout(
+      GENERATE_URL,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ prompt }),
+      },
+      IMAGE_GEN_MS,
+    );
   } catch (err) {
     if (err.name === 'AbortError') throw new Error('Request timed out — the model took too long. Please try again.');
     throw new Error('Network error — could not reach the image service.');
   }
 
-  const data = await res.json().catch(() => ({}));
+  const data = await safeJson(res);
   if (!res.ok) handleErrorResponse(res, data, 'generate');
   return data;
 }
@@ -60,17 +53,21 @@ export async function generateImage(prompt) {
 export async function editImage(imageBase64, prompt) {
   let res;
   try {
-    res = await fetchWithTimeout(EDIT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-      body: JSON.stringify({ image: imageBase64, prompt }),
-    });
+    res = await fetchWithTimeout(
+      EDIT_URL,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ image: imageBase64, prompt }),
+      },
+      IMAGE_GEN_MS,
+    );
   } catch (err) {
     if (err.name === 'AbortError') throw new Error('Request timed out — the model took too long. Please try again.');
     throw new Error('Network error — could not reach the image service.');
   }
 
-  const data = await res.json().catch(() => ({}));
+  const data = await safeJson(res);
   if (!res.ok) handleErrorResponse(res, data, 'edit');
 
   if (!data.b64Image) throw new Error('Image edit returned no result. Please try again.');
@@ -85,16 +82,17 @@ export async function editImage(imageBase64, prompt) {
 export async function fetchImageHistory(limit = 30) {
   let res;
   try {
-    res = await fetchWithTimeout(`${HISTORY_URL}?limit=${limit}`, {
-      method: 'GET',
-      headers: { ...getAuthHeaders() },
-    });
+    res = await fetchWithTimeout(
+      `${HISTORY_URL}?limit=${limit}`,
+      { method: 'GET', headers: { ...getAuthHeaders() } },
+      IMAGE_GEN_MS,
+    );
   } catch (err) {
     if (err.name === 'AbortError') throw new Error('Request timed out loading history.');
     throw new Error('Network error — could not load history.');
   }
 
-  const data = await res.json().catch(() => ({}));
+  const data = await safeJson(res);
   if (!res.ok) {
     if (res.status === 401) throw new Error('Authentication required.');
     throw new Error(data.error ?? 'Failed to load history.');
@@ -111,16 +109,17 @@ export async function fetchImageHistory(limit = 30) {
 export async function deleteHistoryEntry(entryId) {
   let res;
   try {
-    res = await fetchWithTimeout(`${HISTORY_URL}/${entryId}`, {
-      method: 'DELETE',
-      headers: { ...getAuthHeaders() },
-    });
+    res = await fetchWithTimeout(
+      `${HISTORY_URL}/${entryId}`,
+      { method: 'DELETE', headers: { ...getAuthHeaders() } },
+      IMAGE_GEN_MS,
+    );
   } catch (err) {
     if (err.name === 'AbortError') throw new Error('Request timed out.');
     throw new Error('Network error — could not delete entry.');
   }
 
-  const data = await res.json().catch(() => ({}));
+  const data = await safeJson(res);
   if (!res.ok) {
     if (res.status === 401) throw new Error('Authentication required.');
     if (res.status === 404) throw new Error('Entry not found.');

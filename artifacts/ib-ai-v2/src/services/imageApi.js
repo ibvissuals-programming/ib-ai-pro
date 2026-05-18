@@ -1,9 +1,8 @@
 import { getAuthHeaders } from '../auth/authService';
+import { safeJson, fetchWithTimeout, IMAGE_ANALYZE_MS } from '../utils/apiClient';
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 const ANALYZE_URL = `${BASE}/api/analyze-image`;
-
-const TIMEOUT_MS = 60_000;
 
 /**
  * Send an image to the backend for visual analysis.
@@ -18,39 +17,39 @@ const TIMEOUT_MS = 60_000;
  * @returns {Promise<object>}
  */
 export async function analyzeImage(imageBase64, mimeType) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
   let response;
   try {
-    response = await fetch(ANALYZE_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
+    response = await fetchWithTimeout(
+      ANALYZE_URL,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ imageBase64, mimeType }),
       },
-      body: JSON.stringify({ imageBase64, mimeType }),
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timer);
+      IMAGE_ANALYZE_MS,
+    );
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      const te = new Error('Request timed out — please try again');
+      te.name = 'AbortError';
+      throw te;
+    }
+    throw err;
   }
 
   if (!response.ok) {
-    let body;
-    try {
-      body = await response.json();
-    } catch {
-      body = {};
-    }
-
+    const body = await safeJson(response);
     const err = new Error(body.error || `Image analysis API error ${response.status}`);
     err.code = body.code ?? null;
     err.statusCode = response.status;
     throw err;
   }
 
-  return response.json();
+  const result = await safeJson(response);
+  if (!result || Object.keys(result).length === 0) {
+    throw new Error('Image analysis returned an empty response — please try again');
+  }
+  return result;
 }
 
 /**
