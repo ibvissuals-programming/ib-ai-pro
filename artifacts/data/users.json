@@ -169,5 +169,32 @@
     "credits": 0,
     "lastReset": 1778935990243,
     "createdAt": 1778935990243
+  },
+  {
+    "id": "b3a1a6aa-ea42-401f-ab58-9ae3911433f8",
+    "username": "valtest_9z8x",
+    "passwordHash": "e8785530d1faac6a76a306239446e2f1:871520c45c34a2300d3b383fb61e28a2d02fcc4dd6db135523858cb4fd2f2a588b574200b57786e110ba5618f3babd84194f5640cb453eeefcfd8d38197a54b8",
+    "role": "free",
+    "credits": 7,
+    "lastReset": 1779126175823,
+    "createdAt": 1779126175823
+  },
+  {
+    "id": "8b0f0080-9a4d-4ba1-8316-8bbe5b3468b7",
+    "username": "chattest_9z8y",
+    "passwordHash": "bf53e51b8de452badd95210ee68f9fb5:fa9ab1b092613efb55ebeb77e2890ac1d839a47cb3eb72c2d6ed8fd3ab4d56fed754773fdcbf19ce09f31bacb083f0c861353197a039ca89fab8e053eced50eb",
+    "role": "free",
+    "credits": 6,
+    "lastReset": 1779126178912,
+    "createdAt": 1779126178912
+  },
+  {
+    "id": "b1aa3007-4ee4-412b-8e33-44263c38ad59",
+    "username": "histtest_9z8w",
+    "passwordHash": "e0684c005c93c9da0ede3eeac5cc09bf:37e836b0f53feaec0784fb135acc1f769a328f6367e1a82db4437a22a5d10415dc4ecba1cf9cdbe790864d0eeca03177f9f1d0e238920676e8b9004155b84f02",
+    "role": "free",
+    "credits": 7,
+    "lastReset": 1779126207216,
+    "createdAt": 1779126207216
   }
 ]
