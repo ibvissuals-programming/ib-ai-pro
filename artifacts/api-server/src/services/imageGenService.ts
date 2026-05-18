@@ -65,15 +65,28 @@ import { saveToHistory } from "./imageHistoryStore";
 // EDIT_PIPELINE_HARD_TIMEOUT_MS: absolute wall-clock deadline for the entire
 //   editImage() pipeline — no matter how many attempts/verifies are in-flight,
 //   the request is aborted and an error is returned after this many ms.
-const REQUEST_TIMEOUT_MS = 28_000;
-const EDIT_PIPELINE_HARD_TIMEOUT_MS = 40_000;
+export const REQUEST_TIMEOUT_MS          = 28_000;
+export const EDIT_PIPELINE_HARD_TIMEOUT_MS = 40_000;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_MIMES = ["image/png", "image/jpeg", "image/webp"] as const;
 const RESPONSE_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,/;
 
 // Pollinations (text-to-image): 1 retry max — hard limit per requirements.
-const MAX_POLLINATIONS_RETRIES = 1;
-const POLLINATIONS_RETRY_BASE_MS = 1_500;
+export const MAX_POLLINATIONS_RETRIES  = 1;
+const POLLINATIONS_RETRY_BASE_MS       = 1_500;
+
+// ── Contract versioning ───────────────────────────────────────────────────────
+// CONTRACT_VERSION identifies which enforcement ruleset is active.
+// It is included in every edit response and surfaced by GET /api/image/contract.
+// Increment when the IMG2IMG_MASTER_CONTRACT text is materially updated.
+export const CONTRACT_VERSION = "v4" as const;
+
+const CONTRACT_VERSION_HISTORY: Record<string, string> = {
+  v1: "Basic IMG2IMG enforcement — identity lock, background lock, Lightroom-style allowed operations only",
+  v2: "Quality verifier system added — retry-once enforcement; identity/background/pose/composition validation",
+  v3: "Anti-AI look system added — prevents plastic skin, HDR overprocessing, fake cinematic glow, over-smoothed faces; forces DSLR realism",
+  v4: "Retry behavior rule locked — on retry ONLY exposure correction + contrast + white balance; all stylistic enhancement removed on retry",
+};
 
 type AcceptedMime = (typeof ACCEPTED_MIMES)[number];
 
@@ -454,7 +467,7 @@ const GEMINI_IMG2IMG_MODEL = "gemini-2.0-flash-preview-image-generation";
 // DO NOT remove or shorten this contract. It is the primary mechanism that
 // prevents the model from drifting into generative / reconstructive behavior.
 
-const IMG2IMG_MASTER_CONTRACT = `You are a professional Lightroom-style image editing engine operating in STRICT IMG2IMG MODE ONLY.
+export const IMG2IMG_MASTER_CONTRACT = `You are a professional Lightroom-style image editing engine operating in STRICT IMG2IMG MODE ONLY.
 
 Your job is to perform true photographic enhancement only on an existing image.
 
@@ -858,7 +871,7 @@ async function tryGeminiImg2Img(
 // LOOSE-tier modes (STYLE_TRANSFER, BACKGROUND_TRANSFORMATION,
 // AGGRESSIVE_RECONSTRUCTION) skip verification entirely — their structural
 // changes are intentional and the verifier cannot meaningfully check them.
-const VERIFY_TIMEOUT_MS = 8_000;
+export const VERIFY_TIMEOUT_MS = 8_000;
 const GEMINI_VERIFY_MODEL = "gemini-2.5-flash";
 
 type VerificationTier = "STRICT" | "IDENTITY" | "LOOSE";
@@ -1102,6 +1115,98 @@ export interface EditResult {
   intensity: string;
   qualityVerified: boolean;
   qualityIssues: string[];
+  contractVersionUsed: string;
+}
+
+// ── GET /api/image/contract — diagnostic snapshot ─────────────────────────────
+// Returns a read-only view of all live pipeline constants and enforcement rules.
+// Pure function — no side effects, no mutations, no I/O.
+// debugMode (requires DEBUG_CONTRACT=true env var) adds version history and
+// per-layer enforcement detail for deeper introspection.
+export function getContractConfig(debugMode = false): Record<string, unknown> {
+  const config: Record<string, unknown> = {
+    contract:        IMG2IMG_MASTER_CONTRACT,
+    contractVersion: CONTRACT_VERSION,
+
+    pipeline: {
+      editPipelineHardTimeoutMs: EDIT_PIPELINE_HARD_TIMEOUT_MS,
+      requestTimeoutMs:          REQUEST_TIMEOUT_MS,
+      verifyTimeoutMs:           VERIFY_TIMEOUT_MS,
+      maxRetries:                MAX_POLLINATIONS_RETRIES,
+      model:                     GEMINI_IMG2IMG_MODEL,
+      verifierModel:             GEMINI_VERIFY_MODEL,
+    },
+
+    complexity: {
+      SIMPLE:   { timeoutMs: complexityTimeout("SIMPLE"),   retriesOnNoOp: 0, note: "fast-fail immediately on no-op" },
+      STANDARD: { timeoutMs: complexityTimeout("STANDARD"), retriesOnNoOp: 1 },
+      HEAVY:    { timeoutMs: complexityTimeout("HEAVY"),    retriesOnNoOp: 1 },
+    },
+
+    modes: {
+      aggressiveReconstructionDowngradeTo:       "SUBTLE_ENHANCEMENT",
+      aggressiveReconstructionIntensityOverride: "MEDIUM",
+      cinematicEditMaxIntensityCap:              "HIGH",
+      looseTierVerifierSkip:                      true,
+      looseTierModes: [
+        "STYLE_TRANSFER",
+        "BACKGROUND_TRANSFORMATION",
+        "AGGRESSIVE_RECONSTRUCTION",
+      ],
+    },
+
+    safety: {
+      fallbackGenerationDisabled:  true,
+      modelSwitchingDisabled:      true,
+      textToImageFallbackDisabled: true,
+    },
+
+    quality: {
+      verifierEnabled:            true,
+      verifierTimeoutMs:          VERIFY_TIMEOUT_MS,
+      verifierModel:              GEMINI_VERIFY_MODEL,
+      verifierPassthroughOnError: true,
+      retryPolicy:
+        "quality-fail → preservation retry (exposure + contrast + WB only). " +
+        "no-op + SIMPLE → fast-fail immediately (no retry). " +
+        "no-op + STANDARD/HEAVY → escalated retry once.",
+    },
+  };
+
+  if (debugMode) {
+    config.versionHistory = CONTRACT_VERSION_HISTORY;
+    config.enforcementLayers = {
+      "LAYER 0":   "Complexity classifier — SIMPLE / STANDARD / HEAVY timeout budgets",
+      "LAYER 1+2": "Mode + intensity classifier — EditMode + EditIntensity",
+      "LAYER 3":   "Screenshot cleanup prompts — reconstruct artifacts naturally",
+      "LAYER 4":   "Instruction builder — mode-specific or fast-mode override",
+      "LAYER 5":   "Same-model retry with escalated instruction on no-op",
+      "LAYER 6":   "Similarity validation — reject near-identical outputs",
+      "LAYER 7":   "Persistent image history — saved after every successful operation",
+      "LAYER 8":   "Quality Enforcement Verifier — STRICT / IDENTITY / LOOSE tiers",
+    };
+    config.fastModeRules = {
+      triggeredBy: [
+        "mode === AGGRESSIVE_RECONSTRUCTION",
+        "mode === CINEMATIC_EDIT && intensity === EXTREME",
+      ],
+      allowedOps: [
+        "exposure correction",
+        "contrast adjustment",
+        "white balance correction",
+        "mild sharpening",
+      ],
+      forbiddenOps: [
+        "cinematic reconstruction",
+        "heavy style transfer",
+        "generative enhancement",
+        "background modification",
+        "scene rebuilding",
+      ],
+    };
+  }
+
+  return config;
 }
 
 // ── Fast-mode instruction builder ─────────────────────────────────────────────
@@ -1307,6 +1412,7 @@ export async function editImage(
       intensity,
       qualityVerified: qv ? (!qv.skipped && qv.valid) : false,
       qualityIssues:   qv?.issues ?? [],
+      contractVersionUsed: CONTRACT_VERSION,
     };
   };
 

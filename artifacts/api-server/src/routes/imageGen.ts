@@ -16,7 +16,7 @@
  */
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import { generateImage, editImage, type EditResult } from "../services/imageGenService";
+import { generateImage, editImage, getContractConfig, type EditResult } from "../services/imageGenService";
 import { logger } from "../lib/logger";
 import { policyEngine, deductRequestCredits, appendCreditHeaders } from "../middleware/policyEngine";
 import { CREDIT_COSTS } from "../lib/userStore";
@@ -61,6 +61,31 @@ function toRouteError(err: unknown, context: "generate" | "edit"): string {
   // Catch-all for unexpected errors
   return `Image ${context} failed. Please try again.`;
 }
+
+// ── GET /api/image/contract ───────────────────────────────────────────────────
+// Read-only diagnostic endpoint — returns the live runtime configuration of
+// the image editing pipeline. No auth required. No side effects. Pure snapshot.
+//
+// Query params:
+//   ?debug=true  — requires DEBUG_CONTRACT=true env var. Adds version history,
+//                  per-layer enforcement details, and fast-mode rule breakdown.
+
+router.get(
+  "/image/contract",
+  (_req: Request, res: Response) => {
+    const debugMode =
+      _req.query.debug === "true" &&
+      process.env["DEBUG_CONTRACT"] === "true";
+
+    logger.info(
+      { debugMode, ip: _req.ip },
+      "[contractDiag] GET /api/image/contract",
+    );
+
+    const config = getContractConfig(debugMode);
+    res.json(config);
+  },
+);
 
 // ── POST /api/image/generate ──────────────────────────────────────────────────
 
@@ -130,7 +155,16 @@ router.post(
       const result: EditResult = await editImage(parsed.data.image, parsed.data.prompt, req.user?.userId);
       deductRequestCredits(req);
       appendCreditHeaders(req, res);
-      res.json({ b64Image: result.b64Image, status: "success", job: result.job, mode: result.mode, intensity: result.intensity });
+      res.json({
+        b64Image:             result.b64Image,
+        status:               "success",
+        job:                  result.job,
+        mode:                 result.mode,
+        intensity:            result.intensity,
+        qualityVerified:      result.qualityVerified,
+        qualityIssues:        result.qualityIssues,
+        contractVersionUsed:  result.contractVersionUsed,
+      });
     } catch (err: unknown) {
       logger.error({ err }, "[imageGen] edit failed");
       const message = toRouteError(err, "edit");
