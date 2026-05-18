@@ -33,7 +33,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "node /home/runner/workspace/scripts/kill-port.cjs 23765; node /home/runner/workspace/scripts/kill-port.cjs 5000; sleep 0.3; while true; do PORT=5000 pnpm --filter @workspace/ib-ai-v2 run dev; echo '[auto-restart] Vite exited, restarting in 2s...'; sleep 2; node /home/runner/workspace/scripts/kill-port.cjs 5000; done"
+args = "node /home/runner/workspace/scripts/kill-port.cjs 23765; node /home/runner/workspace/scripts/kill-port.cjs 5000; sleep 0.3; while true; do PORT=5000 pnpm --filter @workspace/ib-ai-v2 run dev; echo '[auto-restart] Vite exited, restarting in 0.3s...'; sleep 0.3; done"
 waitForPort = 5000
 
 [[workflows.workflow]]
@@ -45,7 +45,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "node /home/runner/workspace/scripts/kill-port.cjs 8080; node /home/runner/workspace/scripts/kill-port.cjs 8099; sleep 0.3; while true; do PORT=8099 pnpm --filter @workspace/api-server run dev; echo '[auto-restart] Backend exited, restarting in 2s...'; sleep 2; node /home/runner/workspace/scripts/kill-port.cjs 8099; done"
+args = "node /home/runner/workspace/scripts/kill-port.cjs 8080; node /home/runner/workspace/scripts/kill-port.cjs 8099; sleep 0.3; while true; do PORT=8099 pnpm --filter @workspace/api-server run dev; echo '[auto-restart] Backend exited, restarting in 0.3s...'; sleep 0.3; done"
 waitForPort = 8099
 
 [agent]
@@ -73,10 +73,6 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 8080
-externalPort = 8080
-
-[[ports]]
 localPort = 8081
 externalPort = 8081
 
@@ -85,5 +81,5 @@ localPort = 8099
 externalPort = 8099
 
 [[ports]]
-localPort = 23765
-externalPort = 3000
+localPort = 8099
+externalPort = 8099
