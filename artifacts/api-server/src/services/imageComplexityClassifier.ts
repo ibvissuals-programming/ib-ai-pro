@@ -122,15 +122,16 @@ export function classifyJobType(intent: ImageIntent, hasImage: boolean): JobType
 
 /**
  * Return the Gemini timeout in ms appropriate for the complexity level.
- * SIMPLE gets a tighter timeout to fail fast; HEAVY gets more room.
+ * Tighter budgets leave room for the verifier call within the global 40s wall.
+ * SIMPLE: fail fast on no-op. STANDARD: default. HEAVY: max allowed per model call.
  */
 export function complexityTimeout(complexity: RequestComplexity): number {
   switch (complexity) {
     case "SIMPLE":
-      return 18_000;
+      return 15_000;
     case "STANDARD":
-      return 25_000;
+      return 20_000;
     case "HEAVY":
-      return 32_000;
+      return 28_000;
   }
 }

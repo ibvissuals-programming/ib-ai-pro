@@ -60,13 +60,20 @@ import {
 } from "./imageComplexityClassifier";
 import { saveToHistory } from "./imageHistoryStore";
 
-const REQUEST_TIMEOUT_MS = 35_000;
+// ── Timeout / retry constants ─────────────────────────────────────────────────
+// REQUEST_TIMEOUT_MS: per-attempt timeout for Pollinations (text-to-image only).
+// EDIT_PIPELINE_HARD_TIMEOUT_MS: absolute wall-clock deadline for the entire
+//   editImage() pipeline — no matter how many attempts/verifies are in-flight,
+//   the request is aborted and an error is returned after this many ms.
+const REQUEST_TIMEOUT_MS = 28_000;
+const EDIT_PIPELINE_HARD_TIMEOUT_MS = 40_000;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_MIMES = ["image/png", "image/jpeg", "image/webp"] as const;
 const RESPONSE_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,/;
 
-const MAX_POLLINATIONS_RETRIES = 2;
-const POLLINATIONS_RETRY_BASE_MS = 2_000;
+// Pollinations (text-to-image): 1 retry max — hard limit per requirements.
+const MAX_POLLINATIONS_RETRIES = 1;
+const POLLINATIONS_RETRY_BASE_MS = 1_500;
 
 type AcceptedMime = (typeof ACCEPTED_MIMES)[number];
 
@@ -815,7 +822,12 @@ async function tryGeminiImg2Img(
 //   Attempt 1 output fails quality check → trigger Attempt 2 with preservation prompt
 //   Attempt 2 output also fails           → hard FAIL with rejection message
 
-const VERIFY_TIMEOUT_MS = 20_000;
+// Verifier has a tight budget — it must never block the response beyond the global
+// 40s wall. 8s is enough for a text-only Gemini call with small output.
+// LOOSE-tier modes (STYLE_TRANSFER, BACKGROUND_TRANSFORMATION,
+// AGGRESSIVE_RECONSTRUCTION) skip verification entirely — their structural
+// changes are intentional and the verifier cannot meaningfully check them.
+const VERIFY_TIMEOUT_MS = 8_000;
 const GEMINI_VERIFY_MODEL = "gemini-2.5-flash";
 
 type VerificationTier = "STRICT" | "IDENTITY" | "LOOSE";
@@ -907,6 +919,17 @@ async function verifyEditOutput(
 ): Promise<VerificationResult> {
   const tier      = getVerificationTier(mode);
   const modeLabel = getEditModeLabel(mode);
+
+  // LOOSE-tier modes (STYLE_TRANSFER, BACKGROUND_TRANSFORMATION,
+  // AGGRESSIVE_RECONSTRUCTION) intentionally change structure/identity — skip.
+  // Running the verifier on them would only produce false positives and add latency.
+  if (tier === "LOOSE") {
+    logger.info(
+      { tier, mode: modeLabel },
+      "[imageQuality] LAYER 8 verifier SKIPPED — LOOSE tier, structural changes are intentional",
+    );
+    return { valid: true, issues: [], tier, skipped: true, skipReason: "LOOSE tier — structural changes intentional" };
+  }
 
   const commaIdx = outputDataUrl.indexOf(",");
   if (commaIdx === -1) {
@@ -1089,6 +1112,48 @@ export async function editImage(
 
   const parsed = parseAndValidateImage(imageBase64);
 
+  // ── LAYER 0: Classify complexity and job type ──────────────────────────────
+  const intent: ImageIntent  = classifyImageIntent(prompt, true);
+  const complexity            = classifyComplexity(prompt);
+  const jobType               = classifyJobType(intent, true);
+  const timeoutMs             = complexityTimeout(complexity);
+
+  // ── LAYER 1+2: Mode + intensity classification ─────────────────────────────
+  let mode: EditMode           = classifyEditMode(prompt, true);
+  let intensity: EditIntensity = detectEditIntensity(prompt, mode);
+
+  // ── FAST MODE ENFORCEMENT (auto-downgrade) ─────────────────────────────────
+  // AGGRESSIVE_RECONSTRUCTION is a heavy generative operation that risks
+  // scene rebuild and identity drift. Auto-downgrade to SUBTLE_ENHANCEMENT.
+  //
+  // CINEMATIC_EDIT at EXTREME intensity triggers a full Hollywood-grade rebuild
+  // prompt that can exceed safe edit time. Cap it at HIGH.
+  //
+  // These downgrades enforce the "fast, stable, deterministic" contract and
+  // ensure the pipeline stays within the 40s global deadline.
+  let fastModeDowngraded = false;
+  const originalMode      = mode;
+  const originalIntensity = intensity;
+
+  if (mode === "AGGRESSIVE_RECONSTRUCTION") {
+    mode                = "SUBTLE_ENHANCEMENT";
+    intensity           = "MEDIUM";
+    fastModeDowngraded  = true;
+    logger.warn(
+      { originalMode, downgraded: mode, reason: "AGGRESSIVE_RECONSTRUCTION auto-downgraded — heavy generative operation" },
+      "[imageEdit] FAST MODE — mode downgraded to SUBTLE_ENHANCEMENT",
+    );
+  } else if (mode === "CINEMATIC_EDIT" && intensity === "EXTREME") {
+    intensity          = "HIGH";
+    fastModeDowngraded = true;
+    logger.warn(
+      { mode, originalIntensity, downgraded: intensity, reason: "CINEMATIC EXTREME auto-capped to HIGH" },
+      "[imageEdit] FAST MODE — CINEMATIC intensity capped at HIGH",
+    );
+  }
+
+  const verifyTier = getVerificationTier(mode);
+
   logger.info(
     {
       userId,
@@ -1099,20 +1164,12 @@ export async function editImage(
       imageAttached: true,
       model: GEMINI_IMG2IMG_MODEL,
       verifyModel: GEMINI_VERIFY_MODEL,
+      mode,
+      intensity,
+      fastModeDowngraded,
     },
     "[imageEdit] pipeline entered — IMG2IMG ONLY + LAYER 8 quality enforcement",
   );
-
-  // ── LAYER 0: Classify complexity and job type ──────────────────────────────
-  const intent: ImageIntent  = classifyImageIntent(prompt, true);
-  const complexity            = classifyComplexity(prompt);
-  const jobType               = classifyJobType(intent, true);
-  const timeoutMs             = complexityTimeout(complexity);
-
-  // ── LAYER 1+2: Mode + intensity classification ─────────────────────────────
-  const mode: EditMode           = classifyEditMode(prompt, true);
-  const intensity: EditIntensity = detectEditIntensity(prompt, mode);
-  const verifyTier               = getVerificationTier(mode);
 
   // ── LAYER 4: Build instructions ────────────────────────────────────────────
   const primaryInstruction = buildStrongInstruction(mode, intensity, prompt);
@@ -1175,6 +1232,14 @@ export async function editImage(
 
   const attemptErrors: string[] = [];
 
+  // ── GLOBAL HARD DEADLINE ──────────────────────────────────────────────────
+  // Absolute wall-clock limit for the entire editImage pipeline.
+  // No individual attempt timeout or verifier delay can exceed this combined cap.
+  // If the deadline fires before a result is returned, the job is failed immediately
+  // and a graceful error is sent to the caller — no hanging requests.
+  let _deadlineTimerId: ReturnType<typeof setTimeout> | undefined;
+
+  const runPipeline = async (): Promise<EditResult> => {
   try {
     // ── Attempt 1: primary instruction ────────────────────────────────────────
     advanceJob(
@@ -1222,6 +1287,20 @@ export async function editImage(
       );
     }
     // r1 === null (no-op) falls through with attempt2Trigger = "no-op"
+
+    // ── SIMPLE fast-fail on no-op (no retry) ──────────────────────────────────
+    // SIMPLE complexity means the model couldn't apply even a trivial single-op
+    // edit. Retrying with an EXTREME instruction risks identity drift on a simple
+    // request — fail immediately per fast-mode enforcement rules.
+    if (r1 === null && attempt2Trigger === "no-op" && complexity === "SIMPLE") {
+      const failMsg = "Image editing returned no visible change — please try a more descriptive instruction.";
+      failJob(job, "SIMPLE no-op — fast-fail (no retry)");
+      logger.warn(
+        { complexity, mode: getEditModeLabel(mode), fastFail: true },
+        "[imageEdit] SIMPLE no-op fast-fail — skipping retry per fast-mode enforcement",
+      );
+      throw new Error(failMsg);
+    }
 
     // ── Attempt 2: escalated (no-op path) OR preservation (quality-fail path) ──
     const attempt2Instruction =
@@ -1326,5 +1405,35 @@ export async function editImage(
       failJob(job, reason);
     }
     throw err;
+  }
+  }; // end runPipeline
+
+  // ── Race pipeline against hard deadline ───────────────────────────────────
+  const deadlinePromise = new Promise<never>((_, reject) => {
+    _deadlineTimerId = setTimeout(() => {
+      reject(
+        new Error(
+          `Image editing timed out — the request exceeded ${EDIT_PIPELINE_HARD_TIMEOUT_MS / 1000}s. Please try again.`,
+        ),
+      );
+    }, EDIT_PIPELINE_HARD_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([runPipeline(), deadlinePromise]);
+  } catch (err) {
+    // Deadline fired or runPipeline threw after its own catch (re-throw).
+    // Mark failed if not already marked (deadline case won't have done so).
+    if (job.status !== "failed") {
+      const reason = err instanceof Error ? err.message : "Unknown error";
+      failJob(job, reason);
+      logger.error(
+        { reason, jobId: job.jobId },
+        "[imageEdit] global deadline or uncaught error — job marked failed",
+      );
+    }
+    throw err;
+  } finally {
+    if (_deadlineTimerId !== undefined) clearTimeout(_deadlineTimerId);
   }
 }
