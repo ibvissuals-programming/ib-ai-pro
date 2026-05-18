@@ -426,121 +426,156 @@ function parseAndValidateImage(imageDataUrl: string): ParsedImage {
 }
 
 // ── TIER 1: Gemini img2img ────────────────────────────────────────────────────
-// Uses mode+intensity aware instructions (LAYER 4 cinematic lighting engine).
-// Model: gemini-2.0-flash-preview-image-generation — Google's dedicated img2img
-//        editing model. Accepts image input and outputs a MODIFIED image.
-//        gemini-2.5-flash-image is text-to-image only and does not support
-//        image input editing — never use it here.
-// Returns the result as a data URL, or null to trigger fallback.
+// Model priority order (both pass the original image as inlineData):
+//   PRIMARY:  gemini-2.0-flash-preview-image-generation (Google dedicated img2img model)
+//   FALLBACK: gemini-2.5-flash-image (Replit proxy alias — also called with image input)
+//
+// CRITICAL: tryGeminiImg2Img does NOT catch errors.
+//   → null return = "response had no image parts" or "near-identical output"
+//   → thrown error  = real API failure (propagates to caller for logging)
+//   Callers must wrap in try-catch and log the real error body.
 
-const GEMINI_IMG2IMG_MODEL = "gemini-2.0-flash-preview-image-generation";
+const GEMINI_IMG2IMG_MODEL   = "gemini-2.0-flash-preview-image-generation";
+const GEMINI_IMG2IMG_FALLBACK = "gemini-2.5-flash-image";
 
+// Returns edited data URL, or null if the response had no usable image output.
+// THROWS on API error — callers must catch and log.
 async function tryGeminiImg2Img(
   parsed: ParsedImage,
   instruction: string,
   timeoutMs: number,
+  model: string = GEMINI_IMG2IMG_MODEL,
 ): Promise<string | null> {
-  // ── Step 4: Pre-flight validation — image MUST be present and valid ──────
-  // If the image is missing, throw immediately. Never continue without it.
-  if (!parsed.base64 || parsed.base64.length < 10) {
+
+  // ── IMAGE EDIT PIPELINE START ─────────────────────────────────────────────
+  logger.info(
+    { stage: "PIPELINE START", model, mimeType: parsed.mimeType, inputBytes: parsed.base64.length },
+    "[imageEdit] IMAGE EDIT PIPELINE START",
+  );
+
+  // ── IMAGE VALIDATED ───────────────────────────────────────────────────────
+  if (!parsed.base64 || parsed.base64.length < 1000) {
     throw new Error(
-      "[imageEdit] PIPELINE VIOLATION — image is missing from img2img request. Refusing to proceed.",
+      `INVALID IMAGE INPUT — base64 too short (${parsed.base64?.length ?? 0} chars). Image must be at least 1000 chars.`,
     );
   }
   if (!parsed.mimeType) {
-    throw new Error(
-      "[imageEdit] PIPELINE VIOLATION — image MIME type is missing. Refusing to proceed.",
-    );
+    throw new Error("INVALID IMAGE INPUT — MIME type missing.");
   }
+  // Verify the raw base64 has only valid characters (catch JSON corruption early)
+  if (!/^[A-Za-z0-9+/=]+$/.test(parsed.base64.slice(0, 64))) {
+    throw new Error("INVALID IMAGE INPUT — base64 appears corrupted (invalid characters at start).");
+  }
+  logger.info(
+    { stage: "IMAGE VALIDATED", model, inputBytes: parsed.base64.length, mimeType: parsed.mimeType },
+    "[imageEdit] IMAGE VALIDATED",
+  );
+
+  const { ai } = await import("@workspace/integrations-gemini-ai");
+
+  // ── MODEL REQUEST BUILT ───────────────────────────────────────────────────
+  const requestPayload = {
+    model,
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { inlineData: { mimeType: parsed.mimeType, data: parsed.base64 } },
+          { text: instruction },
+        ],
+      },
+    ],
+    config: { responseModalities: ["TEXT", "IMAGE"] },
+  };
+  logger.info(
+    {
+      stage: "MODEL REQUEST BUILT",
+      model,
+      instruction: instruction.slice(0, 120),
+      inlineDataPresent: true,
+      inlineDataBytes: parsed.base64.length,
+    },
+    "[imageEdit] MODEL REQUEST BUILT",
+  );
+
+  // ── MODEL CALL SENT ───────────────────────────────────────────────────────
+  logger.info({ stage: "MODEL CALL SENT", model, timeoutMs }, "[imageEdit] MODEL CALL SENT");
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  // NOTE: errors are NOT caught here — they propagate to the caller.
+  const result = await Promise.race([
+    ai.models.generateContent(requestPayload),
+    new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(`Gemini img2img timeout after ${timeoutMs}ms (model: ${model})`));
+      }, timeoutMs);
+    }),
+  ]);
+
+  if (timeoutId !== undefined) clearTimeout(timeoutId);
+
+  // ── MODEL RESPONSE RECEIVED ───────────────────────────────────────────────
+  const candidate   = result.candidates?.[0];
+  const finishReason = (candidate as { finishReason?: string })?.finishReason ?? "UNKNOWN";
+  const rawParts = candidate?.content?.parts as Array<{
+    text?: string;
+    inlineData?: { mimeType?: string; data?: string };
+  }> | undefined;
+  const textParts  = rawParts?.filter((p) => p.text).map((p) => p.text).join("") ?? "";
+  const imageParts = rawParts?.filter((p) => p.inlineData?.data) ?? [];
 
   logger.info(
     {
-      model: GEMINI_IMG2IMG_MODEL,
-      mimeType: parsed.mimeType,
-      inputBytes: parsed.base64.length,
-      instruction: instruction.slice(0, 80),
+      stage: "MODEL RESPONSE RECEIVED",
+      model,
+      finishReason,
+      totalParts: rawParts?.length ?? 0,
+      imageParts: imageParts.length,
+      textPreview: textParts.slice(0, 120),
     },
-    "[imageEdit] IMAGE PASSED THROUGH MODEL — pre-flight OK, Tier 1 img2img dispatched",
+    "[imageEdit] MODEL RESPONSE RECEIVED",
   );
 
-  try {
-    const { ai } = await import("@workspace/integrations-gemini-ai");
-
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-
-    const result = await Promise.race([
-      ai.models.generateContent({
-        model: GEMINI_IMG2IMG_MODEL,
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { inlineData: { mimeType: parsed.mimeType, data: parsed.base64 } },
-              { text: instruction },
-            ],
-          },
-        ],
-        config: { responseModalities: ["TEXT", "IMAGE"] },
-      }),
-      new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => {
-          logger.warn({ provider: "gemini", model: GEMINI_IMG2IMG_MODEL, timeoutMs }, "[ai] provider timeout");
-          reject(new Error("Gemini img2img timeout"));
-        }, timeoutMs);
-      }),
-    ]);
-
-    if (timeoutId !== undefined) clearTimeout(timeoutId);
-
-    const parts = result.candidates?.[0]?.content?.parts as Array<{
-      inlineData?: { mimeType?: string; data?: string };
-    }> | undefined;
-
-    if (parts) {
-      for (const part of parts) {
-        if (part.inlineData?.data && part.inlineData?.mimeType) {
-          const outputMime = part.inlineData.mimeType;
-          const outputBase64 = part.inlineData.data;
-
-          // LAYER 6: Near-identical output detection
-          // Threshold tightened: catch exact copies and near-duplicates up to 3% size diff
-          if (isNearIdenticalOutput(parsed.base64, outputBase64)) {
-            logger.warn(
-              { model: GEMINI_IMG2IMG_MODEL, inputBytes: parsed.base64.length, outputBytes: outputBase64.length },
-              "[imageEdit] IMG2IMG FAILED → NO-OP DETECTED — output identical to input, will retry with escalated instruction",
-            );
-            return null;
-          }
-
-          const dataUrl = `data:${outputMime};base64,${outputBase64}`;
-          validateImageResponse(dataUrl);
-          logger.info(
-            {
-              model: GEMINI_IMG2IMG_MODEL,
-              outputMime,
-              inputBytes: parsed.base64.length,
-              outputBytes: outputBase64.length,
-              instruction: instruction.slice(0, 80),
-            },
-            "[imageEdit] IMG2IMG SUCCESS — transformation confirmed, output differs from input",
-          );
-          return dataUrl;
-        }
-      }
-    }
-
+  if (imageParts.length === 0) {
     logger.warn(
-      { model: GEMINI_IMG2IMG_MODEL },
-      "[imageEdit] Gemini img2img returned no image parts — triggering Tier 2 fallback",
-    );
-    return null;
-  } catch (err) {
-    logger.warn(
-      { err: err instanceof Error ? err.message : String(err), model: GEMINI_IMG2IMG_MODEL },
-      "[imageEdit] Gemini img2img unavailable — triggering Tier 2 fallback",
+      { model, finishReason, textPreview: textParts.slice(0, 200), rawPartsCount: rawParts?.length ?? 0 },
+      "[imageEdit] model returned NO image parts — response logged above",
     );
     return null;
   }
+
+  // ── Validate and return first usable image part ───────────────────────────
+  for (const part of imageParts) {
+    const outputMime   = part.inlineData!.mimeType!;
+    const outputBase64 = part.inlineData!.data!;
+
+    // LAYER 6: Near-identical output detection
+    if (isNearIdenticalOutput(parsed.base64, outputBase64)) {
+      logger.warn(
+        { model, inputBytes: parsed.base64.length, outputBytes: outputBase64.length },
+        "[imageEdit] IMG2IMG FAILED → NO-OP DETECTED — output identical to input",
+      );
+      return null;
+    }
+
+    const dataUrl = `data:${outputMime};base64,${outputBase64}`;
+    validateImageResponse(dataUrl);
+    logger.info(
+      {
+        stage: "IMG2IMG SUCCESS",
+        model,
+        outputMime,
+        inputBytes: parsed.base64.length,
+        outputBytes: outputBase64.length,
+        instruction: instruction.slice(0, 80),
+      },
+      "[imageEdit] IMG2IMG SUCCESS — transformation confirmed, output differs from input",
+    );
+    return dataUrl;
+  }
+
+  return null;
 }
 
 // ── TIER 2: Gemini vision describe + FLUX regeneration ───────────────────────
@@ -704,90 +739,89 @@ export async function editImage(
     `Mode: ${getEditModeLabel(mode)} | Intensity: ${intensity} | Complexity: ${complexity}${hasPreservationLock ? " | LOCK" : ""}`,
   );
 
-  try {
-    // ── Tier 1: Gemini img2img with cinematic instruction ──────────────────
-    advanceJob(
-      job,
-      "streaming",
-      `Tier 1 — Gemini img2img | ${getEditModeLabel(mode)} | ${intensity} (${timeoutMs}ms)`,
-    );
-
-    let img2imgResult = await tryGeminiImg2Img(
-      parsed,
-      primaryInstruction,
-      timeoutMs,
-    );
-
-    if (img2imgResult) {
-      completeJob(job, "gemini-img2img");
-      // LAYER 7: persist to history
-      if (userId) {
-        saveToHistory({
-          userId,
-          type: "edit",
-          prompt,
-          mode: getEditModeLabel(mode),
-          intensity,
-          b64Image: img2imgResult,
-        }).catch((err) =>
-          logger.warn({ err }, "[imageHistory] Failed to save edit result"),
-        );
-      }
-      return {
-        b64Image: img2imgResult,
-        job: jobSummary(job),
+  // ── Shared success handler ────────────────────────────────────────────────
+  const succeedEdit = (b64Image: string): EditResult => {
+    completeJob(job, "gemini-img2img");
+    if (userId) {
+      saveToHistory({
+        userId,
+        type: "edit",
+        prompt,
         mode: getEditModeLabel(mode),
         intensity,
-      };
+        b64Image,
+      }).catch((err) => logger.warn({ err }, "[imageHistory] Failed to save edit result"));
     }
+    return { b64Image, job: jobSummary(job), mode: getEditModeLabel(mode), intensity };
+  };
 
-    // ── LAYER 5+6: Always retry Tier 1 on near-identical / for HIGH/EXTREME/HEAVY ──
-    // Any no-op detection triggers a retry with escalated instruction regardless of intensity.
-    if (true || shouldRetryTier1(intensity, complexity)) {
-      advanceJob(job, "retrying", "Tier 1 retry — escalated cinematic instruction", {
-        retryCount: 1,
-      });
-      img2imgResult = await tryGeminiImg2Img(
-        parsed,
-        escalatedInstruction,
-        timeoutMs,
+  try {
+    // ── Attempt 1: Primary model (gemini-2.0-flash-preview-image-generation), primary instruction ──
+    advanceJob(job, "streaming", `Attempt 1 — ${GEMINI_IMG2IMG_MODEL} | ${getEditModeLabel(mode)} | ${intensity}`);
+    let r1: string | null = null;
+    try {
+      r1 = await tryGeminiImg2Img(parsed, primaryInstruction, timeoutMs, GEMINI_IMG2IMG_MODEL);
+    } catch (err1) {
+      logger.error(
+        {
+          attempt: 1,
+          model: GEMINI_IMG2IMG_MODEL,
+          error: err1 instanceof Error ? err1.message : String(err1),
+        },
+        "[imageEdit] Attempt 1 HARD FAIL — real API error (not masked)",
       );
-      if (img2imgResult) {
-        completeJob(job, "gemini-img2img");
-        if (userId) {
-          saveToHistory({
-            userId,
-            type: "edit",
-            prompt,
-            mode: getEditModeLabel(mode),
-            intensity,
-            b64Image: img2imgResult,
-          }).catch((err) =>
-            logger.warn({ err }, "[imageHistory] Failed to save edit result"),
-          );
-        }
-        return {
-          b64Image: img2imgResult,
-          job: jobSummary(job),
-          mode: getEditModeLabel(mode),
-          intensity,
-        };
-      }
     }
+    if (r1) return succeedEdit(r1);
+
+    // ── Attempt 2: Primary model, escalated EXTREME instruction ───────────
+    advanceJob(job, "retrying", `Attempt 2 — ${GEMINI_IMG2IMG_MODEL} | escalated EXTREME`, { retryCount: 1 });
+    let r2: string | null = null;
+    try {
+      r2 = await tryGeminiImg2Img(parsed, escalatedInstruction, timeoutMs, GEMINI_IMG2IMG_MODEL);
+    } catch (err2) {
+      logger.error(
+        {
+          attempt: 2,
+          model: GEMINI_IMG2IMG_MODEL,
+          error: err2 instanceof Error ? err2.message : String(err2),
+        },
+        "[imageEdit] Attempt 2 HARD FAIL — real API error (not masked)",
+      );
+    }
+    if (r2) return succeedEdit(r2);
+
+    // ── Attempt 3: Fallback img2img model (gemini-2.5-flash-image) ─────────
+    // This is STILL img2img — the original image is always attached as inlineData.
+    // The fallback model is tried here because the primary model may be unavailable
+    // through the Replit proxy. Text-to-image is NEVER used.
+    advanceJob(job, "retrying", `Attempt 3 — ${GEMINI_IMG2IMG_FALLBACK} | img2img fallback`, { retryCount: 2 });
+    let r3: string | null = null;
+    try {
+      r3 = await tryGeminiImg2Img(parsed, primaryInstruction, timeoutMs, GEMINI_IMG2IMG_FALLBACK);
+    } catch (err3) {
+      logger.error(
+        {
+          attempt: 3,
+          model: GEMINI_IMG2IMG_FALLBACK,
+          error: err3 instanceof Error ? err3.message : String(err3),
+        },
+        "[imageEdit] Attempt 3 HARD FAIL — real API error (not masked)",
+      );
+    }
+    if (r3) return succeedEdit(r3);
 
     // ── TEXT FALLBACK BLOCKED (SECURITY RULE) ────────────────────────────
-    // Both Tier 1 attempts exhausted. A text-to-image fallback (Gemini vision →
-    // FLUX regeneration) is available in this codebase but is FORBIDDEN for edit
-    // requests because it discards the input image and generates a new one from
-    // a text description alone — violating img2img-only enforcement.
-    // DO NOT enable this path for edit requests under any circumstances.
+    // All three img2img attempts exhausted. A text-to-image fallback (Gemini vision
+    // → FLUX regeneration) exists in this codebase but is PERMANENTLY BLOCKED for
+    // edit requests. Invoking it would discard the input image and violate img2img
+    // enforcement. DO NOT re-enable under any circumstances.
     logger.error(
-      { mode: getEditModeLabel(mode), intensity, complexity },
-      "[imageEdit] TEXT FALLBACK BLOCKED (SECURITY RULE) — img2img exhausted, refusing text-to-image generation for edit request",
+      { mode: getEditModeLabel(mode), intensity, complexity, primaryModel: GEMINI_IMG2IMG_MODEL, fallbackModel: GEMINI_IMG2IMG_FALLBACK },
+      "[imageEdit] TEXT FALLBACK BLOCKED (SECURITY RULE) — all img2img attempts exhausted, refusing text-to-image generation",
     );
-    failJob(job, "img2img exhausted — text-to-image fallback blocked by security rule");
+    failJob(job, "all img2img attempts failed — text-to-image fallback blocked");
     throw new Error(
-      "Image editing failed: the model could not produce a modified version of your image. Please try again with a different instruction.",
+      "Image editing failed after 3 attempts. Both Gemini img2img models rejected the request. Please retry.",
     );
   } catch (err) {
     if (job.status !== "failed") {
