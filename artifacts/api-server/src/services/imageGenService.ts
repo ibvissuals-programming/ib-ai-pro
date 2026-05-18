@@ -697,6 +697,19 @@ export async function editImage(
 
   const parsed = parseAndValidateImage(imageBase64);
 
+  // ── Pipeline entry: confirm image is validated and will be attached ───────────
+  logger.info(
+    {
+      userId,
+      promptLength: prompt.length,
+      prompt: prompt.slice(0, 80),
+      imageMime: parsed.mimeType,
+      imageBytes: parsed.base64.length,
+      imageAttached: true,
+    },
+    "[imageEdit] pipeline entered — image validated and attached",
+  );
+
   // ── LAYER 0: Classify complexity and job type ──────────────────────────────
   const intent: ImageIntent = classifyImageIntent(prompt, true);
   const complexity = classifyComplexity(prompt);
@@ -710,9 +723,8 @@ export async function editImage(
   // ── LAYER 4: Build cinematic/mode-aware instruction (replaces generic prompt) ─
   const primaryInstruction = buildStrongInstruction(mode, intensity, prompt);
 
-  // Escalated instruction for LAYER 6 retry (stronger for non-EXTREME → push to EXTREME)
-  const escalatedIntensity: EditIntensity =
-    intensity === "EXTREME" ? "EXTREME" : "EXTREME";
+  // Escalated instruction for LAYER 6 retry — always EXTREME to force a visible change
+  const escalatedIntensity: EditIntensity = "EXTREME";
   const escalatedInstruction = buildStrongInstruction(
     mode,
     escalatedIntensity,
@@ -755,6 +767,9 @@ export async function editImage(
     return { b64Image, job: jobSummary(job), mode: getEditModeLabel(mode), intensity };
   };
 
+  // Accumulates real error messages from each attempt — surfaced in the final failure.
+  const attemptErrors: string[] = [];
+
   try {
     // ── Attempt 1: Primary model (gemini-2.0-flash-preview-image-generation), primary instruction ──
     advanceJob(job, "streaming", `Attempt 1 — ${GEMINI_IMG2IMG_MODEL} | ${getEditModeLabel(mode)} | ${intensity}`);
@@ -762,12 +777,10 @@ export async function editImage(
     try {
       r1 = await tryGeminiImg2Img(parsed, primaryInstruction, timeoutMs, GEMINI_IMG2IMG_MODEL);
     } catch (err1) {
+      const msg1 = err1 instanceof Error ? err1.message : String(err1);
+      attemptErrors.push(`Attempt 1 [${GEMINI_IMG2IMG_MODEL}]: ${msg1}`);
       logger.error(
-        {
-          attempt: 1,
-          model: GEMINI_IMG2IMG_MODEL,
-          error: err1 instanceof Error ? err1.message : String(err1),
-        },
+        { attempt: 1, model: GEMINI_IMG2IMG_MODEL, error: msg1 },
         "[imageEdit] Attempt 1 HARD FAIL — real API error (not masked)",
       );
     }
@@ -779,12 +792,10 @@ export async function editImage(
     try {
       r2 = await tryGeminiImg2Img(parsed, escalatedInstruction, timeoutMs, GEMINI_IMG2IMG_MODEL);
     } catch (err2) {
+      const msg2 = err2 instanceof Error ? err2.message : String(err2);
+      attemptErrors.push(`Attempt 2 [${GEMINI_IMG2IMG_MODEL} escalated]: ${msg2}`);
       logger.error(
-        {
-          attempt: 2,
-          model: GEMINI_IMG2IMG_MODEL,
-          error: err2 instanceof Error ? err2.message : String(err2),
-        },
+        { attempt: 2, model: GEMINI_IMG2IMG_MODEL, error: msg2 },
         "[imageEdit] Attempt 2 HARD FAIL — real API error (not masked)",
       );
     }
@@ -799,12 +810,10 @@ export async function editImage(
     try {
       r3 = await tryGeminiImg2Img(parsed, primaryInstruction, timeoutMs, GEMINI_IMG2IMG_FALLBACK);
     } catch (err3) {
+      const msg3 = err3 instanceof Error ? err3.message : String(err3);
+      attemptErrors.push(`Attempt 3 [${GEMINI_IMG2IMG_FALLBACK}]: ${msg3}`);
       logger.error(
-        {
-          attempt: 3,
-          model: GEMINI_IMG2IMG_FALLBACK,
-          error: err3 instanceof Error ? err3.message : String(err3),
-        },
+        { attempt: 3, model: GEMINI_IMG2IMG_FALLBACK, error: msg3 },
         "[imageEdit] Attempt 3 HARD FAIL — real API error (not masked)",
       );
     }
@@ -815,13 +824,26 @@ export async function editImage(
     // → FLUX regeneration) exists in this codebase but is PERMANENTLY BLOCKED for
     // edit requests. Invoking it would discard the input image and violate img2img
     // enforcement. DO NOT re-enable under any circumstances.
+    const failReason =
+      attemptErrors.length > 0
+        ? `all img2img attempts failed:\n${attemptErrors.join("\n")}`
+        : "all 3 img2img attempts returned no image output (no-op or near-identical)";
     logger.error(
-      { mode: getEditModeLabel(mode), intensity, complexity, primaryModel: GEMINI_IMG2IMG_MODEL, fallbackModel: GEMINI_IMG2IMG_FALLBACK },
+      {
+        mode: getEditModeLabel(mode),
+        intensity,
+        complexity,
+        primaryModel: GEMINI_IMG2IMG_MODEL,
+        fallbackModel: GEMINI_IMG2IMG_FALLBACK,
+        attemptErrors,
+      },
       "[imageEdit] TEXT FALLBACK BLOCKED (SECURITY RULE) — all img2img attempts exhausted, refusing text-to-image generation",
     );
-    failJob(job, "all img2img attempts failed — text-to-image fallback blocked");
+    failJob(job, failReason);
     throw new Error(
-      "Image editing failed after 3 attempts. Both Gemini img2img models rejected the request. Please retry.",
+      attemptErrors.length > 0
+        ? `Image editing failed — ${failReason}`
+        : "Image editing failed after 3 attempts — models returned no image output. Please retry.",
     );
   } catch (err) {
     if (job.status !== "failed") {

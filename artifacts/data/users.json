@@ -196,5 +196,32 @@
     "credits": 7,
     "lastReset": 1779126207216,
     "createdAt": 1779126207216
+  },
+  {
+    "id": "fda15fd9-5ea6-4689-aee8-8950d1b034b7",
+    "username": "routetest_28586",
+    "passwordHash": "5ce6c1958d86900551e014674fb94c7e:525ac0a0ffaf254ae6f2362e1da5b928cf6d80006d60e5fb2be2bcdc2b3fe2d9ca73bf0fab5ea56291d4b61b1eb5347704d918711b3a7aaac9a2062462039246",
+    "role": "free",
+    "credits": 7,
+    "lastReset": 1779130034145,
+    "createdAt": 1779130034145
+  },
+  {
+    "id": "705aa971-a6cf-498e-9b45-e218fcc19df2",
+    "username": "routetest",
+    "passwordHash": "6ea16f4f69903b6645279302b81a5099:131bdb8a630d9a095c4965e78320352c3ee0c1024abdfac9087034549590b0dab3e70fb4d3a2322aca121cf4818337898086308977a5382f01ad2d6334b1276f",
+    "role": "free",
+    "credits": 7,
+    "lastReset": 1779130060185,
+    "createdAt": 1779130060185
+  },
+  {
+    "id": "978a7dac-c96c-4617-935f-0da1c930f48a",
+    "username": "routetest2",
+    "passwordHash": "1d779474aea55e7b4fd9b586c25ad05d:72c0ab3078fc6a2b2899af3e1b4e020861c16048cb7922faabc24a0ac127d79c026e98c8f63f5172419b5b37b7dafc53d19b6b3642eea1e80aa4e20c8baee10f",
+    "role": "free",
+    "credits": 6,
+    "lastReset": 1779130069764,
+    "createdAt": 1779130069764
   }
 ]

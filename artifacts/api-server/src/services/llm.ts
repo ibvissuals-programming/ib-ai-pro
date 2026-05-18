@@ -144,36 +144,64 @@ async function createGeminiStream(messages: ChatMessage[]): Promise<AsyncIterabl
 /**
  * createChatStream()
  *
- * Attempts Groq (llama-3.1-8b-instant) first.
- * Falls back to Gemini (gemini-2.5-flash) automatically if Groq fails for any
- * reason (bad key, model error, network issue, quota exhaustion, etc.).
+ * Routing logic:
+ *   1. If GROQ_API_KEY is present → try Groq (llama-3.1-8b-instant) first,
+ *      fall back to Gemini (gemini-2.5-flash) only on real failure.
+ *   2. If GROQ_API_KEY is absent → route directly to Gemini with a clear log.
+ *      No spurious "Groq started → Groq failed" noise.
  *
- * Never throws to the caller — always returns a working stream or rethrows
- * only when both providers fail.
+ * Throws only when the active provider(s) genuinely fail — never silently.
  */
 export async function createChatStream(messages: ChatMessage[]): Promise<AsyncIterable<string>> {
-  let groqErrMsg = "";
+  const hasGroqKey = !!process.env.GROQ_API_KEY;
 
-  // ── Try Groq first ───────────────────────────────────────────────────────────
-  logger.info({ model: CHAT_MODEL }, "[llm] GROQ REQUEST STARTED");
+  // ── Fast path: Groq key absent — route directly to Gemini ────────────────────
+  if (!hasGroqKey) {
+    logger.info(
+      { provider: "gemini", model: GEMINI_FALLBACK_MODEL, reason: "groq_key_absent" },
+      "[llm] routing: Groq not configured — Gemini is primary for this deployment",
+    );
+    try {
+      const stream = await createGeminiStream(messages);
+      logger.info({ model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini stream ready");
+      return stream;
+    } catch (geminiErr) {
+      const msg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
+      logger.error({ err: msg, model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini failed — no fallback available");
+      throw new Error(`AI provider failed: ${msg}`);
+    }
+  }
+
+  // ── Groq key present — try Groq first ────────────────────────────────────────
+  let groqErrMsg = "";
+  logger.info({ model: CHAT_MODEL, provider: "groq" }, "[llm] routing: Groq selected as primary");
   try {
     const stream = await createGroqStream(messages);
-    logger.info({ model: CHAT_MODEL }, "[llm] GROQ SUCCESS — primary provider active");
+    logger.info({ model: CHAT_MODEL }, "[llm] Groq success — primary provider active");
     return stream;
   } catch (groqErr) {
     groqErrMsg = groqErr instanceof Error ? groqErr.message : String(groqErr);
-    logger.warn({ err: groqErrMsg, model: CHAT_MODEL }, "[llm] GROQ FAILED → FALLBACK GEMINI");
+    logger.warn(
+      { err: groqErrMsg, model: CHAT_MODEL, fallback: GEMINI_FALLBACK_MODEL },
+      "[llm] Groq failed — activating Gemini fallback",
+    );
   }
 
-  // ── Gemini fallback ──────────────────────────────────────────────────────────
-  logger.info({ model: GEMINI_FALLBACK_MODEL }, "[llm] GEMINI USED AS FALLBACK");
+  // ── Gemini fallback (triggered by Groq failure) ───────────────────────────────
+  logger.info(
+    { model: GEMINI_FALLBACK_MODEL, trigger: "groq_failure", groqErr: groqErrMsg },
+    "[llm] Gemini fallback activated",
+  );
   try {
     const stream = await createGeminiStream(messages);
     logger.info({ model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini fallback stream ready");
     return stream;
   } catch (geminiErr) {
     const geminiErrMsg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
-    logger.error({ err: geminiErrMsg }, "[llm] Gemini fallback also failed");
+    logger.error(
+      { groqErr: groqErrMsg, geminiErr: geminiErrMsg },
+      "[llm] Both providers failed — no AI response possible",
+    );
     throw new Error(
       `Both AI providers failed. Groq: ${groqErrMsg}. Gemini: ${geminiErrMsg}.`,
     );

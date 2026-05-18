@@ -74,6 +74,11 @@ router.post(
       return;
     }
 
+    logger.info(
+      { userId: req.user?.userId, promptLength: parsed.data.prompt.length, prompt: parsed.data.prompt.slice(0, 80) },
+      "[imageGen] generate request received",
+    );
+
     try {
       const b64Image = await generateImage(parsed.data.prompt, req.user?.userId);
       deductRequestCredits(req);
@@ -113,6 +118,11 @@ router.post(
         .json({ error: "Invalid request", details: parsed.error.flatten() });
       return;
     }
+
+    logger.info(
+      { userId: req.user?.userId, promptLength: parsed.data.prompt.length, hasImage: !!parsed.data.image, prompt: parsed.data.prompt.slice(0, 80) },
+      "[imageEdit] edit request received",
+    );
 
     try {
       const result: EditResult = await editImage(parsed.data.image, parsed.data.prompt, req.user?.userId);

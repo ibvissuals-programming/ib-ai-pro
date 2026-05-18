@@ -157,6 +157,11 @@ router.post(
       return;
     }
 
+    logger.info(
+      { userId: req.user?.userId, messageCount: parsed.data.messages.length },
+      "[chat] request received",
+    );
+
     const messages = buildContext(parsed.data.messages);
 
     res.setHeader("Content-Type", "text/event-stream");
