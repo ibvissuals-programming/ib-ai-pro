@@ -22,7 +22,7 @@ const router = Router();
 
 router.get(
   "/image/history",
-  policyEngine({ cost: 0, rateKey: "image_history", rateMax: 60, rateWindowMs: 60_000 }),
+  policyEngine({ cost: 0, rateKey: "image_history", rateMax: 60, rateWindowMs: 60_000, allowRecovery: true }),
   async (req: Request, res: Response) => {
     const userId = req.user?.userId;
     if (!userId) {
@@ -51,7 +51,7 @@ const DeleteParamsSchema = z.object({
 
 router.delete(
   "/image/history/:id",
-  policyEngine({ cost: 0, rateKey: "image_history_delete", rateMax: 30, rateWindowMs: 60_000 }),
+  policyEngine({ cost: 0, rateKey: "image_history_delete", rateMax: 30, rateWindowMs: 60_000, allowRecovery: true }),
   async (req: Request, res: Response) => {
     const userId = req.user?.userId;
     if (!userId) {

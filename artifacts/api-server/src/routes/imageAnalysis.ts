@@ -64,7 +64,7 @@ Make each prompt specific, vivid, and directly informed by what is visible in th
 
 router.post(
   "/analyze-image",
-  policyEngine({ cost: CREDIT_COSTS.image_analysis, rateKey: "image_analysis", rateMax: 10, rateWindowMs: 60_000 }),
+  policyEngine({ cost: CREDIT_COSTS.image_analysis, rateKey: "image_analysis", rateMax: 10, rateWindowMs: 60_000, allowRecovery: true }),
   async (req: Request, res: Response) => {
     const parsed = AnalyzeImageSchema.safeParse(req.body);
 

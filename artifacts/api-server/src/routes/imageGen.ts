@@ -64,7 +64,7 @@ function toRouteError(err: unknown, context: "generate" | "edit"): string {
 
 router.post(
   "/image/generate",
-  policyEngine({ cost: CREDIT_COSTS.image_generate, rateKey: "image_generate", rateMax: 10, rateWindowMs: 60_000 }),
+  policyEngine({ cost: CREDIT_COSTS.image_generate, rateKey: "image_generate", rateMax: 10, rateWindowMs: 60_000, allowRecovery: true }),
   async (req: Request, res: Response) => {
     const parsed = GenerateSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -104,7 +104,7 @@ router.post(
     }
     next();
   },
-  policyEngine({ cost: CREDIT_COSTS.image_edit, rateKey: "image_edit", rateMax: 10, rateWindowMs: 60_000 }),
+  policyEngine({ cost: CREDIT_COSTS.image_edit, rateKey: "image_edit", rateMax: 10, rateWindowMs: 60_000, allowRecovery: true }),
   async (req: Request, res: Response) => {
     const parsed = EditSchema.safeParse(req.body);
     if (!parsed.success) {
