@@ -4,7 +4,7 @@
  * TEXT-TO-IMAGE:  Pollinations.ai (free, no auth, FLUX model)
  *
  * IMAGE-TO-IMAGE: Single-model deterministic img2img pipeline.
- *   PRIMARY MODEL: gemini-2.0-flash-preview-image-generation
+ *   PRIMARY MODEL: gemini-2.5-flash-image
  *   RETRY:         Same model, escalated EXTREME instruction (no-op recovery only)
  *   FALLBACK:      NONE — if the primary model fails, the request fails immediately.
  *
@@ -457,7 +457,7 @@ function parseAndValidateImage(imageDataUrl: string): ParsedImage {
 // All edits MUST pass the original image as inlineData conditioning.
 // A second model MUST NOT be substituted here under any circumstances.
 
-const GEMINI_IMG2IMG_MODEL = "gemini-2.0-flash-preview-image-generation";
+const GEMINI_IMG2IMG_MODEL = "gemini-2.5-flash-image";
 
 // ── IMG2IMG MASTER CONTRACT ───────────────────────────────────────────────────
 // This preamble is prepended to EVERY instruction sent to the img2img model.
@@ -1261,7 +1261,7 @@ function buildFastModeInstruction(originalMode: EditMode, userPrompt: string): s
 //
 // CONTRACT:
 //   - Input image ALWAYS attached as inlineData conditioning (never dropped).
-//   - Only gemini-2.0-flash-preview-image-generation is used for editing.
+//   - Only gemini-2.5-flash-image is used for editing.
 //   - gemini-2.5-flash is used for post-edit quality verification only (no image output).
 //
 // PIPELINE FLOW:

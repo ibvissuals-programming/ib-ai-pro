@@ -31,5 +31,22 @@
     "timestamp": 1779132554528,
     "imageFile": "c975b80b-df9c-4d9a-835a-0ee6496c23a3.jpg",
     "mimeType": "image/jpeg"
+  },
+  {
+    "id": "0accbeda-5206-4060-a88e-74e0c2c27d0d",
+    "userId": "e7dfa258-6c99-407f-850e-53a3aa2c5aa0",
+    "type": "edit",
+    "prompt": "make it brighter and more vibrant",
+    "mode": "Color & Mood Edit",
+    "intensity": "MEDIUM",
+    "timestamp": 1779146560066,
+    "imageFile": "0accbeda-5206-4060-a88e-74e0c2c27d0d.png",
+    "mimeType": "image/png",
+    "complexity": "STANDARD",
+    "contractVersionUsed": "v4",
+    "model": "gemini-2.5-flash-image",
+    "status": "success",
+    "retryCount": 0,
+    "latencyMs": 14962
   }
 ]
