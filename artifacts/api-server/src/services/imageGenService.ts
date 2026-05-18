@@ -1073,6 +1073,54 @@ export interface EditResult {
   qualityIssues: string[];
 }
 
+// ── Fast-mode instruction builder ─────────────────────────────────────────────
+// Used ONLY when the pipeline auto-downgrades a heavy mode (e.g.
+// AGGRESSIVE_RECONSTRUCTION or CINEMATIC_EDIT EXTREME) to a safe minimal edit.
+//
+// This instruction is intentionally narrower than buildStrongInstruction — it
+// names the original mode (for transparency) and explicitly forbids all
+// generative/reconstructive ops the original mode would have triggered.
+// This is the production-safety boundary: even if the model "knows" what
+// AGGRESSIVE_RECONSTRUCTION would do, it receives instructions that prohibit it.
+//
+// ANTI-AI-ARTIFACT RULE is always active: outputs must look like real DSLR
+// photographs, not AI-rendered images. No plastic skin, over-smoothing,
+// HDR glow, or reconstructed features are permitted.
+function buildFastModeInstruction(originalMode: EditMode, userPrompt: string): string {
+  return (
+    `FAST MODE EDIT — ${getEditModeLabel(originalMode)} was requested but has been auto-downgraded ` +
+    `to minimal pixel-level correction for system stability.\n` +
+    `\n` +
+    `Apply ONLY these four operations:\n` +
+    `1. Exposure correction — subtle lift of shadows, gentle highlight recovery\n` +
+    `2. Contrast adjustment — natural tonal distribution, no crushing\n` +
+    `3. White balance correction — remove color cast, achieve accurate neutral tones\n` +
+    `4. Mild sharpening — lightly sharpen edges and texture only\n` +
+    `\n` +
+    `User instruction (apply intent only within the four allowed operations): "${userPrompt.slice(0, 120)}"\n` +
+    `\n` +
+    `STRICTLY FORBIDDEN:\n` +
+    `- Cinematic reconstruction or Hollywood-grade relighting\n` +
+    `- Heavy style transfer or artistic reinterpretation\n` +
+    `- Generative enhancement or AI-hallucinated detail\n` +
+    `- Background modification of any kind\n` +
+    `- Scene rebuilding or subject reconstruction\n` +
+    `\n` +
+    `ANTI-AI-ARTIFACT RULE (non-negotiable):\n` +
+    `- Do NOT create plastic or porcelain skin — preserve real skin texture\n` +
+    `- Do NOT over-smooth faces — preserve pores, lines, and natural texture\n` +
+    `- Do NOT apply fake HDR glow or artificial depth exaggeration\n` +
+    `- Do NOT reconstruct or alter facial features in any way\n` +
+    `- Output must look like a real DSLR photo with a Lightroom correction — NOT an AI render\n` +
+    `\n` +
+    `PRESERVATION RULES (absolute):\n` +
+    `- Same face, same identity, same bone structure\n` +
+    `- Same pose and body position\n` +
+    `- Same background, same composition, same framing\n` +
+    `- Do NOT regenerate, restructure, or replace any element`
+  );
+}
+
 // ── editImage: quality-enforced single-model img2img pipeline ────────────────
 //
 // CONTRACT:
@@ -1172,14 +1220,24 @@ export async function editImage(
   );
 
   // ── LAYER 4: Build instructions ────────────────────────────────────────────
-  const primaryInstruction = buildStrongInstruction(mode, intensity, prompt);
+  // When fast-mode downgrade was applied, bypass buildStrongInstruction entirely
+  // and use the strict minimal-ops instruction. This is the hard production-safety
+  // boundary — the model receives an instruction that explicitly forbids the heavy
+  // operations the original mode would have triggered, regardless of mode label.
+  const primaryInstruction: string = fastModeDowngraded
+    ? buildFastModeInstruction(originalMode, prompt)
+    : buildStrongInstruction(mode, intensity, prompt);
 
-  // Escalated instruction — same model, stronger prompt, used for no-op recovery
-  const escalatedInstruction = buildStrongInstruction(
-    mode,
-    "EXTREME",
-    prompt + " — IMPORTANT: this edit MUST be visually transformative. Make a strong, clearly visible change.",
-  );
+  // Escalated instruction — same model, stronger prompt, used for no-op recovery.
+  // Fast-mode downgraded requests still use the safe fast-mode template on retry
+  // (escalating a fast-mode downgrade back to heavy ops would defeat the policy).
+  const escalatedInstruction: string = fastModeDowngraded
+    ? buildFastModeInstruction(originalMode, prompt + " — IMPORTANT: apply a clearly visible but minimal correction.")
+    : buildStrongInstruction(
+        mode,
+        "EXTREME",
+        prompt + " — IMPORTANT: this edit MUST be visually transformative. Make a strong, clearly visible change.",
+      );
 
   const hasPreservationLock = detectPreservationLock(prompt);
   const expandedPrompt      = buildStructuredPrompt(prompt, hasPreservationLock);

@@ -518,7 +518,16 @@ export function buildStrongInstruction(
       );
 
     case "SUBTLE_ENHANCEMENT":
-    default:
+    default: {
+      // Anti-AI artifact rule — appended to all SUBTLE_ENHANCEMENT outputs.
+      // The model must produce a DSLR-style Lightroom correction, not an AI render.
+      const antiAiRule =
+        ` ANTI-AI-ARTIFACT RULE (non-negotiable): ` +
+        `Do NOT create plastic, porcelain, or over-smoothed skin — preserve every pore, line, and natural skin texture. ` +
+        `Do NOT apply fake HDR glow, artificial depth exaggeration, or cinematic bokeh not present in the original. ` +
+        `Do NOT reconstruct or alter any facial feature. ` +
+        `Output must look like a real DSLR photograph with a professional Lightroom correction — NOT an AI-rendered image.`;
+
       if (intensity === "HIGH" || intensity === "EXTREME") {
         return (
           `Apply strong professional photo enhancement to this exact image: ${p}. ` +
@@ -530,7 +539,8 @@ export function buildStrongInstruction(
           `(5) Local color grading: subtle non-destructive tonal refinement for professional quality. ` +
           `(6) Noise reduction: clean sensor noise while preserving fine texture detail. ` +
           `Output must be a professionally corrected photograph — the same scene, same subject, same composition, same background. ` +
-          `Face, identity, pose, body, background, and framing must be completely unchanged.`
+          `Face, identity, pose, body, background, and framing must be completely unchanged.` +
+          antiAiRule
         );
       }
       return (
@@ -542,8 +552,10 @@ export function buildStrongInstruction(
         `(4) Mild sharpening: lightly sharpen key areas of texture and detail. ` +
         `(5) Noise reduction: reduce visible grain while preserving natural texture. ` +
         `Output must look like the same photograph — professionally corrected but structurally identical. ` +
-        `Do not change the face, identity, pose, background, objects, composition, or framing.`
+        `Do not change the face, identity, pose, background, objects, composition, or framing.` +
+        antiAiRule
       );
+    }
   }
 }
 
