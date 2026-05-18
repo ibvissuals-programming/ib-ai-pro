@@ -19,6 +19,15 @@ import { logger } from "../lib/logger";
 const router = Router();
 
 // ── GET /api/image/history ─────────────────────────────────────────────────
+//
+// Returns authenticated user's image history.
+//
+// Query params:
+//   ?limit=N       — max entries (default 30, cap 50)
+//   ?meta=true     — return metadata-only view (no imageUrl, no raw image fields).
+//                    Returns: jobId, timestamp, mode, intensity, complexity,
+//                    contractVersionUsed, status, retryCount, latency, model.
+//                    Designed for audit logs and dashboards — no image bytes served.
 
 router.get(
   "/image/history",
@@ -33,8 +42,29 @@ router.get(
     const limitRaw = req.query["limit"];
     const limit = typeof limitRaw === "string" ? Math.min(Number(limitRaw) || 30, 50) : 30;
 
+    const metaOnly = req.query["meta"] === "true";
+
     try {
       const entries = await getUserHistory(userId, limit);
+
+      if (metaOnly) {
+        // Metadata-only view — no image URLs or image file references
+        const meta = entries.map((e) => ({
+          jobId:               e.id,
+          timestamp:           e.timestamp,
+          mode:                e.mode,
+          intensity:           e.intensity,
+          complexity:          e.complexity     ?? null,
+          contractVersionUsed: e.contractVersionUsed ?? null,
+          status:              e.status         ?? null,
+          retryCount:          e.retryCount     ?? null,
+          latency:             e.latencyMs      ?? null,
+          model:               e.model          ?? null,
+        }));
+        res.json({ entries: meta, count: meta.length, metaOnly: true });
+        return;
+      }
+
       res.json({ entries, count: entries.length });
     } catch (err) {
       logger.error({ err, userId }, "[imageHistory] Failed to get history");

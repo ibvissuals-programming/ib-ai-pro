@@ -74,6 +74,30 @@ async function post(path, body) {
   return res;
 }
 
+/**
+ * Converts a caught fetch error into a human-readable message.
+ * Distinguishes:
+ *   - Server unreachable (TypeError / "Failed to fetch")
+ *   - Request aborted / timed out (AbortError)
+ *   - Any other error (uses err.message directly)
+ */
+function fetchErrorMessage(err) {
+  if (!err) return 'Network error — please try again';
+  if (err.name === 'AbortError') return 'Request timed out — please try again';
+  // "Failed to fetch" covers CORS failures, DNS failures, backend unreachable
+  if (
+    err.name === 'TypeError' ||
+    (typeof err.message === 'string' &&
+      (err.message.includes('fetch') ||
+       err.message.includes('Failed') ||
+       err.message.includes('NetworkError') ||
+       err.message.includes('Load failed')))
+  ) {
+    return 'Cannot reach server — please check your connection or try again';
+  }
+  return err.message || 'Network error — please try again';
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export async function signup(username, password) {
@@ -87,7 +111,7 @@ export async function signup(username, password) {
     saveUser(data.user);
     return { success: true, user: data.user };
   } catch (err) {
-    return { success: false, error: 'Network error — please try again' };
+    return { success: false, error: fetchErrorMessage(err) };
   }
 }
 
@@ -102,7 +126,7 @@ export async function login(username, password) {
     saveUser(data.user);
     return { success: true, user: data.user, recoveryLogin: data.recoveryLogin ?? false };
   } catch (err) {
-    return { success: false, error: 'Network error — please try again' };
+    return { success: false, error: fetchErrorMessage(err) };
   }
 }
 
@@ -130,7 +154,7 @@ export async function recoveryLogin(username, recoveryKey) {
     saveUser(data.user);
     return { success: true, user: data.user, recoveryLogin: true };
   } catch (err) {
-    return { success: false, error: 'Network error — please try again' };
+    return { success: false, error: fetchErrorMessage(err) };
   }
 }
 
@@ -166,7 +190,7 @@ export async function changePassword(newPassword) {
     }
     return { success: true };
   } catch (err) {
-    return { success: false, error: 'Network error — please try again' };
+    return { success: false, error: fetchErrorMessage(err) };
   }
 }
 

@@ -38,6 +38,13 @@ export interface HistoryEntry {
   timestamp: number;
   imageFile: string; // filename only, e.g. "{id}.jpg"
   mimeType: string;
+  // Pipeline metadata (added v4) — optional so old persisted entries stay valid
+  complexity?: string;
+  contractVersionUsed?: string;
+  model?: string;
+  status?: string;
+  retryCount?: number;
+  latencyMs?: number;
 }
 
 export interface HistoryEntryPublic extends HistoryEntry {
@@ -154,8 +161,16 @@ export async function saveToHistory(params: {
   mode: string;
   intensity: string;
   b64Image: string; // full data URL: data:image/...;base64,...
+  // Optional pipeline metadata
+  complexity?: string;
+  contractVersionUsed?: string;
+  model?: string;
+  status?: string;
+  retryCount?: number;
+  latencyMs?: number;
 }): Promise<HistoryEntryPublic> {
-  const { userId, type, prompt, mode, intensity, b64Image } = params;
+  const { userId, type, prompt, mode, intensity, b64Image,
+          complexity, contractVersionUsed, model, status, retryCount, latencyMs } = params;
 
   // Parse data URL
   const commaIdx = b64Image.indexOf(",");
@@ -189,6 +204,13 @@ export async function saveToHistory(params: {
     timestamp: Date.now(),
     imageFile,
     mimeType,
+    // Pipeline metadata — stored when provided by the caller
+    ...(complexity !== undefined && { complexity }),
+    ...(contractVersionUsed !== undefined && { contractVersionUsed }),
+    ...(model !== undefined && { model }),
+    ...(status !== undefined && { status }),
+    ...(retryCount !== undefined && { retryCount }),
+    ...(latencyMs !== undefined && { latencyMs }),
   };
 
   const entries = await loadHistory();

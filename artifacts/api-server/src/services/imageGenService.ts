@@ -1393,7 +1393,10 @@ export async function editImage(
   );
 
   // ── succeedEdit: completes job, persists history, builds return value ───────
-  const succeedEdit = (b64Image: string, qv?: VerificationResult): EditResult => {
+  const pipelineStartMs = Date.now();
+
+  const succeedEdit = (b64Image: string, qv: VerificationResult | undefined, retryCount: number): EditResult => {
+    const latencyMs = Date.now() - pipelineStartMs;
     completeJob(job, "gemini-img2img");
     if (userId) {
       saveToHistory({
@@ -1403,6 +1406,12 @@ export async function editImage(
         mode: getEditModeLabel(mode),
         intensity,
         b64Image,
+        complexity,
+        contractVersionUsed: CONTRACT_VERSION,
+        model: GEMINI_IMG2IMG_MODEL,
+        status: "success",
+        retryCount,
+        latencyMs,
       }).catch((err) => logger.warn({ err }, "[imageHistory] Failed to save edit result"));
     }
     return {
@@ -1466,11 +1475,11 @@ export async function editImage(
           { skipReason: qv1.skipReason },
           "[imageQuality] verifier skipped on Attempt 1 — passing through",
         );
-        return succeedEdit(r1, qv1);
+        return succeedEdit(r1, qv1, 0);
       }
 
       if (qv1.valid) {
-        return succeedEdit(r1, qv1);
+        return succeedEdit(r1, qv1, 0);
       }
 
       // Quality check failed — trigger preservation retry
@@ -1532,11 +1541,11 @@ export async function editImage(
           { skipReason: qv2.skipReason, trigger: attempt2Trigger },
           "[imageQuality] verifier skipped on Attempt 2 — passing through",
         );
-        return succeedEdit(r2, qv2);
+        return succeedEdit(r2, qv2, 1);
       }
 
       if (qv2.valid) {
-        return succeedEdit(r2, qv2);
+        return succeedEdit(r2, qv2, 1);
       }
 
       // Attempt 2 also failed quality — hard reject
