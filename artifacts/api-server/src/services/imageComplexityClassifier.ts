@@ -4,14 +4,19 @@
  * LAYER 0 of the Production Orchestration Engine.
  * Determines request complexity and job type before any processing begins.
  *
- * Complexity determines model routing (Layer 8):
- *   SIMPLE  → Gemini img2img only (fast path, short timeout)
- *   STANDARD → Gemini img2img → FLUX fallback (default path)
- *   HEAVY   → Gemini img2img → enhanced FLUX with richer prompt
+ * Complexity determines timeout budget for the single img2img model:
+ *   SIMPLE   → short timeout   (fast edits: brightness, sharpness, minor fixes)
+ *   STANDARD → default timeout (moderate edits: lighting, color, framing)
+ *   HEAVY    → long timeout    (intensive edits: style transfer, full reconstruction)
+ *
+ * NOTE: Complexity NO LONGER controls model routing. There is only one model
+ * for image editing (gemini-2.0-flash-preview-image-generation). FLUX and any
+ * secondary model references in this file are routing artifacts — they are
+ * ignored by editImage() and exist only in this classifier's internal logic.
  *
  * Job type determines logging and observability:
- *   IMAGE_EDIT_JOB        → user modifying an existing image
- *   IMAGE_GENERATION_JOB  → creating a new image from text
+ *   IMAGE_EDIT_JOB           → user modifying an existing image
+ *   IMAGE_GENERATION_JOB     → creating a new image from text
  *   IMAGE_TRANSFORMATION_JOB → full style/format change (GTA, Pixar, anime, etc.)
  */
 

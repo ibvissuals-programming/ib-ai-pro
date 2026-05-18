@@ -2,12 +2,14 @@
  * Image generation + editing routes — IB AI Assistant
  *
  * POST /api/image/generate  — text-to-image via FLUX (Pollinations)
- * POST /api/image/edit      — image-to-image (true img2img or grounded fallback)
+ * POST /api/image/edit      — deterministic img2img ONLY
+ *                             Single model: gemini-2.0-flash-preview-image-generation
+ *                             No fallback. No text-to-image. Fail-fast on model error.
  *
  * ISOLATION: These routes are fully independent of /api/chat and the Gemini
  * integration. They share no state, no handlers, and no response logic.
  *
- * Auth: requireNormalAuth enforced — recovery sessions are blocked (must change
+ * Auth: policyEngine enforced — recovery sessions are blocked (must change
  *       password first). Image uploads validated: MIME + 10 MB size limit.
  * Credits: 1 per operation (deducted after success only). CEO role = unlimited.
  * Rate limit: 10 generate / 10 edit per minute per IP (CEO bypassed).
