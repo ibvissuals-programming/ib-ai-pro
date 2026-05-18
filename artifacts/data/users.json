@@ -232,5 +232,14 @@
     "credits": 5,
     "lastReset": 1779132515254,
     "createdAt": 1779132515254
+  },
+  {
+    "id": "e7dfa258-6c99-407f-850e-53a3aa2c5aa0",
+    "username": "stabilitytest99",
+    "passwordHash": "470883f164c1f56847828a35d1abb46a:d294ac8332c71cb826f0decd783388c8501a2526f866627b790e8693e95c143a228f96cd826bbeccd74b51e877c2b804e845d8e8cbc54cfbadce83cd46ef933e",
+    "role": "free",
+    "credits": 7,
+    "lastReset": 1779143969419,
+    "createdAt": 1779143969419
   }
 ]

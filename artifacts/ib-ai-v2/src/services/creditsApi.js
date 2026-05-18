@@ -3,6 +3,20 @@ import { getAuthHeaders } from '../auth/authService';
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 
 /**
+ * Safely parse a Response as JSON without throwing.
+ * Returns null on empty body or parse failure.
+ */
+async function safeJson(res) {
+  try {
+    const text = await res.text();
+    if (!text || !text.trim()) return null;
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Fetch the current credit status for the authenticated user.
  * Uses /api/auth/me (token-based) for accurate server-side data.
  *
@@ -27,7 +41,8 @@ export async function fetchCredits(username) {
       headers: authHeaders,
     });
     if (res.ok) {
-      const data = await res.json();
+      const data = await safeJson(res);
+      if (!data) throw new Error('Invalid response from server');
       const { user, credits } = data;
       return {
         username: user.username,
@@ -51,7 +66,9 @@ export async function fetchCredits(username) {
     throw new Error(`Credits API error ${res.status}`);
   }
 
-  return res.json();
+  const data = await safeJson(res);
+  if (!data) throw new Error('Invalid response from credits API');
+  return data;
 }
 
 /**
@@ -71,9 +88,11 @@ export async function upgradePlan(username, plan) {
   });
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
+    const body = await safeJson(res) ?? {};
     throw new Error(body.error || `Upgrade API error ${res.status}`);
   }
 
-  return res.json();
+  const data = await safeJson(res);
+  if (!data) throw new Error('Invalid response from upgrade API');
+  return data;
 }

@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
@@ -47,5 +47,22 @@ app.get(["/health", "/healthz"], (_req, res) => {
 });
 
 app.use("/api", router);
+
+// ── Global JSON error handler ─────────────────────────────────────────────────
+// Catches body-parser SyntaxErrors (malformed request JSON) and any other
+// unhandled errors. Ensures every error response is valid JSON — never HTML.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: Error & { status?: number; statusCode?: number; type?: string }, _req: Request, res: Response, _next: NextFunction): void => {
+  // body-parser signals JSON parse failures with type "entity.parse.failed"
+  if (err.type === "entity.parse.failed" || err instanceof SyntaxError) {
+    logger.warn({ err: err.message }, "[app] malformed JSON body rejected");
+    res.status(400).json({ error: "Invalid JSON in request body" });
+    return;
+  }
+
+  const status = err.status ?? err.statusCode ?? 500;
+  logger.error({ err: err.message, status }, "[app] unhandled error");
+  res.status(status).json({ error: err.message || "Internal server error" });
+});
 
 export default app;

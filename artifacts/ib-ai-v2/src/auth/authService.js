@@ -63,28 +63,71 @@ export function getAuthHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// ── Safe JSON parsing ─────────────────────────────────────────────────────────
+
+/**
+ * Safely parse the JSON body of a Response without ever throwing.
+ *
+ * Reads the body as text first, then attempts JSON.parse.
+ * Returns a fallback object on any failure so callers always get an object.
+ *
+ * Handles:
+ *   - empty body (proxy errors, crashed backend)
+ *   - non-JSON body (HTML error pages, plain-text errors)
+ *   - truncated JSON (network interruption mid-stream)
+ *   - wrong content-type
+ */
+async function safeParseJson(res) {
+  let text;
+  try {
+    text = await res.text();
+  } catch {
+    return { error: 'Failed to read server response' };
+  }
+
+  if (!text || !text.trim()) {
+    return { error: 'Server returned an empty response' };
+  }
+
+  const ct = res.headers?.get?.('content-type') ?? '';
+  if (ct && !ct.includes('application/json') && !ct.includes('text/plain')) {
+    // Non-JSON content-type (e.g. HTML error page) — surface a clear message
+    return { error: 'Invalid server response (unexpected content type)' };
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { error: 'Invalid server response' };
+  }
+}
+
 // ── API helpers ───────────────────────────────────────────────────────────────
 
-async function post(path, body) {
+async function post(path, body, extraHeaders) {
   const res = await fetch(`${BASE}/api${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...extraHeaders },
     body: JSON.stringify(body),
   });
   return res;
 }
 
 /**
- * Converts a caught fetch error into a human-readable message.
+ * Converts a caught fetch/parse error into a human-readable message.
+ *
  * Distinguishes:
- *   - Server unreachable (TypeError / "Failed to fetch")
  *   - Request aborted / timed out (AbortError)
+ *   - JSON parse failure (SyntaxError) — "Invalid server response"
+ *   - Server unreachable (TypeError / "Failed to fetch")
  *   - Any other error (uses err.message directly)
  */
 function fetchErrorMessage(err) {
   if (!err) return 'Network error — please try again';
   if (err.name === 'AbortError') return 'Request timed out — please try again';
-  // "Failed to fetch" covers CORS failures, DNS failures, backend unreachable
+  if (err instanceof SyntaxError || err.name === 'SyntaxError') {
+    return 'Invalid server response — please try again';
+  }
   if (
     err.name === 'TypeError' ||
     (typeof err.message === 'string' &&
@@ -103,7 +146,7 @@ function fetchErrorMessage(err) {
 export async function signup(username, password) {
   try {
     const res = await post('/auth/register', { username, password });
-    const data = await res.json();
+    const data = await safeParseJson(res);
     if (!res.ok) {
       return { success: false, error: data.error || 'Registration failed' };
     }
@@ -118,9 +161,9 @@ export async function signup(username, password) {
 export async function login(username, password) {
   try {
     const res = await post('/auth/login', { username, password });
-    const data = await res.json();
+    const data = await safeParseJson(res);
     if (!res.ok) {
-      return { success: false, error: data.error || 'Login failed' };
+      return { success: false, error: data.error || 'Invalid username or password' };
     }
     saveToken(data.token);
     saveUser(data.user);
@@ -146,9 +189,9 @@ export async function recoveryLogin(username, recoveryKey) {
       },
       body: JSON.stringify({ username }),
     });
-    const data = await res.json();
+    const data = await safeParseJson(res);
     if (!res.ok) {
-      return { success: false, error: data.error || 'Recovery login failed' };
+      return { success: false, error: data.error || 'Invalid recovery key' };
     }
     saveToken(data.token);
     saveUser(data.user);
@@ -180,7 +223,7 @@ export async function changePassword(newPassword) {
       },
       body: JSON.stringify({ newPassword }),
     });
-    const data = await res.json();
+    const data = await safeParseJson(res);
     if (!res.ok) {
       return { success: false, error: data.error || 'Password change failed' };
     }
@@ -239,9 +282,12 @@ export async function verifySession() {
       clearToken();
       return null;
     }
-    const data = await res.json();
-    saveUser(data.user);
-    return data.user;
+    const data = await safeParseJson(res);
+    if (data.user) {
+      saveUser(data.user);
+      return data.user;
+    }
+    return loadCachedUser();
   } catch {
     // Network failure — return cached user so app stays usable offline
     return loadCachedUser();
