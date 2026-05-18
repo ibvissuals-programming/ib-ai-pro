@@ -139,7 +139,12 @@ function buildContext(raw: RawMessage[]): ChatMessage[] {
 
 router.post(
   "/chat",
-  policyEngine({ cost: CREDIT_COSTS.chat, rateKey: "chat", rateMax: 30, rateWindowMs: 60_000 }),
+  policyEngine({
+    cost: CREDIT_COSTS.chat,
+    rateKey: "chat",
+    rateMax: 30,
+    rateWindowMs: 60_000,
+  }),
   async (req: Request, res: Response) => {
     const parsed = ChatRequestSchema.safeParse(req.body);
 
@@ -175,14 +180,24 @@ router.post(
     } catch (err: unknown) {
       logger.error({ err }, "LLM stream error");
 
-      const code =
-        err instanceof Error && "code" in err
-          ? (err as { code?: string }).code
-          : "unknown";
+      const errorMessage =
+        err instanceof Error
+          ? {
+              message: err.message,
+              name: err.name,
+              stack: err.stack,
+            }
+          : {
+              message: String(err),
+            };
 
-      res.write(sseEvent({ error: true, code }));
+      res.write(
+        sseEvent({
+          error: true,
+          code: errorMessage,
+        })
+      );
     } finally {
-      // Deduct 1 credit only on successful stream completion
       if (streamSucceeded) {
         deductRequestCredits(req);
       }
