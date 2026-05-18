@@ -9,5 +9,16 @@
     "timestamp": 1779115305915,
     "imageFile": "69fa9a0d-f17e-437f-9d8f-3c3909e54926.png",
     "mimeType": "image/png"
+  },
+  {
+    "id": "51243e5e-89e1-4892-b445-33275481f9ba",
+    "userId": "e66361c6-3db4-4309-af86-dd009485add3",
+    "type": "edit",
+    "prompt": "Edit this image while preserving the original identity of the subject.\n\nApply clear but natural improvements so the change is visibly noticeable:\n\n- Improve lighting to a cinematic, professional portrait style\n- Slightly enhance facial clarity and skin texture (natural realism, not smoothing)\n- Adjust background lighting to be cleaner and more studio-like\n- Improve overall color balance and contrast\n- Keep the same person, pose, and composition\n\nIMPORTANT:\n- The output MUST look visibly improved compared to the original\n- Do NOT regenerate the image from scratch\n- DO NOT return an unchanged or near-identical image\n- The result must clearly show before/after differences while preserving identity",
+    "mode": "Background Transformation",
+    "intensity": "EXTREME",
+    "timestamp": 1779116112779,
+    "imageFile": "51243e5e-89e1-4892-b445-33275481f9ba.jpg",
+    "mimeType": "image/jpeg"
   }
 ]

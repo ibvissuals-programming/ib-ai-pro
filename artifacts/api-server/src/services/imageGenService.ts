@@ -3,16 +3,21 @@
  *
  * TEXT-TO-IMAGE:  Pollinations.ai (free, no auth, FLUX model)
  *
- * IMAGE-TO-IMAGE: Two-tier pipeline:
- *   Tier 1 (true img2img): Gemini image model — intent+mode+intensity aware.
- *                          Uses cinematic lighting engine for HIGH/EXTREME modes.
- *   Tier 2 (grounded fallback): Gemini vision describe → FLUX regeneration.
+ * IMAGE-TO-IMAGE: Strict img2img-only pipeline (text-to-image fallback BLOCKED for edits).
+ *   Tier 1 (primary):  Gemini gemini-2.0-flash-preview-image-generation — img2img, image always attached.
+ *   Tier 1 retry:      Same model, escalated EXTREME instruction.
+ *   Tier 2 (blocked):  Gemini vision describe → FLUX text-to-image — FORBIDDEN for edits.
+ *                      Functions remain in codebase but are NOT invoked from editImage().
+ *                      Invoking Tier 2 for an edit request violates img2img enforcement.
+ *
+ * SECURITY RULE: Every edit request MUST pass the original image to the model.
+ *                Any code path that generates from text alone is blocked and logged.
  *
  * LAYER 1: Mode classifier (CINEMATIC_EDIT, SCREENSHOT_CLEANUP, AGGRESSIVE_RECONSTRUCTION, etc.)
  * LAYER 2: Intensity levels (LOW / MEDIUM / HIGH / EXTREME) — controls prompt strength
  * LAYER 3: Screenshot cleanup prompts — reconstruct artifacts naturally
  * LAYER 4: Cinematic lighting engine — physically-grounded relighting, not filter-style
- * LAYER 5: Fast path — SIMPLE/LOW skip retry; only HEAVY/EXTREME retries with stronger prompt
+ * LAYER 5: Always retry Tier 1 with escalated instruction on no-op or failure
  * LAYER 6: Similarity validation — reject near-identical outputs, retry with stronger guidance
  * LAYER 7: Persistent image history — saved to disk after every successful operation
  */
@@ -435,9 +440,27 @@ async function tryGeminiImg2Img(
   instruction: string,
   timeoutMs: number,
 ): Promise<string | null> {
+  // ── Step 4: Pre-flight validation — image MUST be present and valid ──────
+  // If the image is missing, throw immediately. Never continue without it.
+  if (!parsed.base64 || parsed.base64.length < 10) {
+    throw new Error(
+      "[imageEdit] PIPELINE VIOLATION — image is missing from img2img request. Refusing to proceed.",
+    );
+  }
+  if (!parsed.mimeType) {
+    throw new Error(
+      "[imageEdit] PIPELINE VIOLATION — image MIME type is missing. Refusing to proceed.",
+    );
+  }
+
   logger.info(
-    { model: GEMINI_IMG2IMG_MODEL, instruction: instruction.slice(0, 80) },
-    "[imageEdit] IMAGE PASSED THROUGH MODEL — Tier 1 Gemini img2img started",
+    {
+      model: GEMINI_IMG2IMG_MODEL,
+      mimeType: parsed.mimeType,
+      inputBytes: parsed.base64.length,
+      instruction: instruction.slice(0, 80),
+    },
+    "[imageEdit] IMAGE PASSED THROUGH MODEL — pre-flight OK, Tier 1 img2img dispatched",
   );
 
   try {
@@ -483,8 +506,8 @@ async function tryGeminiImg2Img(
           // Threshold tightened: catch exact copies and near-duplicates up to 3% size diff
           if (isNearIdenticalOutput(parsed.base64, outputBase64)) {
             logger.warn(
-              { provider: "gemini", model: GEMINI_IMG2IMG_MODEL, outputBytes: outputBase64.length },
-              "[imageEdit] NO-OP DETECTED → FIXING PIPELINE — near-identical output, retrying with stronger instruction",
+              { model: GEMINI_IMG2IMG_MODEL, inputBytes: parsed.base64.length, outputBytes: outputBase64.length },
+              "[imageEdit] IMG2IMG FAILED → NO-OP DETECTED — output identical to input, will retry with escalated instruction",
             );
             return null;
           }
@@ -499,7 +522,7 @@ async function tryGeminiImg2Img(
               outputBytes: outputBase64.length,
               instruction: instruction.slice(0, 80),
             },
-            "[imageEdit] IMAGE EDIT APPLIED — Gemini img2img transformation confirmed",
+            "[imageEdit] IMG2IMG SUCCESS — transformation confirmed, output differs from input",
           );
           return dataUrl;
         }
@@ -752,49 +775,20 @@ export async function editImage(
       }
     }
 
-    // ── Tier 2: Gemini vision describe + FLUX regeneration ────────────────
-    logger.warn(
+    // ── TEXT FALLBACK BLOCKED (SECURITY RULE) ────────────────────────────
+    // Both Tier 1 attempts exhausted. A text-to-image fallback (Gemini vision →
+    // FLUX regeneration) is available in this codebase but is FORBIDDEN for edit
+    // requests because it discards the input image and generates a new one from
+    // a text description alone — violating img2img-only enforcement.
+    // DO NOT enable this path for edit requests under any circumstances.
+    logger.error(
       { mode: getEditModeLabel(mode), intensity, complexity },
-      "[imageEdit] Tier 1 exhausted — falling back to Tier 2 (Gemini vision → FLUX render)",
+      "[imageEdit] TEXT FALLBACK BLOCKED (SECURITY RULE) — img2img exhausted, refusing text-to-image generation for edit request",
     );
-    advanceJob(job, "streaming", "Tier 2 — Gemini vision → FLUX render", {
-      modelUsed: "gemini-vision",
-    });
-
-    let description: string;
-    try {
-      description = await describeImageForEdit(parsed);
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : "Gemini describe failed";
-      failJob(job, reason);
-      throw new Error("Image analysis failed. Please retry.");
-    }
-
-    // Build a mode-aware FLUX prompt
-    const fluxPrompt = buildFluxFallbackPrompt(description, prompt, mode, intensity);
-
-    advanceJob(job, "streaming", "FLUX rendering", { modelUsed: "flux" });
-    const fluxResult = await regenerateWithFlux(fluxPrompt);
-
-    completeJob(job, "flux");
-    if (userId) {
-      saveToHistory({
-        userId,
-        type: "edit",
-        prompt,
-        mode: getEditModeLabel(mode),
-        intensity,
-        b64Image: fluxResult,
-      }).catch((err) =>
-        logger.warn({ err }, "[imageHistory] Failed to save edit result"),
-      );
-    }
-    return {
-      b64Image: fluxResult,
-      job: jobSummary(job),
-      mode: getEditModeLabel(mode),
-      intensity,
-    };
+    failJob(job, "img2img exhausted — text-to-image fallback blocked by security rule");
+    throw new Error(
+      "Image editing failed: the model could not produce a modified version of your image. Please try again with a different instruction.",
+    );
   } catch (err) {
     if (job.status !== "failed") {
       const reason = err instanceof Error ? err.message : "Unknown error";
