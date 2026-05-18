@@ -38,8 +38,10 @@ minimumReleaseAgeExclude:
 
 onlyBuiltDependencies:
   - '@swc/core'
+  - '@google/genai'
   - esbuild
   - msw
+  - protobufjs
   - unrs-resolver
 
 overrides:
