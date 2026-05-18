@@ -439,6 +439,49 @@ function parseAndValidateImage(imageDataUrl: string): ParsedImage {
 
 const GEMINI_IMG2IMG_MODEL = "gemini-2.0-flash-preview-image-generation";
 
+// ── IMG2IMG MASTER CONTRACT ───────────────────────────────────────────────────
+// This preamble is prepended to EVERY instruction sent to the img2img model.
+// It encodes the pixel-anchor / immutability contract that must hold for every
+// edit request, regardless of mode or intensity.
+//
+// DO NOT remove or shorten this contract. It is the primary mechanism that
+// prevents the model from drifting into generative / reconstructive behavior.
+
+const IMG2IMG_MASTER_CONTRACT = `SYSTEM ROLE: You are a professional cinematic image post-production engine operating in STRICT IMG2IMG MODE ONLY. You perform controlled pixel-level enhancement of the exact input image. This is NOT image generation. This is NOT scene reconstruction. This is NOT creative reinterpretation.
+
+IMAGE IMMUTABILITY CONTRACT — ALL REGIONS BELOW ARE LOCKED:
+• Face and facial features         → FULL LOCK — must not change in any way
+• Body proportions and pose        → FULL LOCK — must not change in any way
+• Background and environment       → FULL LOCK — must not be replaced or reconstructed (unless the instruction below explicitly requests it)
+• Composition and camera angle     → FULL LOCK — framing and crop must remain identical
+• Scene identity                   → FULL LOCK — this must remain the same physical environment
+
+ALLOWED OPERATIONS (micro pixel-level only):
+• Exposure correction (subtle, non-destructive)
+• Contrast normalization
+• White balance correction
+• Local non-destructive color grading
+• Noise reduction
+• Mild sharpening
+• Lighting normalization WITHOUT changing the direction of the light source
+• Texture refinement WITHOUT smoothing identity markers or facial features
+
+FORBIDDEN OPERATIONS — NEVER PERFORM THESE:
+• Do NOT recreate or regenerate the image from scratch
+• Do NOT replace, change, or reconstruct the background
+• Do NOT alter the face, identity, or facial bone structure
+• Do NOT change the pose, body position, or body proportions
+• Do NOT add or remove significant objects
+• Do NOT rebuild the scene, set, or physical environment
+• Do NOT convert to illustration, CGI, cartoon, or artistic style (unless the instruction below explicitly requests a style transfer)
+• Do NOT produce screenshot-like, UI-like, or digitally composited output
+• Do NOT perform global scene reconstruction under any circumstances
+
+HARD CONSTRAINT: If you cannot execute the requested edit without altering a LOCKED region, apply ONLY the minimal local pixel adjustments (exposure, contrast, sharpness) and leave all locked regions completely untouched. A subtle but real enhancement is always preferable to a structurally altered output.
+
+SPECIFIC EDIT INSTRUCTION:
+`;
+
 // Returns edited data URL, or null if the response had no usable image output
 // (no-op / near-identical). THROWS on real API error — callers must catch.
 async function tryGeminiImg2Img(
@@ -473,6 +516,11 @@ async function tryGeminiImg2Img(
   const { ai } = await import("@workspace/integrations-gemini-ai");
 
   // ── IMG2IMG MODE ACTIVE ───────────────────────────────────────────────────
+  // The full instruction sent to the model = IMG2IMG_MASTER_CONTRACT (pixel-anchor
+  // immutability rules, forbidden operations, hard constraints) + the mode-specific
+  // instruction. The contract is prepended on every call — it cannot be bypassed.
+  const fullInstruction = IMG2IMG_MASTER_CONTRACT + instruction;
+
   const requestPayload = {
     model: GEMINI_IMG2IMG_MODEL,
     contents: [
@@ -480,7 +528,7 @@ async function tryGeminiImg2Img(
         role: "user",
         parts: [
           { inlineData: { mimeType: parsed.mimeType, data: parsed.base64 } },
-          { text: instruction },
+          { text: fullInstruction },
         ],
       },
     ],
@@ -491,12 +539,15 @@ async function tryGeminiImg2Img(
     {
       stage: "IMG2IMG MODE ACTIVE",
       model: GEMINI_IMG2IMG_MODEL,
+      contractPrepended: true,
+      contractBytes: IMG2IMG_MASTER_CONTRACT.length,
       instruction: instruction.slice(0, 120),
+      fullInstructionBytes: fullInstruction.length,
       inlineDataPresent: true,
       inlineDataBytes: parsed.base64.length,
       timeoutMs,
     },
-    "[imageEdit] IMG2IMG MODE ACTIVE — image attached as conditioning input",
+    "[imageEdit] IMG2IMG MODE ACTIVE — master contract + instruction sent, image attached",
   );
 
   let timeoutId: ReturnType<typeof setTimeout> | undefined;

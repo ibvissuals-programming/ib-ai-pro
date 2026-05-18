@@ -521,16 +521,28 @@ export function buildStrongInstruction(
     default:
       if (intensity === "HIGH" || intensity === "EXTREME") {
         return (
-          `Apply strong enhancement to this image: ${p}. ` +
-          `Significantly improve sharpness, add directional lighting definition, boost clarity and contrast. ` +
-          `Apply professional-grade HDR enhancement. ` +
-          `Preserve the exact composition, subject identity, and content.`
+          `Apply strong professional photo enhancement to this exact image: ${p}. ` +
+          `Perform these operations only — in order of priority: ` +
+          `(1) Correct exposure: lift shadows, recover highlights, balance midtones. ` +
+          `(2) Normalize contrast: deep controlled blacks, clean whites, rich midtone separation. ` +
+          `(3) White balance: remove color cast, achieve neutral accurate skin tones. ` +
+          `(4) Sharpening: apply professional local sharpening to edges and textures. ` +
+          `(5) Local color grading: subtle non-destructive tonal refinement for professional quality. ` +
+          `(6) Noise reduction: clean sensor noise while preserving fine texture detail. ` +
+          `Output must be a professionally corrected photograph — the same scene, same subject, same composition, same background. ` +
+          `Face, identity, pose, body, background, and framing must be completely unchanged.`
         );
       }
       return (
-        `Enhance this image: ${p}. ` +
-        `Improve sharpness, lighting, clarity, and overall quality. ` +
-        `Preserve the exact composition, subject identity, and content — do not add or remove anything.`
+        `Apply subtle professional photo enhancement to this exact image: ${p}. ` +
+        `Perform these operations only: ` +
+        `(1) Exposure correction: subtle lift of underexposed areas, gentle recovery of blown highlights. ` +
+        `(2) Contrast: gentle normalization for clean tonal distribution. ` +
+        `(3) White balance: correct any color cast for neutral, accurate tones. ` +
+        `(4) Mild sharpening: lightly sharpen key areas of texture and detail. ` +
+        `(5) Noise reduction: reduce visible grain while preserving natural texture. ` +
+        `Output must look like the same photograph — professionally corrected but structurally identical. ` +
+        `Do not change the face, identity, pose, background, objects, composition, or framing.`
       );
   }
 }
