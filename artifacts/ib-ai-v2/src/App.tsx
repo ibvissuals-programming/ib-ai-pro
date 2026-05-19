@@ -6,8 +6,10 @@ import Signup from "@/pages/Signup";
 import ChatApp from "@/pages/ChatApp";
 import Landing from "@/pages/Landing";
 import ImageTools from "@/pages/ImageTools";
+import CeoDashboard from "@/pages/CeoDashboard";
 import NotFound from "@/pages/not-found";
 import { ProtectedRoute } from "@/auth/ProtectedRoute";
+import { CeoRoute } from "@/auth/CeoRoute";
 import { isAuthenticated } from "@/auth/authService";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 
@@ -28,6 +30,11 @@ function Router() {
         <ProtectedRoute>
           <ImageTools />
         </ProtectedRoute>
+      </Route>
+      <Route path="/ceo/dashboard">
+        <CeoRoute>
+          <CeoDashboard />
+        </CeoRoute>
       </Route>
       <Route component={NotFound} />
     </Switch>
