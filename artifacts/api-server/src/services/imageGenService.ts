@@ -749,6 +749,51 @@ const STAGE_TEMPERATURES = {
   cinematic:   1.0,
 } as const;
 
+// ── Intensity system ──────────────────────────────────────────────────────────
+
+export type IntensityLevel = "LOW" | "MEDIUM" | "HIGH" | "EXTREME";
+
+const VALID_INTENSITIES: IntensityLevel[] = ["LOW", "MEDIUM", "HIGH", "EXTREME"];
+
+export function resolveIntensity(raw: string | undefined): IntensityLevel {
+  if (!raw) return "MEDIUM";
+  const upper = raw.toUpperCase();
+  return (VALID_INTENSITIES as string[]).includes(upper) ? (upper as IntensityLevel) : "MEDIUM";
+}
+
+export function downgradedIntensity(intensity: IntensityLevel): IntensityLevel {
+  switch (intensity) {
+    case "EXTREME": return "HIGH";
+    case "HIGH":    return "MEDIUM";
+    case "MEDIUM":  return "LOW";
+    case "LOW":     return "LOW";
+  }
+}
+
+// Stage 3 temperature per intensity level (clamped 0.3–1.3 per spec)
+const STAGE_3_TEMPERATURES: Record<IntensityLevel, number> = {
+  LOW:     0.80,
+  MEDIUM:  1.00,
+  HIGH:    1.10,
+  EXTREME: 1.20,
+};
+
+// Instruction addenda injected into Stage 1 based on intensity
+const S1_INTENSITY_ADDENDUM: Record<IntensityLevel, string> = {
+  LOW:     " Apply very strict reconstruction — preserve maximum source fidelity, zero tolerance for deviation.",
+  MEDIUM:  "",
+  HIGH:    " Apply reconstruction with slightly flexible tolerance to prepare for a strong transformation.",
+  EXTREME: " Apply reconstruction with flexible tolerance — the image will undergo aggressive transformation next.",
+};
+
+// Instruction addenda injected into Stage 2 based on intensity
+const S2_INTENSITY_ADDENDUM: Record<IntensityLevel, string> = {
+  LOW:     " Keep enhancement very subtle — apply minimal contrast and sharpening only.",
+  MEDIUM:  "",
+  HIGH:    " Apply stronger lighting correction, higher contrast, and increased sharpening for a vivid base.",
+  EXTREME: " Apply maximum enhancement — push contrast, dynamic range, and sharpening to professional limits.",
+};
+
 type StageDescriptor = {
   stageNum:    number;
   label:       string;
@@ -757,13 +802,15 @@ type StageDescriptor = {
   instruction: (userPrompt: string) => string;
 };
 
-function buildStagePlan(mode: EditMode): StageDescriptor[] {
+function buildStagePlan(mode: EditMode, intensity: IntensityLevel): StageDescriptor[] {
+  const s3Temp = STAGE_3_TEMPERATURES[intensity];
+
   const s1: StageDescriptor = {
     stageNum:    1,
     label:       "Inpainting Specialist",
     contract:    STAGE_1_CLEANUP_CONTRACT,
     temperature: STAGE_TEMPERATURES.cleanup,
-    instruction: (p) => `Final edit goal (context only — do not apply yet): ${p}`,
+    instruction: (p) => `Final edit goal (context only — do not apply yet): ${p}${S1_INTENSITY_ADDENDUM[intensity]}`,
   };
 
   const s2: StageDescriptor = {
@@ -771,14 +818,14 @@ function buildStagePlan(mode: EditMode): StageDescriptor[] {
     label:       "Realism Enhancer",
     contract:    STAGE_2_ENHANCEMENT_CONTRACT,
     temperature: STAGE_TEMPERATURES.enhancement,
-    instruction: (_) => "Enhance this image: improve lighting, contrast, dynamic range, sharpness, and skin texture naturally. Do not apply artistic styling.",
+    instruction: (_) => `Enhance this image: improve lighting, contrast, dynamic range, sharpness, and skin texture naturally. Do not apply artistic styling.${S2_INTENSITY_ADDENDUM[intensity]}`,
   };
 
   const s3Cinematic: StageDescriptor = {
     stageNum:    3,
     label:       "Cinematic Engine",
     contract:    STAGE_3_CINEMATIC_CONTRACT,
-    temperature: STAGE_TEMPERATURES.cinematic,
+    temperature: s3Temp,
     instruction: (p) => p,
   };
 
@@ -786,7 +833,7 @@ function buildStagePlan(mode: EditMode): StageDescriptor[] {
     stageNum:    3,
     label:       "Style Engine",
     contract:    CONTRACT_STYLE_TRANSFER,
-    temperature: STAGE_TEMPERATURES.cinematic,
+    temperature: s3Temp,
     instruction: (p) => p,
   };
 
@@ -794,7 +841,7 @@ function buildStagePlan(mode: EditMode): StageDescriptor[] {
     stageNum:    3,
     label:       "Creative Engine",
     contract:    CONTRACT_CREATIVE,
-    temperature: STAGE_TEMPERATURES.cinematic,
+    temperature: s3Temp,
     instruction: (p) => p,
   };
 
@@ -813,7 +860,7 @@ export async function editImage(
   prompt:        string,
   userId?:       string,
   editMode?:     EditMode | string,
-  _intensity?:   string,
+  intensity?:    string,
 ): Promise<EditResult> {
 
   const parsed  = parseAndValidateImage(imageDataUrl);
@@ -827,12 +874,18 @@ export async function editImage(
       ? (editMode as EditMode)
       : detectEditMode(prompt);
 
-  const modeLabel  = MODE_LABELS[resolvedMode];
-  const intensity  = "HIGH";
+  // ── Step 1b: Resolve intensity ────────────────────────────────────────────
+  const resolvedIntensity: IntensityLevel = resolveIntensity(intensity);
+  const modeLabel = MODE_LABELS[resolvedMode];
 
   logger.info(
-    { resolvedMode, autoDetected: !editMode || !VALID_MODES.includes(editMode as EditMode), prompt: prompt.slice(0, 80) },
-    "[imageEdit] edit mode resolved",
+    {
+      resolvedMode,
+      resolvedIntensity,
+      autoDetected: !editMode || !VALID_MODES.includes(editMode as EditMode),
+      prompt: prompt.slice(0, 80),
+    },
+    "[imageEdit] edit mode and intensity resolved",
   );
 
   // ── Step 2: Build render prompt ───────────────────────────────────────────
@@ -846,7 +899,7 @@ export async function editImage(
     expandedPrompt: renderPrompt,
   });
 
-  advanceJob(job, "processing", `Mode: ${modeLabel} — calling ${GEMINI_IMG2IMG_MODEL}`);
+  advanceJob(job, "processing", `Mode: ${modeLabel} | Intensity: ${resolvedIntensity} — calling ${GEMINI_IMG2IMG_MODEL}`);
 
   const pipelineStartMs = Date.now();
 
@@ -857,7 +910,7 @@ export async function editImage(
     pushRenderTelemetry({
       userId,
       renderProfile:        usedLabel,
-      intensity,
+      intensity:            resolvedIntensity,
       retryCount,
       qualityVerified:      false,
       qualityIssues:        [],
@@ -869,7 +922,7 @@ export async function editImage(
     });
     if (userId) {
       saveToHistory({
-        userId, type: "edit", prompt, mode: usedLabel, intensity, b64Image,
+        userId, type: "edit", prompt, mode: usedLabel, intensity: resolvedIntensity, b64Image,
         complexity: "STANDARD", contractVersionUsed: CONTRACT_VERSION,
         model: GEMINI_IMG2IMG_MODEL, status: "success", retryCount, latencyMs,
       }).catch((err) => logger.warn({ err }, "[imageHistory] Failed to save edit result"));
@@ -878,7 +931,7 @@ export async function editImage(
       b64Image,
       job:                 jobSummary(job),
       mode:                usedLabel,
-      intensity,
+      intensity:           resolvedIntensity,
       qualityVerified:     false,
       qualityIssues:       [],
       contractVersionUsed: CONTRACT_VERSION,
@@ -888,7 +941,7 @@ export async function editImage(
 
   const runPipeline = async (): Promise<EditResult> => {
     try {
-      const stages    = buildStagePlan(resolvedMode);
+      const stages    = buildStagePlan(resolvedMode, resolvedIntensity);
       const lastStage = stages[stages.length - 1]!;
 
       // ── Per-stage debug records (all start as skipped) ────────────────────
@@ -1017,6 +1070,36 @@ export async function editImage(
           return succeedEdit(retryOut, 1, resolvedMode, buildDebug("partial", 1));
         }
         stageRecords.stage_3_cinematic.reason = "weak_transformation";
+
+        // ── Intensity-downgrade failsafe: retry Stage 3 at reduced intensity ─
+        const downgradedInt = downgradedIntensity(resolvedIntensity);
+        if (downgradedInt !== resolvedIntensity) {
+          const intRetryTemp = STAGE_3_TEMPERATURES[downgradedInt];
+          advanceJob(job, "retrying", `Intensity downgrade (${resolvedIntensity} → ${downgradedInt}) — retrying Stage 3`);
+          logger.info(
+            { from: resolvedIntensity, to: downgradedInt, temperature: intRetryTemp },
+            "[imageEdit] intensity downgrade — retrying Stage 3",
+          );
+          let intRetryOut: string | null = null;
+          try {
+            intRetryOut = await runStage(
+              imageDataUrl,
+              lastStage.instruction(renderPrompt) + " Apply this transformation clearly and visibly.",
+              lastStage.contract,
+              3,
+              intRetryTemp,
+            );
+          } catch (err) {
+            logger.error({ err }, "[imageEdit] Stage 3 intensity-downgrade retry threw");
+          }
+          if (intRetryOut) {
+            stageRecords.stage_3_cinematic = {
+              status: "success", time_ms: 0,
+              effect: effectOf(3), reason: "intensity_downgrade_succeeded",
+            };
+            return succeedEdit(intRetryOut, 2, resolvedMode, buildDebug("partial", 1));
+          }
+        }
       }
 
       // ── Final fallback: downgrade mode, single-shot attempt ───────────────

@@ -1,0 +1,147 @@
+IB AI — INTENSITY SYSTEM FULL WIRING PATCH (PRODUCTION FIX)
+
+MISSION:
+Wire the existing intensity parameter into the image generation pipeline so that it actively influences:
+- temperature per stage
+- prompt strength
+- cinematic aggressiveness
+- transformation intensity
+
+CRITICAL RULE:
+DO NOT modify pipeline structure
+DO NOT add new stages
+DO NOT change model providers
+ONLY enhance behavior using existing parameters
+
+────────────────────────────
+CORE CHANGE
+────────────────────────────
+
+The "intensity" parameter MUST now directly control generation behavior.
+
+Accepted values:
+- "LOW"
+- "MEDIUM"
+- "HIGH"
+- "EXTREME"
+
+If numeric or undefined → default to "MEDIUM"
+
+────────────────────────────
+INTENSITY → BEHAVIOR MAPPING
+────────────────────────────
+
+Apply this mapping globally before pipeline execution:
+
+LOW:
+- reduce temperature by -0.20
+- strengthen identity lock
+- minimize stylistic deviation
+- prioritize realism and stability
+
+MEDIUM (default):
+- no change to base configuration
+- balanced behavior
+
+HIGH:
+- increase cinematic freedom
+- +0.10 temperature boost on Stage 3
+- slightly loosen identity constraints in Stage 3 only
+
+EXTREME:
+- +0.20 temperature boost on Stage 3
+- allow strong stylistic transformation
+- reduce identity lock ONLY in Stage 3
+- amplify cinematic and creative effects
+
+────────────────────────────
+STAGE INTEGRATION RULE
+────────────────────────────
+
+Apply intensity as follows:
+
+STAGE 1 (Cleanup):
+- ALWAYS ignore stylistic influence
+- intensity only affects strictness:
+  LOW → very strict reconstruction
+  HIGH/EXTREME → slightly more flexible reconstruction
+
+STAGE 2 (Enhancement):
+- intensity affects strength of:
+  lighting correction
+  sharpening
+  contrast adjustment
+
+STAGE 3 (Cinematic / Creative):
+- FULL intensity control applies here
+- intensity directly modifies:
+  temperature
+  stylistic freedom
+  cinematic aggressiveness
+
+────────────────────────────
+TEMPERATURE MODIFICATION RULE
+────────────────────────────
+
+Base temperatures:
+- Stage 1: 0.35
+- Stage 2: 0.65
+- Stage 3: 1.00
+
+Modify ONLY Stage 3 based on intensity:
+
+LOW:    0.80
+MEDIUM: 1.00
+HIGH:   1.10
+EXTREME: 1.20
+
+Clamp values between 0.3 and 1.3
+
+────────────────────────────
+PIPELINE EXECUTION RULE
+────────────────────────────
+
+Before running pipeline:
+
+1. Read intensity
+2. Convert to modifier profile
+3. Apply modifier to stage configs
+4. Then execute normal 3-stage pipeline
+
+DO NOT re-run pipeline for intensity adjustments.
+DO NOT reprocess earlier stages.
+
+────────────────────────────
+FAILSAFE RULE
+────────────────────────────
+
+If intensity causes:
+- unstable outputs
+- weak image consistency
+- excessive distortion
+
+Then:
+→ downgrade intensity by one level
+→ re-run ONLY Stage 3
+
+────────────────────────────
+EXPECTED RESULT
+────────────────────────────
+
+After this patch:
+- intensity slider will visibly affect output
+- LOW = safe realistic edits
+- MEDIUM = balanced edits
+- HIGH = cinematic strong edits
+- EXTREME = aggressive transformation
+
+────────────────────────────
+FINAL OBJECTIVE
+────────────────────────────
+
+Make IB AI respond physically to user control inputs so that:
+- UI controls are meaningful
+- outputs change predictably
+- cinematic strength is user-controlled
+
+WITHOUT CHANGING CORE ARCHITECTURE.
