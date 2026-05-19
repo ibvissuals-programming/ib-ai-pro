@@ -1,0 +1,113 @@
+ZERO-ANCHOR RENDER INITIALIZATION + CAMERA MODEL LAYER
+
+The generation process MUST NOT begin from pixel reconstruction of the input image.
+
+The input image is converted ONLY into:
+- structural layout map (scene geometry only)
+- identity feature vectors (facial/subject identity only)
+- spatial relationships (object and subject positioning only)
+
+All pixel data is DISCARDED before rendering begins:
+✖ lighting information
+✖ color information
+✖ exposure information
+✖ contrast information
+✖ texture information
+✖ artifacts, UI, screenshots, compression marks
+✖ any photographic styling cues
+
+────────────────────────────
+ZERO-ANCHOR RULE (CORE)
+────────────────────────────
+
+Rendering MUST begin from a neutral latent canvas with:
+
+✔ no inherited pixel information
+✔ no lighting carryover
+✔ no color carryover
+✔ no exposure carryover
+✔ no texture carryover
+
+The input image serves ONLY as structural conditioning.
+
+Any output that preserves pixel-level resemblance of the input image = FAILURE.
+
+────────────────────────────
+CAMERA MODEL LAYER (NEW SYSTEM BEHAVIOR)
+────────────────────────────
+
+After structural conditioning, the system MUST simulate a FULL CAMERA RECAPTURE EVENT.
+
+This means the render is treated as if:
+
+→ a new physical camera is placed in the same scene
+→ the scene is re-photographed in a completely new lighting setup
+→ a new lens, sensor response, and exposure system are applied
+
+The model MUST generate:
+
+✔ new lighting design (not adjustment of existing light)
+✔ new exposure system (full tonal reconstruction)
+✔ new color science (film stock or digital profile simulation)
+✔ new camera perspective feel (lens behavior, depth rendering)
+✔ new atmospheric rendering (air, haze, contrast behavior)
+
+────────────────────────────
+CAMERA MODEL CONSTRAINT RULES
+────────────────────────────
+
+The following MUST be independently redefined:
+
+LIGHTING:
+- must behave like a newly staged lighting setup
+- cannot reference or modify original lighting
+
+COLOR:
+- must behave like a new film stock / camera profile
+- must NOT grade existing pixel colors
+
+EXPOSURE:
+- must simulate a full re-metered shot
+- must NOT adjust original brightness distribution
+
+ATMOSPHERE:
+- must be fully re-simulated (air, depth, mood)
+
+LENS BEHAVIOR:
+- must simulate new optical rendering characteristics
+- depth of field, focus falloff, and sharpness must be regenerated
+
+────────────────────────────
+ANTI-SCREENSHOT / ANTI-UI RULE
+────────────────────────────
+
+UI artifacts, screenshots, overlays, and digital marks:
+
+✔ must be fully absent in final render
+✔ must NOT be removed via cropping or cleanup
+✔ must NOT be treated as objects in the scene
+✔ must be treated as NEVER EXISTED in the re-rendered world
+
+────────────────────────────
+FINAL SYSTEM BEHAVIOR DEFINITION
+────────────────────────────
+
+This is NOT image editing.
+
+This is:
+
+→ structural conditioning + full camera re-capture simulation
+
+The output must behave like a newly shot photograph of the same subject in a newly designed visual environment.
+
+────────────────────────────
+FAILURE CONDITIONS (HARD)
+────────────────────────────
+
+Any of the following = INVALID OUTPUT:
+
+✖ filter-like transformation over original image
+✖ preserved lighting from input
+✖ preserved color palette from input
+✖ visible screenshot/UI remnants
+✖ “edited version of original” appearance

@@ -538,33 +538,32 @@ export function buildCinematicDirectorBrief(
     // User has explicit visual direction — inject full director brief while preserving their intent.
     // Even explicit prompts must receive the full director treatment to ensure maximum transformation.
     return (
-      `CINEMATIC DIRECTOR BRIEF [${style.name}] — ` +
-      `Original user intent: "${prompt}". ` +
+      `ZERO-ANCHOR CAMERA RECAPTURE — DIRECTOR BRIEF [${style.name}]: ` +
+      `User intent: "${prompt}". ` +
+      `CAMERA RECAPTURE DIRECTIVE — treat this as a newly staged photograph of the same subject: ` +
+      `LIGHTING SETUP (new staging): ${style.lighting}. Design this as a freshly staged physical lighting rig — do NOT reference original lighting. ` +
+      `FILM STOCK (new color science): ${style.colorGrade}. Simulate this as a new film stock or camera profile — do NOT grade existing pixel colors. ` +
+      `EXPOSURE SYSTEM (re-metered): ${style.exposure}. Simulate a freshly metered shot — do NOT adjust original brightness distribution. ` +
+      `ATMOSPHERE (re-simulated): ${style.mood}. Re-create environmental depth and mood from scratch. ` +
       `Director transformation: ${style.brief}. ` +
-      `LIGHTING: ${style.lighting}. ` +
-      `COLOR GRADE: ${style.colorGrade}. ` +
-      `EXPOSURE: ${style.exposure}. ` +
-      `MOOD TARGET: ${style.mood}. ` +
-      `Honor the user's original intent above, AND apply this full cinematic director brief as the transformation framework. ` +
-      `Every axis must be intentionally pushed to MAXIMUM: lighting MUST restructure, color MUST shift strongly, ` +
-      `contrast MUST deepen, exposure MUST redistribute, and mood MUST clearly change. ` +
-      `Do NOT treat this as a subtle enhancement — this is a full cinematic transformation.`
+      `ALL 5 camera axes MUST be independently re-generated: lighting, color science, exposure, atmosphere, lens behavior. ` +
+      `Filter-only output = camera recapture FAILURE.`
     );
   }
 
-  // Vague or short prompt — inject full director brief at maximum intensity
+  // Vague or short prompt — inject full camera recapture director brief
   return (
-    `CINEMATIC DIRECTOR BRIEF [${style.name}] — ` +
-    `Original user intent: "${prompt}". ` +
+    `ZERO-ANCHOR CAMERA RECAPTURE — DIRECTOR BRIEF [${style.name}]: ` +
+    `User intent: "${prompt}". ` +
+    `CAMERA RECAPTURE DIRECTIVE — treat the input as a structural blueprint only. Re-photograph the scene fresh: ` +
+    `LIGHTING SETUP (new staging): ${style.lighting}. Design from scratch — zero carryover from original lighting. ` +
+    `FILM STOCK (new color science): ${style.colorGrade}. Simulate as new film stock — do NOT grade existing pixels. ` +
+    `EXPOSURE SYSTEM (re-metered): ${style.exposure}. Freshly metered shot — do NOT adjust original distribution. ` +
+    `ATMOSPHERE (re-simulated): ${style.mood}. Re-create fully from scratch — no atmospheric carryover. ` +
     `Director transformation: ${style.brief}. ` +
-    `LIGHTING: ${style.lighting}. ` +
-    `COLOR GRADE: ${style.colorGrade}. ` +
-    `EXPOSURE: ${style.exposure}. ` +
-    `MOOD TARGET: ${style.mood}. ` +
-    `Apply this as a FULL MAXIMUM cinematic visual transformation — not a generic enhancement, not a filter. ` +
-    `Every axis must be pushed aggressively: lighting MUST restructure, color MUST shift strongly, ` +
-    `contrast MUST deepen dramatically, exposure MUST redistribute boldly, and mood MUST be clearly different from the input. ` +
-    `Near-identical output is a failure — the transformation must be strongly visible.`
+    `ALL 5 camera axes MUST be independently re-generated at MAXIMUM strength. ` +
+    `The output must feel like a completely new photograph of the same subject — not an edited version of the original. ` +
+    `Filter-only output = FAILURE. Pixel-preserving output = FAILURE.`
   );
 }
 
