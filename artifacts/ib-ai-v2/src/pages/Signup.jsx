@@ -1,11 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { motion } from 'framer-motion';
-import { Cpu, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { Cpu, AlertCircle, CheckCircle } from 'lucide-react';
 import { signup } from '../auth/authService';
 import { useAuth } from '../hooks/useAuth';
-
-const UI_RETRY_INTERVAL_MS = 2_500;
 
 export default function Signup() {
   const [, setLocation] = useLocation();
@@ -16,19 +14,8 @@ export default function Signup() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [serverStatus, setServerStatus] = useState('idle'); // 'idle' | 'connecting'
 
-  const retryTimerRef = useRef(null);
-  const doSignupRef   = useRef(null);
-
-  // Clean up any pending retry timer on unmount
-  useEffect(() => {
-    return () => {
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-    };
-  }, []);
-
-  // ── Signup attempt (with auto-retry on startup errors) ────────────────────
+  // ── Signup attempt ─────────────────────────────────────────────────────────
 
   const doSignup = async (user, pass) => {
     setLoading(true);
@@ -37,27 +24,14 @@ export default function Signup() {
     setLoading(false);
 
     if (result.success) {
-      setServerStatus('idle');
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       setSuccess(true);
       setUser(result.user);
       await new Promise(r => setTimeout(r, 600));
       setLocation('/chat');
-    } else if (result.isStartupError) {
-      // Server is cold-starting — show connecting state and retry automatically
-      setServerStatus('connecting');
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-      retryTimerRef.current = setTimeout(
-        () => doSignupRef.current?.(user, pass),
-        UI_RETRY_INTERVAL_MS,
-      );
     } else {
-      setServerStatus('idle');
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       setError(result.error || 'Signup failed');
     }
   };
-  doSignupRef.current = doSignup;
 
   // ── Form submit ───────────────────────────────────────────────────────────
 
@@ -82,11 +56,8 @@ export default function Signup() {
       return;
     }
 
-    if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     doSignup(username.trim(), password);
   };
-
-  const isConnecting = serverStatus === 'connecting';
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
@@ -151,19 +122,7 @@ export default function Signup() {
               />
             </div>
 
-            {/* Connecting indicator — startup / cold-start state */}
-            {isConnecting && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                className="flex items-center gap-2 text-amber-400 text-xs bg-amber-400/10 border border-amber-400/20 rounded-xl px-3 py-2.5"
-              >
-                <Loader2 size={12} className="shrink-0 animate-spin" />
-                Connecting to server...
-              </motion.div>
-            )}
-
-            {error && !isConnecting && (
+            {error && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
@@ -187,7 +146,7 @@ export default function Signup() {
 
             <button
               type="submit"
-              disabled={loading || success || isConnecting}
+              disabled={loading || success}
               data-testid="button-signup"
               className="w-full bg-primary text-primary-foreground rounded-xl py-2.5 text-sm font-medium hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed mt-2 shadow-lg shadow-primary/20"
             >
@@ -198,9 +157,9 @@ export default function Signup() {
                     transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
                     className="w-3.5 h-3.5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full"
                   />
-                  {isConnecting ? 'Connecting...' : 'Creating account...'}
+                  Creating account...
                 </span>
-              ) : isConnecting ? 'Retrying...' : 'Create account'}
+              ) : 'Create account'}
             </button>
           </form>
         </div>

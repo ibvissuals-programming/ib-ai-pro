@@ -1,11 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Cpu, AlertCircle, KeyRound, Lock, CheckCircle, Loader2 } from 'lucide-react';
+import { Cpu, AlertCircle, KeyRound, Lock, CheckCircle } from 'lucide-react';
 import { login, recoveryLogin, changePassword } from '../auth/authService';
 import { useAuth } from '../hooks/useAuth';
-
-const UI_RETRY_INTERVAL_MS = 2_500;
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -22,21 +20,8 @@ export default function Login() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const [serverStatus, setServerStatus] = useState('idle'); // 'idle' | 'connecting'
 
-  // Refs for auto-retry — always point to the latest render's function
-  const retryTimerRef  = useRef(null);
-  const doLoginRef     = useRef(null);
-  const doRecoveryRef  = useRef(null);
-
-  // Clean up any pending retry timer on unmount
-  useEffect(() => {
-    return () => {
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-    };
-  }, []);
-
-  // ── Login attempt (with auto-retry on startup errors) ─────────────────────
+  // ── Login attempt ──────────────────────────────────────────────────────────
 
   const doLogin = async (user, pass) => {
     setLoading(true);
@@ -45,8 +30,6 @@ export default function Login() {
     setLoading(false);
 
     if (result.success) {
-      setServerStatus('idle');
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       setUser(result.user);
       if (result.recoveryLogin) {
         setMode('set-password');
@@ -54,23 +37,12 @@ export default function Login() {
       } else {
         setLocation('/chat');
       }
-    } else if (result.isStartupError) {
-      // Server is cold-starting — show connecting state and retry automatically
-      setServerStatus('connecting');
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-      retryTimerRef.current = setTimeout(
-        () => doLoginRef.current?.(user, pass),
-        UI_RETRY_INTERVAL_MS,
-      );
     } else {
-      setServerStatus('idle');
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       setError(result.error || 'Login failed');
     }
   };
-  doLoginRef.current = doLogin;
 
-  // ── Recovery attempt (with auto-retry on startup errors) ──────────────────
+  // ── Recovery attempt ───────────────────────────────────────────────────────
 
   const doRecovery = async (user, key) => {
     setLoading(true);
@@ -79,24 +51,12 @@ export default function Login() {
     setLoading(false);
 
     if (result.success) {
-      setServerStatus('idle');
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       setUser(result.user);
       setMode('set-password');
-    } else if (result.isStartupError) {
-      setServerStatus('connecting');
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-      retryTimerRef.current = setTimeout(
-        () => doRecoveryRef.current?.(user, key),
-        UI_RETRY_INTERVAL_MS,
-      );
     } else {
-      setServerStatus('idle');
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       setError(result.error || 'Recovery login failed');
     }
   };
-  doRecoveryRef.current = doRecovery;
 
   // ── Form submit handlers ───────────────────────────────────────────────────
 
@@ -107,7 +67,6 @@ export default function Login() {
       setError('Please fill in all fields');
       return;
     }
-    if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     doLogin(username.trim(), password);
   };
 
@@ -118,7 +77,6 @@ export default function Login() {
       setError('Please fill in username and recovery key');
       return;
     }
-    if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     doRecovery(username.trim(), recoveryKey.trim());
   };
 
@@ -144,8 +102,6 @@ export default function Login() {
       setError(result.error || 'Password change failed');
     }
   };
-
-  const isConnecting = serverStatus === 'connecting';
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
@@ -213,20 +169,7 @@ export default function Login() {
                   />
                 </div>
 
-                {/* Connecting indicator — startup / cold-start state */}
-                {isConnecting && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    className="flex items-center gap-2 text-amber-400 text-xs bg-amber-400/10 border border-amber-400/20 rounded-xl px-3 py-2.5"
-                  >
-                    <Loader2 size={12} className="shrink-0 animate-spin" />
-                    Connecting to server...
-                  </motion.div>
-                )}
-
-                {/* Error — only shown for genuine auth failures */}
-                {error && !isConnecting && (
+                {error && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
@@ -239,7 +182,7 @@ export default function Login() {
 
                 <button
                   type="submit"
-                  disabled={loading || isConnecting}
+                  disabled={loading}
                   data-testid="button-login"
                   className="w-full bg-primary text-primary-foreground rounded-xl py-2.5 text-sm font-medium hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed mt-2 shadow-lg shadow-primary/20"
                 >
@@ -250,14 +193,14 @@ export default function Login() {
                         transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
                         className="w-3.5 h-3.5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full"
                       />
-                      {isConnecting ? 'Connecting...' : 'Signing in...'}
+                      Signing in...
                     </span>
-                  ) : isConnecting ? 'Retrying...' : 'Sign in'}
+                  ) : 'Sign in'}
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => { setMode('recovery'); setError(''); setServerStatus('idle'); if (retryTimerRef.current) clearTimeout(retryTimerRef.current); }}
+                  onClick={() => { setMode('recovery'); setError(''); }}
                   className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-1.5"
                 >
                   <KeyRound size={11} />
@@ -309,19 +252,7 @@ export default function Login() {
                   />
                 </div>
 
-                {/* Connecting indicator */}
-                {isConnecting && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    className="flex items-center gap-2 text-amber-400 text-xs bg-amber-400/10 border border-amber-400/20 rounded-xl px-3 py-2.5"
-                  >
-                    <Loader2 size={12} className="shrink-0 animate-spin" />
-                    Connecting to server...
-                  </motion.div>
-                )}
-
-                {error && !isConnecting && (
+                {error && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
@@ -334,7 +265,7 @@ export default function Login() {
 
                 <button
                   type="submit"
-                  disabled={loading || isConnecting}
+                  disabled={loading}
                   className="w-full bg-amber-500 text-white rounded-xl py-2.5 text-sm font-medium hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-lg"
                 >
                   {loading ? (
@@ -344,14 +275,14 @@ export default function Login() {
                         transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
                         className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full"
                       />
-                      {isConnecting ? 'Connecting...' : 'Verifying…'}
+                      Verifying…
                     </span>
-                  ) : isConnecting ? 'Retrying...' : 'Access with recovery key'}
+                  ) : 'Access with recovery key'}
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => { setMode('login'); setError(''); setServerStatus('idle'); if (retryTimerRef.current) clearTimeout(retryTimerRef.current); }}
+                  onClick={() => { setMode('login'); setError(''); }}
                   className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-1.5"
                 >
                   Back to normal login

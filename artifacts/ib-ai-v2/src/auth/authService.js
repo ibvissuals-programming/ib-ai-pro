@@ -5,9 +5,9 @@
  * JWT token stored in localStorage under IB_TOKEN_KEY.
  *
  * Public API (unchanged interface for useAuth.js compatibility):
- *   signup(username, password) → { success, error?, isStartupError? }
- *   login(username, password)  → { success, error?, recoveryLogin?, isStartupError? }
- *   recoveryLogin(username, key) → { success, error?, recoveryLogin?, isStartupError? }
+ *   signup(username, password) → { success, error? }
+ *   login(username, password)  → { success, error?, recoveryLogin? }
+ *   recoveryLogin(username, key) → { success, error?, recoveryLogin? }
  *   changePassword(newPassword) → { success, error? }
  *   logout()
  *   getCurrentUser()           → { id, username, role, credits } | null
@@ -15,25 +15,19 @@
  *   getToken()                 → string | null
  *   getAuthHeaders()           → { Authorization: 'Bearer ...' } | {}
  *
- * Startup safety:
- *   All mutating auth functions (login/signup/recoveryLogin) run a health
- *   pre-check before sending credentials. If the server isn't ready, or if
- *   a startup-class error occurs (empty body, network, timeout, 5xx), the
- *   call is retried up to MAX_AUTH_RETRIES times with RETRY_DELAY_MS between
- *   attempts. Hard auth failures (401/400/409) are never retried.
- *
- *   isStartupError: true is set on the result so the UI can show
- *   "Connecting to server..." instead of a generic auth error.
+ * Flow:
+ *   Auth functions attempt immediately — no health pre-check, no polling.
+ *   A single retry is performed only on genuine network-level failures
+ *   (fetch throws: AbortError, TypeError). Hard server responses (400/401/409)
+ *   are never retried.
  */
 
 import { fetchWithTimeout, AUTH_TIMEOUT_MS } from '../utils/apiClient';
-import { checkServerHealth } from '../utils/serverReadiness';
 
 const IB_TOKEN_KEY = 'ib_token';
 const IB_USER_KEY = 'ib_cached_user';
 
-const MAX_AUTH_RETRIES = 3;
-const RETRY_DELAY_MS   = 1_000;
+const RETRY_DELAY_MS = 800;
 
 const BASE = (() => {
   try {
@@ -81,18 +75,6 @@ export function getAuthHeaders() {
 
 // ── Safe JSON parsing ─────────────────────────────────────────────────────────
 
-/**
- * Safely parse the JSON body of a Response without ever throwing.
- *
- * Reads the body as text first, then attempts JSON.parse.
- * Returns a fallback object on any failure so callers always get an object.
- *
- * Handles:
- *   - empty body (proxy errors, crashed backend)
- *   - non-JSON body (HTML error pages, plain-text errors)
- *   - truncated JSON (network interruption mid-stream)
- *   - wrong content-type
- */
 async function safeParseJson(res) {
   let text;
   try {
@@ -119,10 +101,6 @@ async function safeParseJson(res) {
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
-/**
- * POST to a backend auth endpoint with a timeout.
- * Uses fetchWithTimeout so requests never hang indefinitely.
- */
 async function post(path, body, extraHeaders) {
   return fetchWithTimeout(
     `${BASE}/api${path}`,
@@ -135,15 +113,6 @@ async function post(path, body, extraHeaders) {
   );
 }
 
-/**
- * Converts a caught fetch/parse error into a human-readable message.
- *
- * Distinguishes:
- *   - Request aborted / timed out (AbortError)
- *   - JSON parse failure (SyntaxError) — "Invalid server response"
- *   - Server unreachable (TypeError / "Failed to fetch")
- *   - Any other error (uses err.message directly)
- */
 function fetchErrorMessage(err) {
   if (!err) return 'Network error — please try again';
   if (err.name === 'AbortError') return 'Request timed out — please try again';
@@ -163,9 +132,17 @@ function fetchErrorMessage(err) {
   return err.message || 'Network error — please try again';
 }
 
-/** Pause between retry attempts */
-function retryDelay() {
-  return new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+/** True for errors where a single retry is warranted (network-level only). */
+function isNetworkError(err) {
+  return (
+    err?.name === 'AbortError' ||
+    err?.name === 'TypeError' ||
+    (typeof err?.message === 'string' &&
+      (err.message.includes('fetch') ||
+       err.message.includes('Failed') ||
+       err.message.includes('NetworkError') ||
+       err.message.includes('Load failed')))
+  );
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -173,30 +150,21 @@ function retryDelay() {
 /**
  * signup() — create a new account.
  *
- * Startup safety:
- *   - Health pre-check before sending credentials
- *   - Up to MAX_AUTH_RETRIES on startup-class failures (network, 5xx, empty body)
- *   - Immediate return (no retry) on 400 / 409 (validation / duplicate)
- *   - isStartupError: true on all startup-class failures so the UI can show
- *     "Connecting to server..." instead of a generic auth error
+ * Attempts immediately. One retry on network-level failure only.
+ * Hard server errors (400/409) are returned immediately without retry.
  */
 export async function signup(username, password) {
-  const health = await checkServerHealth();
-  if (!health.ready) {
-    return { success: false, error: 'Server is starting up — please try again', isStartupError: true };
-  }
-
-  for (let attempt = 1; attempt <= MAX_AUTH_RETRIES; attempt++) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
     let res, data;
     try {
       res  = await post('/auth/register', { username, password });
       data = await safeParseJson(res);
     } catch (err) {
-      if (attempt === MAX_AUTH_RETRIES) {
-        return { success: false, error: fetchErrorMessage(err), isStartupError: true };
+      if (attempt === 1 && isNetworkError(err)) {
+        await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+        continue;
       }
-      await retryDelay();
-      continue;
+      return { success: false, error: fetchErrorMessage(err) };
     }
 
     if (!res.ok) {
@@ -204,15 +172,11 @@ export async function signup(username, password) {
       if (res.status === 400 || res.status === 409) {
         return { success: false, error: data.error || 'Registration failed' };
       }
-      // Server error (5xx, etc.) — startup class
-      if (attempt < MAX_AUTH_RETRIES) { await retryDelay(); continue; }
-      return { success: false, error: data.error || 'Server is starting up — please try again', isStartupError: true };
+      return { success: false, error: data.error || 'Server error — please try again' };
     }
 
-    // 200/201 but fields missing — startup class (empty body race)
     if (!data.token || !data.user) {
-      if (attempt < MAX_AUTH_RETRIES) { await retryDelay(); continue; }
-      return { success: false, error: data.error || 'Server is starting up — please try again', isStartupError: true };
+      return { success: false, error: data.error || 'Unexpected server response — please try again' };
     }
 
     saveToken(data.token);
@@ -220,35 +184,27 @@ export async function signup(username, password) {
     return { success: true, user: data.user };
   }
 
-  return { success: false, error: 'Server is starting up — please try again', isStartupError: true };
+  return { success: false, error: 'Cannot reach server — please try again' };
 }
 
 /**
  * login() — authenticate with username + password.
  *
- * Startup safety:
- *   - Health pre-check before sending credentials
- *   - Up to MAX_AUTH_RETRIES on startup-class failures (network, 5xx, empty body)
- *   - Immediate return (no retry) on 401 / 400 (wrong credentials / bad request)
- *   - isStartupError: true on all startup-class failures
+ * Attempts immediately. One retry on network-level failure only.
+ * Hard auth failures (401/400) are returned immediately without retry.
  */
 export async function login(username, password) {
-  const health = await checkServerHealth();
-  if (!health.ready) {
-    return { success: false, error: 'Server is starting up — please try again', isStartupError: true };
-  }
-
-  for (let attempt = 1; attempt <= MAX_AUTH_RETRIES; attempt++) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
     let res, data;
     try {
       res  = await post('/auth/login', { username, password });
       data = await safeParseJson(res);
     } catch (err) {
-      if (attempt === MAX_AUTH_RETRIES) {
-        return { success: false, error: fetchErrorMessage(err), isStartupError: true };
+      if (attempt === 1 && isNetworkError(err)) {
+        await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+        continue;
       }
-      await retryDelay();
-      continue;
+      return { success: false, error: fetchErrorMessage(err) };
     }
 
     if (!res.ok) {
@@ -256,15 +212,11 @@ export async function login(username, password) {
       if (res.status === 401 || res.status === 400) {
         return { success: false, error: data.error || 'Invalid username or password' };
       }
-      // Server error (5xx, etc.) — startup class
-      if (attempt < MAX_AUTH_RETRIES) { await retryDelay(); continue; }
-      return { success: false, error: data.error || 'Server is starting up — please try again', isStartupError: true };
+      return { success: false, error: data.error || 'Server error — please try again' };
     }
 
-    // 200 OK but fields missing — startup class (empty body race)
     if (!data.token || !data.user) {
-      if (attempt < MAX_AUTH_RETRIES) { await retryDelay(); continue; }
-      return { success: false, error: data.error || 'Server is starting up — please try again', isStartupError: true };
+      return { success: false, error: data.error || 'Unexpected server response — please try again' };
     }
 
     saveToken(data.token);
@@ -272,27 +224,17 @@ export async function login(username, password) {
     return { success: true, user: data.user, recoveryLogin: data.recoveryLogin ?? false };
   }
 
-  return { success: false, error: 'Server is starting up — please try again', isStartupError: true };
+  return { success: false, error: 'Cannot reach server — please try again' };
 }
 
 /**
  * recoveryLogin() — CEO recovery path.
- * Sends x-ceo-recovery-key header + username body.
- * Password not required.
- * Returns { success, user?, recoveryLogin?, error?, isStartupError? }
  *
- * Startup safety:
- *   - Health pre-check before sending credentials
- *   - Up to MAX_AUTH_RETRIES on startup-class failures
- *   - Immediate return (no retry) on 401 / 400 (bad key / bad request)
+ * Attempts immediately. One retry on network-level failure only.
+ * Hard auth failures (401/400) are returned immediately without retry.
  */
 export async function recoveryLogin(username, recoveryKey) {
-  const health = await checkServerHealth();
-  if (!health.ready) {
-    return { success: false, error: 'Server is starting up — please try again', isStartupError: true };
-  }
-
-  for (let attempt = 1; attempt <= MAX_AUTH_RETRIES; attempt++) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
     let res, data;
     try {
       res = await fetchWithTimeout(
@@ -309,11 +251,11 @@ export async function recoveryLogin(username, recoveryKey) {
       );
       data = await safeParseJson(res);
     } catch (err) {
-      if (attempt === MAX_AUTH_RETRIES) {
-        return { success: false, error: fetchErrorMessage(err), isStartupError: true };
+      if (attempt === 1 && isNetworkError(err)) {
+        await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+        continue;
       }
-      await retryDelay();
-      continue;
+      return { success: false, error: fetchErrorMessage(err) };
     }
 
     if (!res.ok) {
@@ -321,14 +263,11 @@ export async function recoveryLogin(username, recoveryKey) {
       if (res.status === 401 || res.status === 400) {
         return { success: false, error: data.error || 'Invalid recovery key' };
       }
-      // Server error — startup class
-      if (attempt < MAX_AUTH_RETRIES) { await retryDelay(); continue; }
-      return { success: false, error: data.error || 'Server is starting up — please try again', isStartupError: true };
+      return { success: false, error: data.error || 'Server error — please try again' };
     }
 
     if (!data.token || !data.user) {
-      if (attempt < MAX_AUTH_RETRIES) { await retryDelay(); continue; }
-      return { success: false, error: data.error || 'Server is starting up — please try again', isStartupError: true };
+      return { success: false, error: data.error || 'Unexpected server response — please try again' };
     }
 
     saveToken(data.token);
@@ -336,17 +275,12 @@ export async function recoveryLogin(username, recoveryKey) {
     return { success: true, user: data.user, recoveryLogin: true };
   }
 
-  return { success: false, error: 'Server is starting up — please try again', isStartupError: true };
+  return { success: false, error: 'Cannot reach server — please try again' };
 }
 
 /**
  * changePassword() — change the current user's password.
  * Requires a valid session token (including recovery sessions).
- *
- * After a successful recovery-session password change, the server issues
- * a fresh normal JWT. This function saves it, replacing the restricted token.
- *
- * Returns { success, error? }
  */
 export async function changePassword(newPassword) {
   const token = getToken();
@@ -384,8 +318,6 @@ export function logout() {
 
 /**
  * Returns the cached user object from localStorage.
- * For a verified server-side check, use verifySession() instead.
- * Kept synchronous so existing components work without changes.
  */
 export function getCurrentUser() {
   const token = getToken();
@@ -399,12 +331,6 @@ export function isAuthenticated() {
 
 /**
  * Verify the current token against the server and refresh the cached user.
- * Call this on app mount to ensure the session is still valid.
- *
- * NOTE: Recovery sessions will get a 403 from /api/auth/me (which uses
- * requireNormalAuth). This is correct — they should be redirected to change-password.
- *
- * @returns {Promise<{id, username, role, credits}|null>}
  */
 export async function verifySession() {
   const token = getToken();
