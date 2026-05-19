@@ -1,0 +1,83 @@
+IB AI — PRODUCTION HARDENING & STABILITY LOCK
+
+MISSION:
+Stabilize the entire codebase for deployment readiness. Fix all blocking errors, ensure clean builds, and guarantee runtime safety without changing architecture or features.
+
+CRITICAL RULES:
+- DO NOT add new features
+- DO NOT modify pipeline logic
+- DO NOT change AI behavior systems (mode, intensity, stages, temperature)
+- ONLY fix stability, type issues, runtime safety, and build consistency
+
+────────────────────────────
+STEP 1 — TYPE SAFETY AUDIT
+────────────────────────────
+Fix all TypeScript / type errors across the codebase.
+
+Focus:
+- admin.ts errors
+- userId / string | string[] mismatches
+- any unsafe casts
+- missing interface compatibility
+- unused imports causing build warnings
+
+DO NOT suppress errors — resolve them properly.
+
+────────────────────────────
+STEP 2 — BUILD CONSISTENCY CHECK
+────────────────────────────
+Ensure:
+- backend builds cleanly
+- no TS6305 or missing declaration issues
+- all internal packages resolve correctly
+- no broken import paths
+
+If a module is runtime-valid but TypeScript fails:
+- fix declaration mapping or import resolution
+- do NOT disable type checking globally
+
+────────────────────────────
+STEP 3 — RUNTIME SAFETY CHECK
+────────────────────────────
+Ensure all critical systems fail safely:
+
+Check:
+- GROQ missing → Gemini fallback must always activate safely
+- Gemini missing → graceful error response (no crash)
+- image pipeline timeout → fallback logic triggers correctly
+- stage failures → do not break entire request
+- JSON stores → never crash on malformed data
+
+────────────────────────────
+STEP 4 — ENVIRONMENT VALIDATION
+────────────────────────────
+Verify all required env handling is safe:
+
+- GROQ_API_KEY optional
+- Gemini integration required but safely asserted
+- DATABASE_URL optional but safely handled
+- no undefined env crashes anywhere in runtime
+
+────────────────────────────
+STEP 5 — CLEAN START GUARANTEE
+────────────────────────────
+Ensure:
+- server starts with zero manual intervention
+- backend boots without errors
+- frontend loads without missing dependencies
+- all routes register correctly
+
+────────────────────────────
+STEP 6 — FINAL OUTPUT FORMAT
+────────────────────────────
+Provide:
+
+1. Build Status (PASS / FAIL)
+2. Remaining Errors (if any)
+3. Fixed Issues Summary
+4. Risk Report (if any unstable areas remain)
+5. Deployment Readiness (YES / NO)
+
+────────────────────────────
+FINAL OBJECTIVE:
+Make IB AI fully deployable, stable, and safe to run in production without modifying its feature set or AI behavior systems.

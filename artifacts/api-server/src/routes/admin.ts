@@ -176,7 +176,7 @@ router.get("/admin/users", requireCeo, (_req: Request, res: Response) => {
 // Reuses getUserHistory() from imageHistoryStore — admin-only wrapper.
 
 router.get("/admin/users/:userId/history", requireCeo, async (req: Request, res: Response) => {
-  const { userId } = req.params;
+  const userId = String(req.params["userId"]);
   const rawLimit = Number(req.query["limit"]) || 20;
   const limit = Math.max(1, Math.min(rawLimit, 50));
 
@@ -199,7 +199,7 @@ router.get("/admin/users/:userId/history", requireCeo, async (req: Request, res:
 // CEO users are not modified. Credits floor at 0 (no negatives).
 
 router.patch("/admin/users/:userId/credits", requireCeo, (req: Request, res: Response) => {
-  const { userId } = req.params;
+  const userId = String(req.params["userId"]);
   const { delta }  = req.body as { delta?: unknown };
 
   if (typeof delta !== "number" || !Number.isInteger(delta) || delta === 0) {
@@ -233,7 +233,7 @@ router.patch("/admin/users/:userId/credits", requireCeo, (req: Request, res: Res
 // Set a user's role to "free" or "premium". Cannot demote/promote CEO.
 
 router.patch("/admin/users/:userId/role", requireCeo, (req: Request, res: Response) => {
-  const { userId } = req.params;
+  const userId = String(req.params["userId"]);
   const { role }   = req.body as { role?: unknown };
 
   if (role !== "free" && role !== "premium") {
