@@ -3,11 +3,13 @@
  *
  * ALL endpoints require: valid JWT + role === "ceo"
  *
- * GET /api/admin/stats          — system stats snapshot
- * GET /api/admin/active-users   — users seen within last 5 minutes
- * GET /api/admin/logs           — recent audit log entries (?limit=50)
- * GET /api/admin/health         — uptime, memory, status flags
- * GET /api/admin/users          — full user directory (read-only, no passwords)
+ * GET   /api/admin/stats                      — system stats snapshot
+ * GET   /api/admin/active-users              — users seen within last 5 minutes
+ * GET   /api/admin/logs                      — recent audit log entries (?limit=50)
+ * GET   /api/admin/health                    — uptime, memory, status flags
+ * GET   /api/admin/users                     — full user directory (read-only, no passwords)
+ * PATCH /api/admin/users/:userId/credits     — adjust user credits by delta (+/-)
+ * PATCH /api/admin/users/:userId/role        — set user role (free | premium only)
  */
 import { Router, type Request, type Response } from "express";
 import { requireCeo } from "../middleware/requireCeo";
@@ -24,7 +26,7 @@ import {
   getTrackedUserCount,
   ACTIVE_THRESHOLD_MS,
 } from "../lib/activityTracker";
-import { getAllUsers } from "../lib/userStore";
+import { getAllUsers, getUserById, adjustCredits, setUserRole } from "../lib/userStore";
 import { getBootState } from "../lib/bootState";
 import { getRenderTelemetry, getRenderTelemetryStats, type RenderTelemetryEntry } from "../lib/renderTelemetry";
 
@@ -166,6 +168,67 @@ router.get("/admin/users", requireCeo, (_req: Request, res: Response) => {
     count:     result.length,
     users:     result,
   });
+});
+
+// ── PATCH /api/admin/users/:userId/credits ────────────────────────────────────
+// Adjust a user's credit balance by delta. Positive = add, negative = deduct.
+// CEO users are not modified. Credits floor at 0 (no negatives).
+
+router.patch("/admin/users/:userId/credits", requireCeo, (req: Request, res: Response) => {
+  const { userId } = req.params;
+  const { delta }  = req.body as { delta?: unknown };
+
+  if (typeof delta !== "number" || !Number.isInteger(delta) || delta === 0) {
+    res.status(400).json({ error: "delta must be a non-zero integer" });
+    return;
+  }
+  if (Math.abs(delta) > 1_000) {
+    res.status(400).json({ error: "delta must be between -1000 and 1000" });
+    return;
+  }
+
+  const user = getUserById(userId);
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  if (user.role === "ceo") {
+    res.status(400).json({ error: "CEO users have unlimited credits — no adjustment needed" });
+    return;
+  }
+
+  try {
+    const newCredits = adjustCredits(userId, delta);
+    res.json({ userId, credits: newCredits, delta });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to adjust credits" });
+  }
+});
+
+// ── PATCH /api/admin/users/:userId/role ───────────────────────────────────────
+// Set a user's role to "free" or "premium". Cannot demote/promote CEO.
+
+router.patch("/admin/users/:userId/role", requireCeo, (req: Request, res: Response) => {
+  const { userId } = req.params;
+  const { role }   = req.body as { role?: unknown };
+
+  if (role !== "free" && role !== "premium") {
+    res.status(400).json({ error: "role must be 'free' or 'premium'" });
+    return;
+  }
+
+  const user = getUserById(userId);
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  if (user.role === "ceo") {
+    res.status(403).json({ error: "Cannot change role of CEO account" });
+    return;
+  }
+
+  setUserRole(userId, role);
+  res.json({ userId, role });
 });
 
 // ── GET /api/admin/render-analytics ──────────────────────────────────────────

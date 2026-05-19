@@ -438,6 +438,23 @@ export function deductCredits(userId: string, cost: number): void {
   scheduleSave();
 }
 
+/**
+ * adjustCredits() — add or remove credits from a user (CEO admin action).
+ *
+ * - CEO users are not modified (they have unlimited credits)
+ * - Credits floor at 0 (no negative balances)
+ * - Returns the new credit balance (or Infinity for CEO)
+ */
+export function adjustCredits(userId: string, delta: number): number {
+  const user = store.get(userId);
+  if (!user) throw new Error(`User not found: ${userId}`);
+  if (user.role === "ceo") return Infinity;
+  refillIfExpired(user);
+  user.credits = Math.max(0, user.credits + delta);
+  scheduleSave();
+  return user.credits;
+}
+
 export function setUserRole(userId: string, role: UserRole): void {
   const user = store.get(userId);
   if (!user) return;
