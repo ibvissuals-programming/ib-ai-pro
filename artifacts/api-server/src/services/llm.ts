@@ -1,5 +1,6 @@
 import { logger } from "../lib/logger";
 import { ai } from "@workspace/integrations-gemini-ai";
+import { recordCompletion, type AiProvider } from "../lib/aiMetrics";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -19,6 +20,37 @@ function delay(ms: number) {
 function isRetryable(err: any): boolean {
   const msg = String(err?.message || err).toLowerCase();
   return msg.includes("429") || msg.includes("rate") || msg.includes("overloaded");
+}
+
+// ── Metrics wrapper ────────────────────────────────────────────────────────────
+// Wraps an async generator to record full-stream latency and success/error
+// when the consumer finishes reading. Transparent to the caller.
+
+async function* wrapTracked(
+  inner: AsyncIterable<string>,
+  provider: AiProvider,
+  fallbackTriggered: boolean,
+  startMs: number,
+): AsyncIterable<string> {
+  try {
+    for await (const chunk of inner) {
+      yield chunk;
+    }
+    const latencyMs = Date.now() - startMs;
+    recordCompletion(provider, fallbackTriggered, latencyMs, true);
+    logger.debug(
+      { provider, fallbackTriggered, latencyMs, success: true },
+      "[llm] stream completed",
+    );
+  } catch (err) {
+    const latencyMs = Date.now() - startMs;
+    recordCompletion(provider, fallbackTriggered, latencyMs, false);
+    logger.debug(
+      { provider, fallbackTriggered, latencyMs, success: false },
+      "[llm] stream error",
+    );
+    throw err;
+  }
 }
 
 // ── Groq streaming ─────────────────────────────────────────────────────────────
@@ -55,7 +87,6 @@ async function createGroqStream(messages: ChatMessage[]): Promise<AsyncIterable<
       });
 
       if (!response.ok || !response.body) {
-        // Read error body for proper diagnostics before throwing
         const errBody = await response.text().catch(() => "(unreadable)");
         logger.error(
           { status: response.status, body: errBody },
@@ -116,7 +147,6 @@ async function createGeminiStream(messages: ChatMessage[]): Promise<AsyncIterabl
   const systemMessage = messages.find((m) => m.role === "system");
   const conversationMessages = messages.filter((m) => m.role !== "system");
 
-  // Map OpenAI-style roles to Gemini roles (assistant → model)
   const contents = conversationMessages.map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
     parts: [{ text: m.content }],
@@ -150,23 +180,32 @@ async function createGeminiStream(messages: ChatMessage[]): Promise<AsyncIterabl
  *   2. If GROQ_API_KEY is absent → route directly to Gemini with a clear log.
  *      No spurious "Groq started → Groq failed" noise.
  *
+ * Instrumentation:
+ *   - Every routing path records provider, fallback flag, latency, and
+ *     success/error to aiMetrics via wrapTracked().
+ *   - Per-request routing selection logs are DEBUG (not INFO).
+ *   - Errors, warnings, and fallback events remain at WARN/INFO.
+ *   - API keys and message content are never logged.
+ *
  * Throws only when the active provider(s) genuinely fail — never silently.
  */
 export async function createChatStream(messages: ChatMessage[]): Promise<AsyncIterable<string>> {
   const hasGroqKey = !!process.env.GROQ_API_KEY;
+  const requestStartMs = Date.now();
 
   // ── Fast path: Groq key absent — route directly to Gemini ────────────────────
   if (!hasGroqKey) {
-    logger.info(
+    logger.debug(
       { provider: "gemini", model: GEMINI_FALLBACK_MODEL, reason: "groq_key_absent" },
-      "[llm] routing: Groq not configured — Gemini is primary for this deployment",
+      "[llm] routing to Gemini (Groq not configured)",
     );
     try {
       const stream = await createGeminiStream(messages);
-      logger.info({ model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini stream ready");
-      return stream;
+      logger.debug({ model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini stream ready");
+      return wrapTracked(stream, "gemini", false, requestStartMs);
     } catch (geminiErr) {
       const msg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
+      recordCompletion("gemini", false, Date.now() - requestStartMs, false);
       logger.error({ err: msg, model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini failed — no fallback available");
       throw new Error(`AI provider failed: ${msg}`);
     }
@@ -174,13 +213,16 @@ export async function createChatStream(messages: ChatMessage[]): Promise<AsyncIt
 
   // ── Groq key present — try Groq first ────────────────────────────────────────
   let groqErrMsg = "";
-  logger.info({ model: CHAT_MODEL, provider: "groq" }, "[llm] routing: Groq selected as primary");
+  const groqStartMs = Date.now();
+  logger.debug({ model: CHAT_MODEL, provider: "groq" }, "[llm] routing to Groq (primary)");
+
   try {
     const stream = await createGroqStream(messages);
-    logger.info({ model: CHAT_MODEL }, "[llm] Groq success — primary provider active");
-    return stream;
+    logger.debug({ model: CHAT_MODEL }, "[llm] Groq stream ready");
+    return wrapTracked(stream, "groq", false, requestStartMs);
   } catch (groqErr) {
     groqErrMsg = groqErr instanceof Error ? groqErr.message : String(groqErr);
+    recordCompletion("groq", false, Date.now() - groqStartMs, false);
     logger.warn(
       { err: groqErrMsg, model: CHAT_MODEL, fallback: GEMINI_FALLBACK_MODEL },
       "[llm] Groq failed — activating Gemini fallback",
@@ -189,17 +231,19 @@ export async function createChatStream(messages: ChatMessage[]): Promise<AsyncIt
 
   // ── Gemini fallback (triggered by Groq failure) ───────────────────────────────
   logger.info(
-    { model: GEMINI_FALLBACK_MODEL, trigger: "groq_failure", groqErr: groqErrMsg },
+    { model: GEMINI_FALLBACK_MODEL, trigger: "groq_failure" },
     "[llm] Gemini fallback activated",
   );
+
   try {
     const stream = await createGeminiStream(messages);
-    logger.info({ model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini fallback stream ready");
-    return stream;
+    logger.debug({ model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini fallback stream ready");
+    return wrapTracked(stream, "gemini", true, requestStartMs);
   } catch (geminiErr) {
     const geminiErrMsg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
+    recordCompletion("gemini", true, Date.now() - requestStartMs, false);
     logger.error(
-      { groqErr: groqErrMsg, geminiErr: geminiErrMsg },
+      { geminiErr: geminiErrMsg },
       "[llm] Both providers failed — no AI response possible",
     );
     throw new Error(
