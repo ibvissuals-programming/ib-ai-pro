@@ -375,11 +375,6 @@ const MODE_RULES: Array<{
       "denoise",
       "clarity",
       "crisp",
-      "enhance",
-      "improve",
-      "brighten",
-      "darken",
-      "contrast",
     ],
   },
 ];
@@ -397,7 +392,11 @@ export function classifyEditMode(
     if (rule.keywords.length > 0 && rule.keywords.some((k) => lower.includes(k))) return rule.mode;
   }
 
-  return "SUBTLE_ENHANCEMENT";
+  // Default: treat unmatched prompts as CINEMATIC_EDIT — NOT SUBTLE_ENHANCEMENT.
+  // Generic prompts ("make it look better", "enhance", "improve") should receive
+  // full cinematic transformation treatment. SUBTLE_ENHANCEMENT is only reached
+  // when explicitly matched by its own phrases/keywords above (sharp, fix, repair, etc.).
+  return "CINEMATIC_EDIT";
 }
 
 // ── CINEMATIC DIRECTOR LAYER ──────────────────────────────────────────────────
@@ -536,17 +535,24 @@ export function buildCinematicDirectorBrief(
   const style = selectDirectorStyle(prompt, mode);
 
   if (isExplicit && !isVague) {
-    // User already has clear visual direction — augment without overriding
+    // User has explicit visual direction — inject full director brief while preserving their intent.
+    // Even explicit prompts must receive the full director treatment to ensure maximum transformation.
     return (
-      `${prompt}. ` +
-      `Apply with ${style.lighting}. ` +
-      `Color grade: ${style.colorGrade}. ` +
-      `Exposure strategy: ${style.exposure}. ` +
-      `Mood: ${style.mood}.`
+      `CINEMATIC DIRECTOR BRIEF [${style.name}] — ` +
+      `Original user intent: "${prompt}". ` +
+      `Director transformation: ${style.brief}. ` +
+      `LIGHTING: ${style.lighting}. ` +
+      `COLOR GRADE: ${style.colorGrade}. ` +
+      `EXPOSURE: ${style.exposure}. ` +
+      `MOOD TARGET: ${style.mood}. ` +
+      `Honor the user's original intent above, AND apply this full cinematic director brief as the transformation framework. ` +
+      `Every axis must be intentionally pushed to MAXIMUM: lighting MUST restructure, color MUST shift strongly, ` +
+      `contrast MUST deepen, exposure MUST redistribute, and mood MUST clearly change. ` +
+      `Do NOT treat this as a subtle enhancement — this is a full cinematic transformation.`
     );
   }
 
-  // Vague or short prompt — inject full director brief
+  // Vague or short prompt — inject full director brief at maximum intensity
   return (
     `CINEMATIC DIRECTOR BRIEF [${style.name}] — ` +
     `Original user intent: "${prompt}". ` +
@@ -555,8 +561,10 @@ export function buildCinematicDirectorBrief(
     `COLOR GRADE: ${style.colorGrade}. ` +
     `EXPOSURE: ${style.exposure}. ` +
     `MOOD TARGET: ${style.mood}. ` +
-    `Apply this as a full cinematic visual transformation — not a generic enhancement. ` +
-    `Every axis must be intentionally pushed: lighting, color, contrast, exposure, and mood must ALL visibly change.`
+    `Apply this as a FULL MAXIMUM cinematic visual transformation — not a generic enhancement, not a filter. ` +
+    `Every axis must be pushed aggressively: lighting MUST restructure, color MUST shift strongly, ` +
+    `contrast MUST deepen dramatically, exposure MUST redistribute boldly, and mood MUST be clearly different from the input. ` +
+    `Near-identical output is a failure — the transformation must be strongly visible.`
   );
 }
 
@@ -565,15 +573,15 @@ export function buildCinematicDirectorBrief(
 // Forces the model to self-verify ≥3 of 5 transformation axes before outputting.
 // Do NOT append to structural-only modes (SCREENSHOT_CLEANUP, TEXT_REMOVAL).
 const VARIANCE_ENFORCEMENT_SUFFIX =
-  ` VARIANCE ENFORCEMENT CHECK (PRO_EDIT_MODE): Before outputting, confirm your result` +
-  ` satisfies AT LEAST 3 of these 5 transformation axes:` +
-  ` (1) LIGHTING SHIFT — direction, source, or intensity is clearly different;` +
-  ` (2) COLOR PALETTE SHIFT — temperature, hue, or cinematic grade is clearly different;` +
-  ` (3) CONTRAST CURVE SHIFT — shadow depth, highlights, or tonal range is clearly different;` +
-  ` (4) EXPOSURE REDISTRIBUTION — overall exposure balance is clearly different;` +
-  ` (5) MOOD/ATMOSPHERE CHANGE — emotional or cinematic feel is clearly different.` +
-  ` If fewer than 3 axes are satisfied → increase transformation strength and apply a stronger edit.` +
-  ` Near-identical output = VARIANCE FAILURE. Minimum 3 axes required.`;
+  ` VARIANCE ENFORCEMENT CHECK (PRO_EDIT_MODE MAXIMUM): Before outputting, verify your result` +
+  ` satisfies ALL 5 of these transformation axes — all are required, not optional:` +
+  ` (1) LIGHTING SHIFT — light direction, source quality, or intensity is CLEARLY and STRONGLY different from the input (a minor brightness nudge does NOT count);` +
+  ` (2) COLOR PALETTE SHIFT — color temperature, hue balance, or cinematic grade is CLEARLY and STRONGLY different (a near-neutral tweak does NOT count);` +
+  ` (3) CONTRAST CURVE SHIFT — shadow depth, highlight brightness, or tonal separation is CLEARLY and STRONGLY different (deep blacks, luminous highlights, punchy S-curve);` +
+  ` (4) EXPOSURE REDISTRIBUTION — overall exposure balance is CLEARLY different (shadows dramatically lifted OR highlights dramatically recovered OR intentional bold exposure shift);` +
+  ` (5) MOOD/ATMOSPHERE CHANGE — the emotional and cinematic feel is CLEARLY and STRONGLY different from the input (flat→dramatic, bright→moody, neutral→cinematic).` +
+  ` If ANY axis is unsatisfied → push that axis harder before outputting.` +
+  ` Near-identical output = TOTAL FAILURE. All 5 axes are mandatory. Maximum transformation strength required.`;
 
 // ── LAYER 4: Strong cinematic instruction builder ─────────────────────────────
 
@@ -626,28 +634,24 @@ export function buildStrongInstruction(
     }
 
     case "CINEMATIC_EDIT": {
-      if (intensity === "LOW" || intensity === "MEDIUM") {
-        return (
-          `Apply cinematic enhancement: ${p}. ` +
-          `Add directional studio lighting with natural shadow definition. ` +
-          `Apply gentle HDR contrast and subtle film-grade color grading. ` +
-          `Slightly increase depth of field separation. ` +
-          `Subject identity, face, clothing, and pose must remain completely unchanged.`
-        );
-      }
       const extremeLine =
         intensity === "EXTREME"
-          ? `Apply EXTREME cinematic transformation — this should look like a $200M Hollywood film frame.`
-          : `Apply strong Hollywood-grade cinematic transformation.`;
+          ? `Apply EXTREME cinematic transformation — this must look like a frame from a $200M Hollywood production.`
+          : intensity === "LOW" || intensity === "MEDIUM"
+          ? `Apply strong visible cinematic transformation — a clear and professional upgrade from the input.`
+          : `Apply powerful Hollywood-grade cinematic transformation.`;
       return (
         `${extremeLine} Edit: ${p}. ` +
-        `Apply a professional 3-point lighting setup: powerful directional key light, soft fill light to control shadow depth, ` +
-        `and a strong rim/backlight to separate the subject from the background. ` +
-        `Shape HDR contrast: deep rich shadows, luminous controlled highlights, cinematic midtone richness. ` +
-        `Apply optical depth of field — sharp subject with natural background separation. ` +
-        `Color grade with premium film palette: deep cool shadows, warm neutral skin tones, controlled highlights. ` +
-        `Add subtle anamorphic lens bloom on the brightest highlights and light organic film grain. ` +
-        `This must look physically relit by a Hollywood cinematographer — NOT a social media filter or Instagram edit. ` +
+        `LIGHTING: Physically restructure the lighting — apply a dramatic 3-point setup with a powerful directional key light, ` +
+        `controlled fill that shapes shadow depth, and a strong rim/backlight that clearly separates subject from background. ` +
+        `Lighting direction and quality MUST be visibly different from the input. ` +
+        `COLOR GRADE: Apply a strong professional film color palette — deep cool or teal shadows, warm neutral skin tones, ` +
+        `controlled luminous highlights. The overall color temperature and mood must be clearly shifted from the input. ` +
+        `CONTRAST: Shape an aggressive HDR contrast curve — deep crushed blacks, bright luminous highlights, rich cinematic midtone depth. ` +
+        `The tonal range must be dramatically broader and richer than the input. ` +
+        `ATMOSPHERE: Add subtle anamorphic lens bloom on highlights and light organic film grain for cinematic realism. ` +
+        `This must look physically relit and graded by a Hollywood cinematographer — ` +
+        `NOT a social media filter, NOT a subtle adjustment, NOT a near-identical output. ` +
         `Subject identity, face, clothing, logos, and pose must remain completely unchanged.` +
         VARIANCE_ENFORCEMENT_SUFFIX
       );
@@ -711,17 +715,19 @@ export function buildStrongInstruction(
 
       if (intensity === "HIGH" || intensity === "EXTREME") {
         return (
-          `Apply strong professional photo enhancement to this exact image: ${p}. ` +
-          `Perform these operations at FULL VISIBLE STRENGTH — in order of priority: ` +
-          `(1) Exposure: aggressive shadow lift, strong highlight recovery, intentional midtone shaping. ` +
-          `(2) Contrast: deep rich blacks, punchy highlights, cinematic S-curve tonal range — make it clearly visible. ` +
-          `(3) White balance and color temperature: strong warm-to-cool or cool-to-warm shift as appropriate — visible change required. ` +
-          `(4) Sharpening and clarity: strong local contrast enhancement, crisp texture detail, micro-contrast lift. ` +
-          `(5) Color grading: STRONG visible tonal transformation — apply a cinematic film palette, moody grade, or professional Lightroom preset. The color mood must clearly change. ` +
-          `(6) Noise reduction: clean grain while preserving natural film texture. ` +
-          `Output must look like a professionally graded photograph — same structural composition and subject identity, ` +
-          `but clearly different and better: stronger lighting, richer color, deeper contrast, more cinematic mood. ` +
-          `REQUIRED: The output must look visibly different from the input — stronger, moodier, more professional. ` +
+          `Apply a STRONG full cinematic photo transformation to this exact image: ${p}. ` +
+          `This is NOT a subtle enhancement — every axis must produce a CLEARLY VISIBLE and STRONG change: ` +
+          `LIGHTING: Restructure the lighting — change its direction, intensity, and quality dramatically. ` +
+          `Add a strong directional key light with deep shadow shaping. Lighting must be visibly different from the input. ` +
+          `CONTRAST: Apply a deep cinematic S-curve — crushed blacks, punchy bright highlights, rich midtone separation. ` +
+          `The tonal range must be significantly broader and bolder than the input. ` +
+          `COLOR GRADE: Apply a STRONG visible tonal transformation — use a cinematic film palette (teal-orange, bleach bypass, ` +
+          `warm editorial, moody cool, or Kodak film emulation). The color mood MUST clearly change from the input. ` +
+          `EXPOSURE: Boldly redistribute exposure — aggressively lift shadow detail OR dramatically recover blown highlights ` +
+          `OR apply intentional exposure shift. The overall tonal weight must be clearly different. ` +
+          `SHARPENING: Apply strong local contrast enhancement, crisp texture detail, and micro-contrast lift. ` +
+          `Output must look like a professionally Lightroom-graded and cinematically relit photograph — ` +
+          `strongly different from the input in lighting, color, contrast, and mood. ` +
           `PRESERVE ONLY: face identity, pose, body position, background objects and layout, and composition framing.` +
           antiAiRule +
           VARIANCE_ENFORCEMENT_SUFFIX

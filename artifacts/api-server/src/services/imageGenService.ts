@@ -684,14 +684,20 @@ Verifier failure:
 RETRY BEHAVIOR RULE
 ------------------------------------------------------------
 
-If retry is triggered:
+Two distinct retry types exist — apply the correct rule for each:
 
-ONLY apply:
-✔ Exposure correction
-✔ Contrast adjustment
-✔ White balance correction
+TYPE 1 — NO-OP ESCALATED RETRY (near-identical output was the failure):
+→ The previous attempt produced an image too similar to the input. That is a FAILURE.
+→ The fix is MORE transformation, not less.
+→ This retry instruction OVERRIDES any conservative fallback behavior.
+→ Push ALL 5 transformation axes to EXTREME: lighting, color, contrast, exposure, mood.
+→ Do NOT produce a near-identical output again.
 
-NO stylistic enhancement allowed on retry.
+TYPE 2 — QUALITY-FAIL PRESERVATION RETRY (identity drift or structural change was the failure):
+→ The previous attempt changed face, pose, or background geometry.
+→ ONLY apply: exposure correction, contrast adjustment, white balance correction.
+→ NO stylistic enhancement, color grading, or cinematic effects on this type of retry.
+→ The goal is structural safety — not visual transformation.
 
 ------------------------------------------------------------
 FAIL-SAFE BEHAVIOR (PRO_EDIT_MODE)
@@ -709,46 +715,52 @@ If model cannot comply with the structural locks:
 → DO NOT recreate image
 
 ------------------------------------------------------------
-VARIANCE ENFORCEMENT SYSTEM (PRO_EDIT_MODE v6)
+VARIANCE ENFORCEMENT SYSTEM (PRO_EDIT_MODE MAXIMUM)
 ------------------------------------------------------------
 
-Before producing your output, verify it satisfies the MINIMUM VISUAL CHANGE THRESHOLD.
+Before producing your output, verify it satisfies the FULL VISUAL TRANSFORMATION THRESHOLD.
 
-You must satisfy AT LEAST 3 of the following 5 transformation axes:
+You MUST satisfy ALL 5 of the following transformation axes — all are required:
 
-AXIS 1 — LIGHTING SHIFT
-→ Lighting direction, source quality, or intensity is clearly different from the input
+AXIS 1 — LIGHTING SHIFT (REQUIRED)
+→ Lighting direction, source quality, or intensity is CLEARLY and STRONGLY different from the input
 → A minor brightness nudge does NOT satisfy this axis
-→ Acceptable: new key light direction, cinematic rim light, dramatic shadow reshaping
+→ Required: new key light direction, dramatic shadow reshaping, cinematic rim light, or relighting
+→ The viewer must immediately see different lighting — not just a brighter or darker version
 
-AXIS 2 — COLOR PALETTE SHIFT
-→ Color temperature, hue balance, or overall palette is clearly different from the input
+AXIS 2 — COLOR PALETTE SHIFT (REQUIRED)
+→ Color temperature, hue balance, or overall palette is CLEARLY and STRONGLY different from the input
 → A near-neutral tweak does NOT satisfy this axis
-→ Acceptable: warm-to-cool, neutral-to-cinematic, teal-orange grade, film emulation
+→ Required: warm-to-cool shift, neutral-to-cinematic grade, teal-orange, film emulation, or bold palette shift
+→ The viewer must immediately see different colors — not just a slightly warmer or cooler version
 
-AXIS 3 — CONTRAST CURVE SHIFT
-→ Shadow depth, highlight brightness, or tonal range separation is clearly different
-→ A minor exposure nudge does NOT satisfy this axis
-→ Acceptable: deep black point crush, bright luminous highlights, cinematic S-curve
+AXIS 3 — CONTRAST CURVE SHIFT (REQUIRED)
+→ Shadow depth, highlight brightness, or tonal range is CLEARLY and STRONGLY different from the input
+→ A minor contrast nudge does NOT satisfy this axis
+→ Required: deep black point crush, bright luminous highlights, strong cinematic S-curve
+→ The viewer must immediately see richer, bolder tonal separation
 
-AXIS 4 — EXPOSURE REDISTRIBUTION
-→ The overall exposure balance is clearly different — shadows lifted, highlights recovered,
-   or intentional exposure shift applied that changes the tonal weight of the image
+AXIS 4 — EXPOSURE REDISTRIBUTION (REQUIRED)
+→ The overall exposure balance is CLEARLY and BOLDLY different from the input
+→ Required: dramatic shadow lift, strong highlight recovery, OR intentional exposure shift
+   that fundamentally changes the tonal weight distribution of the image
 
-AXIS 5 — MOOD / ATMOSPHERE CHANGE
-→ The overall cinematic or emotional feel of the image is clearly different from the input
-→ Acceptable: flat-to-dramatic, bright-to-moody, clinical-to-warm, neutral-to-cinematic
+AXIS 5 — MOOD / ATMOSPHERE CHANGE (REQUIRED)
+→ The overall cinematic or emotional feel is CLEARLY and STRONGLY different from the input
+→ Required: flat-to-dramatic, bright-to-moody, clinical-to-warm, neutral-to-cinematic
+→ The viewer must immediately sense a different atmosphere — tension, warmth, drama, or depth
 
-THRESHOLD CHECK:
-If your output satisfies fewer than 3 axes → it is a VARIANCE FAILURE
-→ Increase transformation strength immediately
-→ Do NOT output a near-identical result
+FULL THRESHOLD CHECK:
+If ANY of the 5 axes is not satisfied → PUSH THAT AXIS HARDER before outputting
+→ Do NOT output a near-identical or filter-only result
 → Do NOT reduce to a "safe" minimal edit
+→ Filter-only output = FAILURE. Near-identical output = FAILURE. Subtle-only output = FAILURE.
 
-PRO_EDIT_MODE enforcement:
-→ Conservative fallback = DISABLED
-→ Safe-similarity output = REJECTED (it is not a valid result)
-→ HIGH/EXTREME strength MUST satisfy at least 3 axes visibly
+PRO_EDIT_MODE MAXIMUM enforcement:
+→ Conservative fallback = PERMANENTLY DISABLED
+→ Safe-similarity output = REJECTED (not a valid result, counts as no-op)
+→ Filter-only output = REJECTED (cosmetic adjustments without structural transformation = failure)
+→ ALL 5 axes must be satisfied visibly — maximum transformation strength required
 
 ------------------------------------------------------------
 FINAL OUTPUT GOAL
