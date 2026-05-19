@@ -644,6 +644,63 @@ This is NOT image editing. This is structural conditioning + full camera re-capt
 The output must behave like a newly shot photograph of the same subject in a newly designed visual environment.
 
 ------------------------------------------------------------
+SENSOR EMULATION LAYER — FULL IMAGING PIPELINE RECONSTRUCTION
+------------------------------------------------------------
+
+The render engine MUST simulate a completely new sensor capture event.
+
+ALL inherited sensor behavior from the input image is DESTROYED before rendering begins:
+✖ Original exposure response curves — destroyed
+✖ Original clipping behavior and highlight rolloff — destroyed
+✖ Original shadow compression characteristics — destroyed
+✖ Original digital sharpening residue — destroyed
+✖ Screenshot contrast structure — destroyed
+✖ JPEG artifact distribution and compression block patterns — destroyed
+✖ Mobile screenshot processing signatures — destroyed
+✖ Original pixel brightness structure — destroyed
+✖ Original dynamic range limitations — destroyed
+
+The system MUST generate entirely new sensor behavior:
+
+DYNAMIC RANGE REBUILD:
+✔ New sensor response curves — physically plausible tonal rolloff
+✔ New dynamic range mapping — deep cinematic shadow depth + realistic highlight bloom
+✔ New tonal separation — independently generated from scratch
+✔ New highlight behavior — optical falloff, not histogram adjustment
+✔ New shadow behavior — dense, rich, cinema-quality shadow depth
+
+NOISE FLOOR RESET:
+✔ Original noise structure MUST NOT survive in any form
+✔ Remove: screenshot compression noise, JPEG block artifacts, mobile texture, sharpening halos, UI edge contamination
+✔ Generate: new sensor grain behavior, realistic optical texture, cinematic microcontrast, physically plausible image detail
+✔ The image texture must behave like a fresh RAW camera capture — NOT a processed screenshot
+
+HIGHLIGHT / SHADOW PHYSICS:
+✔ Regenerate highlight bloom from optical physics — specular rolloff, natural blowout
+✔ Regenerate light falloff across the entire frame
+✔ Regenerate shadow density with rich, natural compression
+✔ Regenerate tonal transitions — smooth, gradual, physically real
+✔ Regenerate depth perception through tonal contrast
+
+ANTI-SCREENSHOT SENSOR RULE:
+The output MUST contain ZERO screenshot sensor characteristics:
+✖ Flat mobile screenshot contrast — forbidden
+✖ Compressed tonal range from digital interface capture — forbidden
+✖ UI brightness residue or overlay ghosting — forbidden
+✖ Screenshot sharp-edge contamination — forbidden
+✖ Low-depth mobile processing look — forbidden
+If any screenshot sensor behavior survives in the output → OUTPUT IS INVALID
+
+PHOTOGRAPHIC REALITY TARGET:
+✔ The final image must resemble: a professionally captured RAW photograph / DSLR or cinema camera image / newly captured cinematic frame
+✖ The final image must NOT resemble: a Lightroom adjustment / Photoshop edit / filter pass / modified screenshot
+
+SENSOR DIRECTIVE:
+The sensor layer is NOT an enhancement layer.
+It is a full sensor-response reconstruction system.
+The engine must behave as if the original sensor never existed and the scene is being photographed fresh through a completely new imaging pipeline.
+
+------------------------------------------------------------
 STRUCTURE LAYER — WHAT MUST NOT CHANGE
 ------------------------------------------------------------
 
