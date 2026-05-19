@@ -158,6 +158,10 @@ export async function signup(username, password) {
     if (!res.ok) {
       return { success: false, error: data.error || 'Registration failed' };
     }
+    // Guard: 200 OK but missing token/user (empty body, proxy error, backend crash)
+    if (!data.token || !data.user) {
+      return { success: false, error: data.error || 'Server returned an empty response — please try again' };
+    }
     saveToken(data.token);
     saveUser(data.user);
     return { success: true, user: data.user };
@@ -172,6 +176,10 @@ export async function login(username, password) {
     const data = await safeParseJson(res);
     if (!res.ok) {
       return { success: false, error: data.error || 'Invalid username or password' };
+    }
+    // Guard: 200 OK but missing token/user (empty body, proxy error, backend crash)
+    if (!data.token || !data.user) {
+      return { success: false, error: data.error || 'Server returned an empty response — please try again' };
     }
     saveToken(data.token);
     saveUser(data.user);
@@ -204,6 +212,10 @@ export async function recoveryLogin(username, recoveryKey) {
     const data = await safeParseJson(res);
     if (!res.ok) {
       return { success: false, error: data.error || 'Invalid recovery key' };
+    }
+    // Guard: 200 OK but missing token/user (empty body, proxy error, backend crash)
+    if (!data.token || !data.user) {
+      return { success: false, error: data.error || 'Server returned an empty response — please try again' };
     }
     saveToken(data.token);
     saveUser(data.user);
