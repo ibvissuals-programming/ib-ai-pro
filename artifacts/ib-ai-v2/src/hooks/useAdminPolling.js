@@ -101,6 +101,11 @@ function useEndpointPoll(path, intervalMs) {
   return { data, error, errorCode, loading, lastOk };
 }
 
+/** Poll the user directory — 30 s interval (list changes rarely). */
+export function useUserDirectory() {
+  return useEndpointPoll('/admin/users', 30_000);
+}
+
 export function useAdminPolling() {
   const health      = useEndpointPoll('/admin/health',               8_000);
   const stats       = useEndpointPoll('/admin/stats',               10_000);

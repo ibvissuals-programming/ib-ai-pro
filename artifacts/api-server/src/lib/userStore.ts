@@ -279,6 +279,30 @@ export function toPublicUser(user: User): PublicUser {
   };
 }
 
+// ── CEO admin read-only view ───────────────────────────────────────────────────
+
+export interface AdminUserView {
+  id: string;
+  username: string;
+  role: UserRole;
+  credits: number | null; // null = CEO (unlimited)
+  createdAt: number;
+}
+
+/**
+ * Returns all registered users for the CEO admin directory.
+ * Password hashes are NEVER included. Read-only snapshot of the in-memory store.
+ */
+export function getAllUsers(): AdminUserView[] {
+  return Array.from(store.values()).map((u) => ({
+    id:       u.id,
+    username: u.username,
+    role:     u.role,
+    credits:  u.role === "ceo" ? null : u.credits,
+    createdAt: u.createdAt,
+  }));
+}
+
 export function createUser(
   username: string,
   password: string,

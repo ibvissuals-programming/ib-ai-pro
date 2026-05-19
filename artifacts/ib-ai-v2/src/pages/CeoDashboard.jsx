@@ -10,18 +10,20 @@
  * No backend changes required. Pure frontend consumer of existing APIs.
  */
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { Link, Redirect } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Activity, Users, BarChart2, ScrollText,
   ArrowLeft, RefreshCw, LogOut, Sun, Moon,
-  CheckCircle2, XCircle, AlertCircle, Clock,
-  ChevronRight, ChevronDown, Cpu, Zap, Shield,
+  AlertCircle, Clock,
+  ChevronRight, ChevronDown, Cpu, Shield,
+  LayoutDashboard, UsersRound,
 } from 'lucide-react';
 import { logout } from '../auth/authService';
 import { useAdminPolling } from '../hooks/useAdminPolling';
 import { useTheme } from '../contexts/ThemeContext';
+import { UsersDirectoryPanel } from '../components/UsersDirectoryPanel';
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
@@ -486,10 +488,58 @@ function DashboardHeader({ user }) {
   );
 }
 
+// ── Tab bar ───────────────────────────────────────────────────────────────────
+
+function TabBar({ activeTab, onTabChange }) {
+  const tabs = [
+    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { id: 'users',    label: 'Users',    icon: UsersRound },
+  ];
+
+  return (
+    <div className="border-b border-border/30 bg-background/40 backdrop-blur-sm">
+      <div className="max-w-7xl mx-auto px-4">
+        <nav className="flex gap-0" role="tablist">
+          {tabs.map(({ id, label, icon: Icon }) => {
+            const isActive = activeTab === id;
+            return (
+              <button
+                key={id}
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => onTabChange(id)}
+                className={`
+                  relative flex items-center gap-1.5 px-4 py-3 text-xs font-medium
+                  transition-colors select-none
+                  ${isActive
+                    ? 'text-foreground'
+                    : 'text-muted-foreground hover:text-foreground/70'
+                  }
+                `}
+              >
+                <Icon size={13} className="shrink-0" />
+                {label}
+                {isActive && (
+                  <motion.div
+                    layoutId="tab-indicator"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-t"
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function CeoDashboard() {
   const { health, stats, activeUsers, logs, globalErrorCode } = useAdminPolling();
+  const [activeTab, setActiveTab] = useState('overview');
 
   // Handle global auth errors
   if (globalErrorCode === 'unauthorized') {
@@ -513,7 +563,6 @@ export default function CeoDashboard() {
     );
   }
 
-  // Derive current username from cached user (no extra fetch needed)
   const cachedUser = (() => {
     try { return JSON.parse(localStorage.getItem('ib_cached_user')) || null; }
     catch { return null; }
@@ -522,43 +571,69 @@ export default function CeoDashboard() {
   return (
     <div className="min-h-screen bg-background">
       <DashboardHeader user={cachedUser?.username ?? 'CEO'} />
+      <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
 
       <main className="max-w-7xl mx-auto px-4 py-5">
-        {/* Top row: Health + Active Users */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <HealthPanel
-            data={health.data}
-            loading={health.loading}
-            error={health.error}
-            lastOk={health.lastOk}
-          />
-          <ActiveUsersPanel
-            data={activeUsers.data}
-            loading={activeUsers.loading}
-            error={activeUsers.error}
-            lastOk={activeUsers.lastOk}
-          />
-        </div>
+        <AnimatePresence mode="wait">
+          {activeTab === 'overview' ? (
+            <motion.div
+              key="overview"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.16 }}
+            >
+              {/* Top row: Health + Active Users */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <HealthPanel
+                  data={health.data}
+                  loading={health.loading}
+                  error={health.error}
+                  lastOk={health.lastOk}
+                />
+                <ActiveUsersPanel
+                  data={activeUsers.data}
+                  loading={activeUsers.loading}
+                  error={activeUsers.error}
+                  lastOk={activeUsers.lastOk}
+                />
+              </div>
 
-        {/* Bottom row: Stats (narrow) + Logs (wide) */}
-        <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-4 mt-4">
-          <StatsPanel
-            data={stats.data}
-            loading={stats.loading}
-            error={stats.error}
-            lastOk={stats.lastOk}
-          />
-          <LogsPanel
-            data={logs.data}
-            loading={logs.loading}
-            error={logs.error}
-            lastOk={logs.lastOk}
-          />
-        </div>
+              {/* Bottom row: Stats (narrow) + Logs (wide) */}
+              <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-4 mt-4">
+                <StatsPanel
+                  data={stats.data}
+                  loading={stats.loading}
+                  error={stats.error}
+                  lastOk={stats.lastOk}
+                />
+                <LogsPanel
+                  data={logs.data}
+                  loading={logs.loading}
+                  error={logs.error}
+                  lastOk={logs.lastOk}
+                />
+              </div>
 
-        <p className="text-center text-[10px] text-muted-foreground/40 mt-6 pb-4">
-          Live data — health every 8s · stats every 10s · users every 12s · logs every 15s
-        </p>
+              <p className="text-center text-[10px] text-muted-foreground/40 mt-6 pb-4">
+                Live data — health every 8s · stats every 10s · users every 12s · logs every 15s
+              </p>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="users"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.16 }}
+            >
+              <UsersDirectoryPanel />
+              <p className="text-center text-[10px] text-muted-foreground/40 mt-6 pb-4">
+                User list refreshes every 30s — read-only view
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
     </div>
   );

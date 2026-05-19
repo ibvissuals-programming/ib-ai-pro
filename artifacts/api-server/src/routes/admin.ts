@@ -7,6 +7,7 @@
  * GET /api/admin/active-users   — users seen within last 5 minutes
  * GET /api/admin/logs           — recent audit log entries (?limit=50)
  * GET /api/admin/health         — uptime, memory, status flags
+ * GET /api/admin/users          — full user directory (read-only, no passwords)
  */
 import { Router, type Request, type Response } from "express";
 import { requireCeo } from "../middleware/requireCeo";
@@ -19,9 +20,11 @@ import {
 } from "../lib/statsCounter";
 import {
   getActiveUsers,
+  getAllActivity,
   getTrackedUserCount,
   ACTIVE_THRESHOLD_MS,
 } from "../lib/activityTracker";
+import { getAllUsers } from "../lib/userStore";
 import { getBootState } from "../lib/bootState";
 
 const router = Router();
@@ -125,6 +128,42 @@ router.get("/admin/health", requireCeo, (_req: Request, res: Response) => {
       auth:          boot === "success" ? "operational" : "degraded",
     },
     auditLogEntries: getAuditLogSize(),
+  });
+});
+
+// ── GET /api/admin/users ──────────────────────────────────────────────────────
+// Read-only user directory. No passwords, no secrets.
+// Merges userStore records with in-memory activity data to produce status fields.
+
+router.get("/admin/users", requireCeo, (_req: Request, res: Response) => {
+  const users      = getAllUsers();
+  const activityMap = new Map(getAllActivity().map((a) => [a.userId, a]));
+  const now         = Date.now();
+
+  const result = users
+    .map((u) => {
+      const act         = activityMap.get(u.id);
+      const lastSeenAt  = act?.lastSeenAt  ?? null;
+      const lastLoginAt = act?.lastLoginAt ?? null;
+      const isActive    = lastSeenAt != null && (now - lastSeenAt) < ACTIVE_THRESHOLD_MS;
+
+      return {
+        id:          u.id,
+        username:    u.username,
+        role:        u.role,
+        credits:     u.credits,
+        createdAt:   u.createdAt,
+        lastLoginAt,
+        lastSeenAt,
+        status:      isActive ? "active" : "inactive",
+      };
+    })
+    .sort((a, b) => b.createdAt - a.createdAt); // newest first
+
+  res.json({
+    timestamp: Date.now(),
+    count:     result.length,
+    users:     result,
   });
 });
 

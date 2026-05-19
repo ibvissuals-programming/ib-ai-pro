@@ -91,3 +91,12 @@ export function getActiveUsers(
 export function getTrackedUserCount(): number {
   return activity.size;
 }
+
+/**
+ * Return ALL tracked activity records regardless of lastSeenAt.
+ * Used by the CEO admin users endpoint to merge activity data with the
+ * full user list from userStore. Keyed by userId.
+ */
+export function getAllActivity(): ActivityRecord[] {
+  return Array.from(activity.values());
+}
