@@ -19,6 +19,7 @@ import {
   AlertCircle, Clock,
   ChevronRight, ChevronDown, Cpu, Shield,
   LayoutDashboard, UsersRound,
+  Film, Zap, CheckCircle, XCircle, SkipForward,
 } from 'lucide-react';
 import { logout } from '../auth/authService';
 import { useAdminPolling } from '../hooks/useAdminPolling';
@@ -435,6 +436,176 @@ function LogsPanel({ data, loading, error, lastOk }) {
   );
 }
 
+// ── Panel 5: Render Analytics ─────────────────────────────────────────────────
+
+function VerifierBadge({ outcome }) {
+  if (outcome === 'PASS')    return <span className="flex items-center gap-1 text-emerald-400"><CheckCircle size={10} /> Pass</span>;
+  if (outcome === 'FAIL')    return <span className="flex items-center gap-1 text-red-400"><XCircle size={10} /> Fail</span>;
+  return <span className="flex items-center gap-1 text-muted-foreground/50"><SkipForward size={10} /> Skip</span>;
+}
+
+function IntensityChip({ intensity }) {
+  const color =
+    intensity === 'EXTREME' ? 'text-red-400 bg-red-400/10 border-red-400/20' :
+    intensity === 'HIGH'    ? 'text-orange-400 bg-orange-400/10 border-orange-400/20' :
+    intensity === 'MEDIUM'  ? 'text-blue-400 bg-blue-400/10 border-blue-400/20' :
+    intensity === 'LOW'     ? 'text-sky-300 bg-sky-400/10 border-sky-400/20' :
+    'text-muted-foreground bg-muted/30 border-border/30';
+  return (
+    <span className={`px-1.5 py-0.5 rounded border text-[10px] font-medium ${color}`}>
+      {intensity}
+    </span>
+  );
+}
+
+function RenderAnalyticsPanel({ data, loading, error, lastOk }) {
+  const [showEntries, setShowEntries] = useState(false);
+  const stats   = data?.stats;
+  const entries = data?.entries ?? [];
+
+  const profileDist = stats?.profileDistribution ?? {};
+  const profileTotal = Object.values(profileDist).reduce((s, v) => s + v, 0);
+
+  return (
+    <Panel icon={Film} title="Render Analytics" lastOk={lastOk} loading={loading} error={error}>
+      <div className="px-4 py-4 space-y-4">
+
+        {/* ── Summary cards ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {[
+            { label: 'Total Renders',  value: stats?.total ?? '—',            sub: 'since start' },
+            { label: 'Avg Duration',   value: stats?.total ? `${(stats.avgDurationMs / 1000).toFixed(1)}s` : '—', sub: 'per render' },
+            { label: 'Pass Rate',      value: stats?.total ? `${stats.passRate}%` : '—',  sub: 'verifier ok' },
+            { label: 'Retry Rate',     value: stats?.total ? `${stats.retryRate}%` : '—', sub: 'needed retry' },
+          ].map(({ label, value, sub }) => (
+            <div key={label} className="glass-subtle rounded-lg px-3 py-3 border border-border/20">
+              <div className="text-xl font-bold text-foreground tabular-nums">{value}</div>
+              <div className="text-[10px] text-muted-foreground mt-0.5">{label}</div>
+              <div className="text-[10px] text-muted-foreground/40 mt-0.5">{sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Profile distribution ── */}
+        {profileTotal > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-1">
+              <Film size={9} /> Profile Distribution
+            </p>
+            <div className="space-y-1.5">
+              {Object.entries(profileDist)
+                .sort(([, a], [, b]) => b - a)
+                .map(([profile, count]) => {
+                  const pct = Math.round((count / profileTotal) * 100);
+                  return (
+                    <div key={profile} className="flex items-center gap-2">
+                      <span className="text-[11px] text-muted-foreground w-36 truncate shrink-0">{profile}</span>
+                      <div className="flex-1 h-1.5 bg-muted/30 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary/60 rounded-full transition-all duration-700"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] text-muted-foreground/60 tabular-nums w-8 text-right shrink-0">{count}</span>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Verifier outcome distribution ── */}
+        {stats?.verifierOutcomeDistribution && stats.total > 0 && (
+          <div className="flex gap-3 flex-wrap">
+            {[
+              { label: 'Passed',  key: 'PASS',    color: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20' },
+              { label: 'Failed',  key: 'FAIL',    color: 'text-red-400 bg-red-400/10 border-red-400/20' },
+              { label: 'Skipped', key: 'SKIPPED', color: 'text-muted-foreground bg-muted/30 border-border/30' },
+            ].map(({ label, key, color }) => (
+              <div key={key} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-medium ${color}`}>
+                {label}: {stats.verifierOutcomeDistribution[key] ?? 0}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Recent entries toggle ── */}
+        {entries.length > 0 && (
+          <div>
+            <button
+              onClick={() => setShowEntries((x) => !x)}
+              className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showEntries ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+              Recent renders ({entries.length})
+            </button>
+
+            <AnimatePresence>
+              {showEntries && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.18 }}
+                  className="overflow-hidden"
+                >
+                  <div className="mt-2 overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-border/20">
+                          <th className="text-left px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">Time</th>
+                          <th className="text-left px-2 py-2 text-muted-foreground font-medium">Profile</th>
+                          <th className="text-left px-2 py-2 text-muted-foreground font-medium">Intensity</th>
+                          <th className="text-left px-2 py-2 text-muted-foreground font-medium hidden sm:table-cell">Verifier</th>
+                          <th className="text-left px-2 py-2 text-muted-foreground font-medium hidden md:table-cell">Duration</th>
+                          <th className="text-left px-2 py-2 text-muted-foreground font-medium hidden lg:table-cell">Retries</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {entries.map((e) => (
+                          <tr key={e.id} className="border-b border-border/10 last:border-0 hover:bg-white/[0.02] transition-colors">
+                            <td className="px-2 py-2 text-muted-foreground/70 whitespace-nowrap tabular-nums">
+                              {formatTime(e.timestamp)}
+                            </td>
+                            <td className="px-2 py-2 text-foreground max-w-[140px] truncate">
+                              {e.renderProfile}
+                            </td>
+                            <td className="px-2 py-2">
+                              <IntensityChip intensity={e.intensity} />
+                            </td>
+                            <td className="px-2 py-2 hidden sm:table-cell">
+                              <VerifierBadge outcome={e.verifierOutcome} />
+                            </td>
+                            <td className="px-2 py-2 text-muted-foreground/70 tabular-nums hidden md:table-cell">
+                              {(e.processingDurationMs / 1000).toFixed(1)}s
+                            </td>
+                            <td className="px-2 py-2 text-muted-foreground/70 hidden lg:table-cell">
+                              {e.retryCount > 0
+                                ? <span className="text-amber-400 font-medium">{e.retryCount}</span>
+                                : <span className="text-muted-foreground/30">—</span>
+                              }
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
+        {!loading && !error && stats?.total === 0 && (
+          <p className="text-xs text-muted-foreground/50 text-center py-4">
+            No render telemetry yet — data appears after the first image edit.
+          </p>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
 // ── Dashboard header ──────────────────────────────────────────────────────────
 
 function DashboardHeader({ user }) {
@@ -538,7 +709,7 @@ function TabBar({ activeTab, onTabChange }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function CeoDashboard() {
-  const { health, stats, activeUsers, logs, globalErrorCode } = useAdminPolling();
+  const { health, stats, activeUsers, logs, renderAnalytics, globalErrorCode } = useAdminPolling();
   const [activeTab, setActiveTab] = useState('overview');
 
   // Handle global auth errors
@@ -615,8 +786,18 @@ export default function CeoDashboard() {
                 />
               </div>
 
+              {/* Render Analytics — full width */}
+              <div className="mt-4">
+                <RenderAnalyticsPanel
+                  data={renderAnalytics.data}
+                  loading={renderAnalytics.loading}
+                  error={renderAnalytics.error}
+                  lastOk={renderAnalytics.lastOk}
+                />
+              </div>
+
               <p className="text-center text-[10px] text-muted-foreground/40 mt-6 pb-4">
-                Live data — health every 8s · stats every 10s · users every 12s · logs every 15s
+                Live data — health every 8s · stats every 10s · users every 12s · logs every 15s · render analytics every 20s
               </p>
             </motion.div>
           ) : (

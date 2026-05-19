@@ -107,20 +107,20 @@ export function useUserDirectory() {
 }
 
 export function useAdminPolling() {
-  const health      = useEndpointPoll('/admin/health',               8_000);
-  const stats       = useEndpointPoll('/admin/stats',               10_000);
-  const activeUsers = useEndpointPoll('/admin/active-users',        12_000);
-  const logs        = useEndpointPoll('/admin/logs?limit=50',       15_000);
+  const health          = useEndpointPoll('/admin/health',               8_000);
+  const stats           = useEndpointPoll('/admin/stats',               10_000);
+  const activeUsers     = useEndpointPoll('/admin/active-users',        12_000);
+  const logs            = useEndpointPoll('/admin/logs?limit=50',       15_000);
+  const renderAnalytics = useEndpointPoll('/admin/render-analytics',    20_000);
 
   // Bubble up the most critical auth error code
+  const allEndpoints = [health, stats, activeUsers, logs, renderAnalytics];
   const globalErrorCode =
-    health.errorCode === 'unauthorized' || stats.errorCode === 'unauthorized' ||
-    activeUsers.errorCode === 'unauthorized' || logs.errorCode === 'unauthorized'
+    allEndpoints.some((e) => e.errorCode === 'unauthorized')
       ? 'unauthorized'
-      : health.errorCode === 'forbidden' || stats.errorCode === 'forbidden' ||
-        activeUsers.errorCode === 'forbidden' || logs.errorCode === 'forbidden'
+      : allEndpoints.some((e) => e.errorCode === 'forbidden')
         ? 'forbidden'
         : null;
 
-  return { health, stats, activeUsers, logs, globalErrorCode };
+  return { health, stats, activeUsers, logs, renderAnalytics, globalErrorCode };
 }

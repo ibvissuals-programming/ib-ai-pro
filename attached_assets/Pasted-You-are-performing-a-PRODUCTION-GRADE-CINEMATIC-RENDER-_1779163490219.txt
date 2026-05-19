@@ -1,0 +1,264 @@
+You are performing a PRODUCTION-GRADE CINEMATIC RENDER PIPELINE HARDENING PASS for IB AI.
+
+MISSION:
+Push the image engine toward true cinematic re-render quality while STRICTLY preserving subject identity, anatomy, and scene structure.
+
+CRITICAL RULES:
+
+- DO NOT build anything related to bypassing AI detection
+- DO NOT remove provenance/watermark systems
+- DO NOT build “undetectable AI” tooling
+- DO NOT build anti-forensics systems
+- DO NOT build identity replacement or face-swapping systems
+- Preserve all existing safety systems
+- Preserve all existing auth, CEO dashboard, routing, and API stability
+- NO rewrites
+- NO architecture replacement
+- NO breaking changes
+
+OBJECTIVE:
+Improve cinematic transformation quality WITHOUT changing the human identity or scene geometry.
+
+IMPLEMENT THESE SYSTEMS:
+
+==================================================
+
+1. CINEMATIC RECAPTURE PROFILE SYSTEM
+   ==================================================
+
+Create a new render profile layer that simulates:
+
+- Hollywood film stills
+- Editorial photography
+- DSLR realism
+- Low-light cinema
+- Kodak Portra look
+- Fuji cinematic tones
+- Nordic cold atmosphere
+- Warm sunset drama
+
+The system must:
+
+- preserve face geometry
+- preserve ethnicity
+- preserve age appearance
+- preserve pose
+- preserve body proportions
+- preserve hairstyle silhouette
+
+The system may change:
+
+- lighting
+- atmosphere
+- color science
+- tonal response
+- contrast depth
+- cinematic mood
+- lens behavior
+- depth rendering
+
+==================================================
+2. ADVANCED IDENTITY PRESERVATION SYSTEM
+
+Strengthen identity lock across ALL render passes.
+
+Explicitly preserve:
+
+- eye spacing
+- eye shape
+- eyelid structure
+- eyebrow spacing
+- nose bridge
+- nostril shape
+- lip structure
+- jawline
+- chin projection
+- cheekbone structure
+- forehead proportions
+- hairstyle silhouette
+- skin identity
+
+Add:
+IDENTITY_PRIORITY_RULE:
+“If cinematic intensity conflicts with identity accuracy,
+reduce cinematic intensity.
+NEVER reduce identity fidelity.”
+
+==================================================
+3. CINEMATIC LIGHTING ENGINE
+
+Add a dedicated lighting synthesis system:
+
+Support:
+
+- Rembrandt lighting
+- 3-point lighting
+- soft cinematic diffusion
+- rim lighting
+- volumetric atmosphere
+- noir shadows
+- golden hour simulation
+- neon reflections
+- editorial flash balance
+
+Lighting MUST:
+
+- feel physically believable
+- create cinematic depth
+- avoid flat screenshot contrast
+- avoid filter-overlay appearance
+
+==================================================
+4. FILM COLOR SCIENCE SYSTEM
+
+Add:
+
+- film stock simulation profiles
+- cinematic shadow toning
+- highlight rolloff logic
+- tonal separation curves
+- realistic skin-tone preservation
+- cinematic bloom behavior
+
+Support:
+
+- Kodak Portra
+- Fuji Velvia
+- teal-orange cinema
+- bleach bypass
+- soft matte film
+- luxury editorial color science
+
+==================================================
+5. MULTI-PASS RENDER VERIFICATION
+
+Add a verifier scoring system with 2 categories:
+
+A. Identity Integrity Score
+Checks:
+
+- facial geometry
+- anatomy consistency
+- hairstyle consistency
+- ethnicity preservation
+- age preservation
+
+B. Cinematic Transformation Score
+Checks:
+
+- lighting transformation
+- tonal depth
+- atmosphere
+- color science
+- cinematic realism
+
+If:
+Identity score < threshold
+→ reject render
+
+If:
+Transformation score < threshold
+→ escalate cinematic strength and retry
+
+==================================================
+6. CEO DASHBOARD RENDER ANALYTICS
+
+Add a new CEO dashboard panel:
+
+Render Analytics
+
+Display:
+
+- render mode used
+- cinematic profile selected
+- retry count
+- identity score
+- cinematic score
+- processing duration
+- verifier outcome
+
+Add:
+recent render logs table
+
+==================================================
+7. FRONTEND RENDER PROFILE SELECTOR
+
+Add a selector before image submission:
+
+Cinematic Profile:
+
+- Hollywood Film
+- Editorial
+- DSLR Natural
+- Noir
+- Golden Hour
+- Luxury Commercial
+- Moody Cinema
+- Nordic Cold
+
+Add:
+Intensity selector:
+
+- Balanced
+- Strong
+- Extreme
+
+Balanced:
+more identity preservation
+
+Extreme:
+maximum cinematic transformation while preserving anatomy
+
+==================================================
+8. DEBUG + OBSERVABILITY
+
+Add structured logs for:
+
+- render profile
+- retry cause
+- identity verifier result
+- cinematic verifier result
+- render duration
+- escalation triggers
+
+Add:
+render pipeline stage timing
+
+==================================================
+9. STABILITY REQUIREMENTS
+
+Preserve:
+
+- existing auth system
+- CEO dashboard
+- routing
+- API contracts
+- Gemini integration
+- image upload flow
+- existing user accounts
+
+NO regressions.
+NO rewrites.
+NO feature removal.
+
+After implementation:
+
+- rebuild
+- restart workflows
+- verify frontend
+- verify backend
+- verify CEO dashboard
+- verify image generation
+- verify image editing
+- verify login flow
+- verify publish compatibility
+
+Then provide:
+
+- exact files changed
+- exact systems added
+- test results
+- remaining weaknesses
+- next recommended upgrade
+
+Make, test, iterate…

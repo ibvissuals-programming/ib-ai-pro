@@ -225,6 +225,29 @@ function GenerateTab() {
   );
 }
 
+// ── Render profile + intensity options ────────────────────────────────────────
+const CINEMATIC_PROFILES = [
+  { value: '',                        label: 'Auto-Detect (recommended)' },
+  { value: 'CINEMATIC_EDIT',          label: 'Cinematic Edit' },
+  { value: 'COLOR_MOOD_EDIT',         label: 'Color & Mood' },
+  { value: 'SUBTLE_ENHANCEMENT',      label: 'Subtle Enhancement' },
+  { value: 'AGGRESSIVE_RECONSTRUCTION', label: 'Aggressive Reconstruction' },
+  { value: 'STYLE_TRANSFER',          label: 'Style Transfer' },
+  { value: 'BACKGROUND_TRANSFORMATION', label: 'Background Swap' },
+  { value: 'SCREENSHOT_CLEANUP',      label: 'Screenshot Cleanup' },
+  { value: 'TEXT_REMOVAL',            label: 'Text Removal' },
+  { value: 'WALLPAPER_UPGRADE',       label: 'Wallpaper Upgrade' },
+  { value: 'OBJECT_MANIPULATION',     label: 'Object Manipulation' },
+];
+
+const INTENSITY_LEVELS = [
+  { value: '',        label: 'Auto-Detect' },
+  { value: 'LOW',     label: 'Low' },
+  { value: 'MEDIUM',  label: 'Medium' },
+  { value: 'HIGH',    label: 'High' },
+  { value: 'EXTREME', label: 'Extreme' },
+];
+
 // ── Edit tab ──────────────────────────────────────────────────────────────────
 function EditTab() {
   const [sourceImage, setSourceImage] = useState(null);
@@ -234,6 +257,8 @@ function EditTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [dragOver, setDragOver] = useState(false);
+  const [cinematicProfile, setCinematicProfile] = useState('');
+  const [intensityLevel, setIntensityLevel] = useState('');
   const fileInputRef = useRef(null);
   const checkRate = useRateLimit();
 
@@ -265,7 +290,12 @@ function EditTab() {
     setOutput(null);
     setOutputMeta(null);
     try {
-      const res = await editImage(sourceImage, prompt.trim());
+      const res = await editImage(
+        sourceImage,
+        prompt.trim(),
+        cinematicProfile || undefined,
+        intensityLevel   || undefined,
+      );
       setOutput(res.b64Image);
       setOutputMeta({ mode: res.mode ?? null, intensity: res.intensity ?? null });
     } catch (err) {
@@ -325,6 +355,40 @@ function EditTab() {
         {EXAMPLES.map((ex) => (
           <button key={ex} onClick={() => setPrompt(ex)} className="text-[11px] px-2.5 py-1 rounded-full border border-border/60 text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-all">{ex}</button>
         ))}
+      </div>
+
+      {/* ── Render Profile + Intensity selectors ── */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+            <Film size={9} />
+            Render Profile
+          </label>
+          <select
+            value={cinematicProfile}
+            onChange={(e) => setCinematicProfile(e.target.value)}
+            className="w-full bg-background/60 border border-input rounded-xl px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring/40 focus:border-primary/50 transition-all cursor-pointer"
+          >
+            {CINEMATIC_PROFILES.map(({ value, label }) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+            <Zap size={9} />
+            Intensity
+          </label>
+          <select
+            value={intensityLevel}
+            onChange={(e) => setIntensityLevel(e.target.value)}
+            className="w-full bg-background/60 border border-input rounded-xl px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring/40 focus:border-primary/50 transition-all cursor-pointer"
+          >
+            {INTENSITY_LEVELS.map(({ value, label }) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <button

@@ -60,6 +60,7 @@ import {
   complexityTimeout,
 } from "./imageComplexityClassifier";
 import { saveToHistory } from "./imageHistoryStore";
+import { pushRenderTelemetry } from "../lib/renderTelemetry";
 
 // ── Timeout / retry constants ─────────────────────────────────────────────────
 // REQUEST_TIMEOUT_MS: per-attempt timeout for Pollinations (text-to-image only).
@@ -1870,6 +1871,8 @@ export async function editImage(
   imageBase64: string,
   prompt: string,
   userId?: string,
+  cinematicProfileOverride?: EditMode,
+  intensityOverride?: EditIntensity,
 ): Promise<EditResult> {
   if (!imageBase64 || imageBase64.trim().length < 10) {
     logger.warn("[imageEdit] edit rejected — no image supplied");
@@ -1887,6 +1890,25 @@ export async function editImage(
   // ── LAYER 1+2: Mode + intensity classification ─────────────────────────────
   let mode: EditMode           = classifyEditMode(prompt, true);
   let intensity: EditIntensity = detectEditIntensity(prompt, mode);
+
+  // ── CINEMATIC PROFILE + INTENSITY OVERRIDE (user-selected via UI) ──────────
+  // When the frontend sends explicit cinematicProfile or intensity values,
+  // those override the auto-classified values. The rest of the pipeline is
+  // unaffected — overrides slot into the same classification variables.
+  if (cinematicProfileOverride) {
+    logger.info(
+      { original: mode, override: cinematicProfileOverride },
+      "[imageEdit] cinematicProfile override applied",
+    );
+    mode = cinematicProfileOverride;
+  }
+  if (intensityOverride) {
+    logger.info(
+      { original: intensity, override: intensityOverride },
+      "[imageEdit] intensity override applied",
+    );
+    intensity = intensityOverride;
+  }
 
   // ── FAST MODE ENFORCEMENT (auto-downgrade) ─────────────────────────────────
   // AGGRESSIVE_RECONSTRUCTION is a heavy generative operation that risks
@@ -2032,12 +2054,30 @@ export async function editImage(
         latencyMs,
       }).catch((err) => logger.warn({ err }, "[imageHistory] Failed to save edit result"));
     }
+
+    const qualityVerified = qv ? (!qv.skipped && qv.valid) : false;
+    const verifierOutcome: "PASS" | "FAIL" | "SKIPPED" =
+      !qv ? "SKIPPED" : qv.skipped ? "SKIPPED" : qv.valid ? "PASS" : "FAIL";
+
+    // ── RENDER TELEMETRY PUSH ────────────────────────────────────────────────
+    pushRenderTelemetry({
+      userId,
+      renderProfile:      getEditModeLabel(mode),
+      intensity,
+      retryCount,
+      qualityVerified,
+      qualityIssues:      qv?.issues ?? [],
+      verifierOutcome,
+      processingDurationMs: latencyMs,
+      contractVersion:    CONTRACT_VERSION,
+    });
+
     return {
       b64Image,
       job: jobSummary(job),
       mode: getEditModeLabel(mode),
       intensity,
-      qualityVerified: qv ? (!qv.skipped && qv.valid) : false,
+      qualityVerified,
       qualityIssues:   qv?.issues ?? [],
       contractVersionUsed: CONTRACT_VERSION,
     };

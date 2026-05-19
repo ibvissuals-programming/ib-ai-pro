@@ -38,12 +38,29 @@ const GenerateSchema = z.object({
   prompt: z.string().min(1, "Prompt is required").max(500, "Prompt too long"),
 });
 
+const VALID_CINEMATIC_PROFILES = [
+  "SUBTLE_ENHANCEMENT",
+  "CINEMATIC_EDIT",
+  "AGGRESSIVE_RECONSTRUCTION",
+  "SCREENSHOT_CLEANUP",
+  "WALLPAPER_UPGRADE",
+  "TEXT_REMOVAL",
+  "STYLE_TRANSFER",
+  "OBJECT_MANIPULATION",
+  "BACKGROUND_TRANSFORMATION",
+  "COLOR_MOOD_EDIT",
+] as const;
+
+const VALID_INTENSITIES = ["LOW", "MEDIUM", "HIGH", "EXTREME"] as const;
+
 const EditSchema = z.object({
   image: z.string().min(10, "Image is required"),
   prompt: z
     .string()
     .min(1, "Edit instruction is required")
     .max(2000, "Prompt too long"),
+  cinematicProfile: z.enum(VALID_CINEMATIC_PROFILES).optional(),
+  intensity: z.enum(VALID_INTENSITIES).optional(),
 });
 
 // ── User-safe error sanitizer for route layer ─────────────────────────────────
@@ -169,7 +186,13 @@ router.post(
     );
 
     try {
-      const result: EditResult = await editImage(parsed.data.image, parsed.data.prompt, req.user?.userId);
+      const result: EditResult = await editImage(
+        parsed.data.image,
+        parsed.data.prompt,
+        req.user?.userId,
+        parsed.data.cinematicProfile,
+        parsed.data.intensity,
+      );
       deductRequestCredits(req);
       appendCreditHeaders(req, res);
       incImageEdited();

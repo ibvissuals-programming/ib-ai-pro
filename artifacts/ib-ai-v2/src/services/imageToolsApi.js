@@ -48,17 +48,23 @@ export async function generateImage(prompt) {
  * Edit an existing image using a natural-language instruction.
  * @param {string} imageBase64 — data URL (data:image/...;base64,...)
  * @param {string} prompt — edit instruction
+ * @param {string} [cinematicProfile] — optional EditMode override (e.g. "CINEMATIC_EDIT")
+ * @param {string} [intensity] — optional intensity override ("LOW"|"MEDIUM"|"HIGH"|"EXTREME")
  * @returns {Promise<{ b64Image: string, status: string, mode?: string, intensity?: string }>}
  */
-export async function editImage(imageBase64, prompt) {
+export async function editImage(imageBase64, prompt, cinematicProfile, intensity) {
   let res;
+  const body = { image: imageBase64, prompt };
+  if (cinematicProfile) body.cinematicProfile = cinematicProfile;
+  if (intensity)        body.intensity        = intensity;
+
   try {
     res = await fetchWithTimeout(
       EDIT_URL,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ image: imageBase64, prompt }),
+        body: JSON.stringify(body),
       },
       IMAGE_GEN_MS,
     );

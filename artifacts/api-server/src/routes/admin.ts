@@ -26,6 +26,7 @@ import {
 } from "../lib/activityTracker";
 import { getAllUsers } from "../lib/userStore";
 import { getBootState } from "../lib/bootState";
+import { getRenderTelemetry, getRenderTelemetryStats } from "../lib/renderTelemetry";
 
 const router = Router();
 
@@ -164,6 +165,21 @@ router.get("/admin/users", requireCeo, (_req: Request, res: Response) => {
     timestamp: Date.now(),
     count:     result.length,
     users:     result,
+  });
+});
+
+// ── GET /api/admin/render-analytics ──────────────────────────────────────────
+// Returns in-memory render telemetry: aggregate stats + recent entries.
+// Data is lost on restart — telemetry is ephemeral, not persisted.
+
+router.get("/admin/render-analytics", requireCeo, (req: Request, res: Response) => {
+  const rawLimit = Number(req.query["limit"]) || 50;
+  const limit    = Math.max(1, Math.min(rawLimit, 200));
+
+  res.json({
+    timestamp: Date.now(),
+    stats:     getRenderTelemetryStats(),
+    entries:   getRenderTelemetry(limit),
   });
 });
 
