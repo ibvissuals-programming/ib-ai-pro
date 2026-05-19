@@ -123,6 +123,11 @@ export function useAdminPolling() {
   const cinematicInsights  = useEndpointPoll('/admin/cinematic-insights',  25_000);
   const activityTimeline   = useEndpointPoll('/admin/logs?limit=100',      30_000);
 
+  // ── Control Center endpoints ──────────────────────────────────────────────
+  const systemHealth  = useEndpointPoll('/admin/system/health',       10_000);
+  const pipelineStats = useEndpointPoll('/admin/pipeline/stats',      30_000);
+  const actionLogs    = useEndpointPoll('/admin/action-logs?limit=50', 15_000);
+
   // Bubble up the most critical auth error code
   const allEndpoints = [health, stats, activeUsers, logs, renderAnalytics, cinematicInsights];
   const globalErrorCode =
@@ -132,5 +137,10 @@ export function useAdminPolling() {
         ? 'forbidden'
         : null;
 
-  return { health, stats, activeUsers, logs, renderAnalytics, cinematicInsights, activityTimeline, globalErrorCode };
+  return {
+    health, stats, activeUsers, logs, renderAnalytics, cinematicInsights,
+    activityTimeline,
+    systemHealth, pipelineStats, actionLogs,
+    globalErrorCode,
+  };
 }

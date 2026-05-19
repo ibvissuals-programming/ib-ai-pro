@@ -17,7 +17,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { logger } from "../lib/logger";
-import { USE_POSTGRES } from "../lib/storageFlag";
+import { isPostgresEnabled } from "../lib/systemConfig";
 import { pgLoadAllHistory, pgSaveEntry, pgDeleteEntry } from "./pgImageHistoryStore";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -78,7 +78,7 @@ function entryToPublic(entry: HistoryEntry): HistoryEntryPublic {
 async function loadHistory(): Promise<HistoryEntry[]> {
   if (cache !== null) return cache;
 
-  if (USE_POSTGRES) {
+  if (isPostgresEnabled()) {
     try {
       cache = await pgLoadAllHistory() as HistoryEntry[];
       logger.info({ count: cache.length }, "[imageHistory] Loaded from PostgreSQL");
@@ -260,7 +260,7 @@ export async function saveToHistory(params: {
 
   cache = entries;
 
-  if (USE_POSTGRES) {
+  if (isPostgresEnabled()) {
     try {
       await pgSaveEntry(entry);
       for (const evId of evictedIds) {
@@ -314,7 +314,7 @@ export async function deleteHistoryEntry(
   const [removed] = entries.splice(idx, 1);
   cache = entries;
 
-  if (USE_POSTGRES) {
+  if (isPostgresEnabled()) {
     try {
       await pgDeleteEntry(entryId);
     } catch (pgErr) {
@@ -330,6 +330,69 @@ export async function deleteHistoryEntry(
 
   logger.info({ userId, entryId }, "[imageHistory] Deleted entry");
   return true;
+}
+
+// ── Pipeline stats snapshot (for admin Control Center) ────────────────────────
+
+export interface HistoryStatsSnapshot {
+  total:       number;
+  byMode:      Record<string, number>;
+  byIntensity: Record<string, number>;
+  byStatus:    Record<string, number>;
+  byType:      Record<string, number>;
+  successRate: number;
+  retryRate:   number;
+  avgLatencyMs: number | null;
+  topMode:     string | null;
+  topIntensity: string | null;
+}
+
+/**
+ * Compute read-only pipeline statistics from the in-memory cache.
+ * Returns a zero-filled snapshot if no history is loaded yet.
+ */
+export function getHistoryStatsSnapshot(): HistoryStatsSnapshot {
+  const entries: HistoryEntry[] = cache ?? [];
+
+  const byMode:      Record<string, number> = {};
+  const byIntensity: Record<string, number> = {};
+  const byStatus:    Record<string, number> = {};
+  const byType:      Record<string, number> = {};
+
+  let latencySum = 0;
+  let latencyCount = 0;
+  let retryCount = 0;
+
+  for (const e of entries) {
+    byMode[e.mode]           = (byMode[e.mode]           ?? 0) + 1;
+    byIntensity[e.intensity] = (byIntensity[e.intensity] ?? 0) + 1;
+    byType[e.type]           = (byType[e.type]           ?? 0) + 1;
+    if (e.status) byStatus[e.status] = (byStatus[e.status] ?? 0) + 1;
+    if (e.latencyMs != null) { latencySum += e.latencyMs; latencyCount++; }
+    if ((e.retryCount ?? 0) > 0) retryCount++;
+  }
+
+  const total = entries.length;
+  const successCount = byStatus["success"] ?? 0;
+
+  function topKey(map: Record<string, number>): string | null {
+    const keys = Object.keys(map);
+    if (!keys.length) return null;
+    return keys.reduce((a, b) => map[a] > map[b] ? a : b);
+  }
+
+  return {
+    total,
+    byMode,
+    byIntensity,
+    byStatus,
+    byType,
+    successRate:  total > 0 ? Math.round((successCount / total) * 1000) / 10 : 0,
+    retryRate:    total > 0 ? Math.round((retryCount  / total) * 1000) / 10 : 0,
+    avgLatencyMs: latencyCount > 0 ? Math.round(latencySum / latencyCount) : null,
+    topMode:      topKey(byMode),
+    topIntensity: topKey(byIntensity),
+  };
 }
 
 /**

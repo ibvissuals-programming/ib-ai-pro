@@ -17,7 +17,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { logger } from "./logger";
-import { USE_POSTGRES } from "./storageFlag";
+import { isPostgresEnabled } from "./systemConfig";
 import { pgLoadAllUsers, pgPersistAllUsers } from "./pgUserStore";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -130,7 +130,7 @@ async function persistStore(): Promise<void> {
   try {
     await prev; // wait for any in-progress write to finish
 
-    if (USE_POSTGRES) {
+    if (isPostgresEnabled()) {
       try {
         await pgPersistAllUsers(Array.from(store.values()));
         return;
@@ -174,7 +174,7 @@ function scheduleSave(): void {
 // ── Load with schema validation ───────────────────────────────────────────────
 
 export async function loadUserStore(): Promise<void> {
-  if (USE_POSTGRES) {
+  if (isPostgresEnabled()) {
     try {
       const users = await pgLoadAllUsers();
       for (const u of users) {

@@ -1,11 +1,10 @@
 /**
- * storageFlag — IB AI PostgreSQL storage feature flag.
+ * storageFlag — re-exports dynamic isPostgresEnabled() from systemConfig.
  *
- * Set USE_POSTGRES_STORAGE=true in the environment to activate PostgreSQL
- * as the primary persistence layer for users and image history.
+ * Previously exported a static const USE_POSTGRES. Replaced with a runtime-
+ * togglable function so storage mode can be changed via the Control Center
+ * without restarting the server.
  *
- * When false (default):  full JSON file system — no change to existing behaviour.
- * When true:             PostgreSQL primary, JSON file fallback on PG error.
+ * Callers that import directly from this file continue to work unchanged.
  */
-export const USE_POSTGRES: boolean =
-  process.env["USE_POSTGRES_STORAGE"] === "true";
+export { isPostgresEnabled } from "./systemConfig";

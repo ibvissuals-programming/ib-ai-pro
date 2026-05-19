@@ -4,6 +4,7 @@ import { loadUserStore, repairCeoAccount } from "./lib/userStore";
 import { logProviderHealth } from "./lib/env";
 import { initImageStore } from "./services/imageHistoryStore";
 import { setBootDegraded } from "./lib/bootState";
+import { loadSystemConfig } from "./lib/systemConfig";
 
 // ── Global error handlers ─────────────────────────────────────────────────────
 
@@ -29,6 +30,13 @@ const port = Number(process.env.PORT) || 8080;
 
 async function bootstrap() {
   logger.info("[system] Server starting");
+
+  // 0. Load system config (storage mode etc.) — must run before loadUserStore()
+  try {
+    await loadSystemConfig();
+  } catch (err) {
+    logger.warn({ err }, "[system] System config load failed — using defaults");
+  }
 
   // 1. Provider health check
   logProviderHealth();

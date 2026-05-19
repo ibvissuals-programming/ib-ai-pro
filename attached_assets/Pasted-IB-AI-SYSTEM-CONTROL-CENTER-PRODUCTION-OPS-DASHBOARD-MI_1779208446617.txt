@@ -1,0 +1,184 @@
+IB AI — SYSTEM CONTROL CENTER (PRODUCTION OPS DASHBOARD)
+
+MISSION:
+Build a centralized control and observability dashboard for IB AI that allows real-time monitoring, safe system control, and controlled migration management.
+
+CRITICAL RULES:
+- DO NOT modify AI generation pipeline
+- DO NOT change image generation or edit logic
+- DO NOT alter auth or credit system
+- ONLY build control, visibility, and operational tooling
+
+This is a CONTROL LAYER ONLY.
+
+────────────────────────────
+STEP 1 — SYSTEM STATE AGGREGATION
+────────────────────────────
+
+Create a unified system status object:
+
+systemStatus = {
+  backend: "healthy | degraded | down",
+  db: {
+    mode: "postgres | json | hybrid",
+    status: "connected | fallback | error",
+    lastMigrationRun: timestamp | null
+  },
+  ai: {
+    groq: "active | fallback | missing",
+    gemini: "active | degraded | missing"
+  },
+  pipeline: {
+    status: "healthy | slow | failing",
+    avgLatency: number,
+    failureRate: number
+  }
+}
+
+This must be derived from existing runtime logs and state — NOT hardcoded.
+
+────────────────────────────
+STEP 2 — STORAGE MODE CONTROL
+────────────────────────────
+
+Expose controlled toggle:
+
+USE_POSTGRES_STORAGE
+
+Add admin-only control endpoint:
+
+POST /admin/storage/mode
+
+Body:
+{
+  mode: "postgres" | "json" | "hybrid"
+}
+
+Rules:
+- Requires CEO role authentication
+- Must restart-safe (persist in env or config store)
+- Must NOT crash system when toggled incorrectly
+- Must log all changes in admin audit log
+
+────────────────────────────
+STEP 3 — MIGRATION CONTROL PANEL
+────────────────────────────
+
+Add endpoint:
+
+POST /admin/storage/migrate
+
+Capabilities:
+- triggers migration script safely
+- returns progress status
+- prevents concurrent migrations
+- logs:
+  - start time
+  - duration
+  - records migrated
+  - failures skipped
+
+Must be idempotent and safe to re-run.
+
+────────────────────────────
+STEP 4 — SYSTEM HEALTH DASHBOARD API
+────────────────────────────
+
+Create endpoint:
+
+GET /admin/system/health
+
+Returns:
+- storage mode
+- AI provider status
+- pipeline status
+- DB connection state
+- active users count
+- image generation success rate (last 100 jobs)
+- fallback frequency stats
+
+This is READ-ONLY.
+
+────────────────────────────
+STEP 5 — PIPELINE DIAGNOSTICS VIEW
+────────────────────────────
+
+Expose aggregated analytics:
+
+GET /admin/pipeline/stats
+
+Return:
+- average stage latency (Stage 1 / 2 / 3)
+- most failing stage
+- most used mode
+- intensity distribution
+- retry rate per stage
+- fallback triggers (mode downgrade, intensity downgrade)
+
+────────────────────────────
+STEP 6 — AUDIT LOGGING SYSTEM
+────────────────────────────
+
+Every admin action MUST be logged:
+
+Log structure:
+{
+  action: string,
+  actor: "ceo | admin",
+  timestamp: number,
+  details: object
+}
+
+Track:
+- storage mode changes
+- migrations
+- system toggles
+- failed admin actions
+
+Store in:
+- PostgreSQL admin_logs table (preferred)
+- fallback JSON if DB unavailable
+
+────────────────────────────
+STEP 7 — FRONTEND CONTROL PANEL (CEO DASHBOARD V2)
+────────────────────────────
+
+Add UI sections:
+
+1. SYSTEM STATUS CARDS
+- backend health
+- DB mode
+- AI provider status
+- pipeline latency
+
+2. STORAGE CONTROL PANEL
+- toggle: JSON / PostgreSQL / Hybrid
+- migration button
+- warning confirmation modal
+
+3. PIPELINE ANALYTICS
+- stage performance bars
+- mode distribution chart
+- failure heatmap
+
+4. AUDIT LOG STREAM
+- real-time admin actions
+- filter by action type
+
+────────────────────────────
+STEP 8 — SAFETY GUARDS
+────────────────────────────
+
+- No admin action executes without authentication
+- No migration can run twice simultaneously
+- No storage toggle can leave system without fallback
+- No endpoint should crash backend if DB is down
+
+────────────────────────────
+FINAL OBJECTIVE:
+Turn IB AI into a fully observable, controllable AI system platform with:
+- real-time system visibility
+- safe storage control
+- migration management
+- pipeline diagnostics
+- audit compliance tracking
