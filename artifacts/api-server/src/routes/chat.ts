@@ -179,12 +179,17 @@ router.post(
       [...rawMessages].reverse().find((m) => m.role === "user")?.content ?? "";
     const sessionTitle = lastUserContent.slice(0, 60) || "New Chat";
 
-    // Load user memory for context injection — fire-and-forget safe fallback
+    // Load user memory for context injection — fire-and-forget safe fallback.
+    // Memory is secondary context only; conversation history remains primary.
     let memoryBlock: string | null = null;
     if (req.user?.userId) {
       try {
         const memMap = await getUserMemoryMap(req.user.userId);
+        const memCount = Object.keys(memMap).length;
         memoryBlock = buildMemoryBlock(memMap);
+        if (memCount > 0) {
+          logger.debug({ userId: req.user.userId, memCount }, "[chat] memory injected");
+        }
       } catch (memErr) {
         logger.warn({ err: memErr }, "[chat] memory load failed — continuing without it");
       }

@@ -16,7 +16,8 @@ import { db, userMemoryTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 
 export const MEMORY_LIMITS = {
-  maxEntriesPerUser: 50,
+  maxEntriesPerUser: 50,  // hard storage cap — oldest pruned on overflow
+  maxInjectedEntries: 20, // max entries injected into system prompt — prevents prompt bloat
   maxKeyLength: 80,
   maxValueLength: 500,
 } as const;
@@ -160,32 +161,53 @@ export async function deleteMemory(userId: string, key: string): Promise<boolean
 }
 
 /**
- * Clear all memory entries for a user.
+ * Clear all memory entries for a user. Uses a single bulk delete.
  */
 export async function clearUserMemory(userId: string): Promise<number> {
-  const rows = await db
-    .select({ id: userMemoryTable.id })
+  // Count first so we can return the number cleared
+  const [{ total }] = await db
+    .select({ total: count() })
     .from(userMemoryTable)
     .where(eq(userMemoryTable.userId, userId));
 
-  for (const row of rows) {
-    await db.delete(userMemoryTable).where(eq(userMemoryTable.id, row.id));
-  }
+  if (total === 0) return 0;
 
-  logger.debug({ userId, cleared: rows.length }, "[memory] cleared all entries");
-  return rows.length;
+  await db.delete(userMemoryTable).where(eq(userMemoryTable.userId, userId));
+
+  logger.debug({ userId, cleared: total }, "[memory] cleared all entries");
+  return total;
 }
 
 // ── Prompt injection ──────────────────────────────────────────────────────────
 
 /**
  * Build a compact memory block suitable for injection into the system prompt.
- * Returns null if no memories exist (no injection needed).
+ *
+ * Rules:
+ *   - Returns null when no memories exist — no injection overhead.
+ *   - Caps at MEMORY_LIMITS.maxInjectedEntries (most recently updated) to prevent
+ *     prompt bloat. Storage cap (50) is separate from injection cap (20).
+ *   - Includes a usage note so the model applies context naturally, not robotically.
+ *
+ * @param map  key→value record returned by getUserMemoryMap (newest-first order).
+ * @returns    Formatted string to append to the system prompt, or null.
  */
 export function buildMemoryBlock(map: Record<string, string>): string | null {
   const entries = Object.entries(map);
   if (entries.length === 0) return null;
 
-  const lines = entries.map(([k, v]) => `- ${k}: ${v}`).join("\n");
-  return `## What I remember about you\n${lines}`;
+  // map is already ordered newest-first from getUserMemoryMap (DESC updatedAt).
+  // Take only the most recently updated entries up to the injection cap.
+  const capped = entries.slice(0, MEMORY_LIMITS.maxInjectedEntries);
+
+  const lines = capped.map(([k, v]) => `- ${k}: ${v}`).join("\n");
+
+  // Usage note steers the model to apply context naturally rather than
+  // robotically citing it ("As I recall you mentioned...").
+  return [
+    "## User Context",
+    "Use the following known preferences and facts to personalize your responses naturally.",
+    "Do not explicitly cite or reference these entries unless directly relevant.",
+    lines,
+  ].join("\n");
 }

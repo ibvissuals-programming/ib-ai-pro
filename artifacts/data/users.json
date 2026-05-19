@@ -241,5 +241,14 @@
     "credits": 6,
     "lastReset": 1779143969419,
     "createdAt": 1779143969419
+  },
+  {
+    "id": "8464ba47-7170-4646-af6c-c3f80fb26e7c",
+    "username": "memaudit",
+    "passwordHash": "42eb73701b2d8c7f2b932cc65ac58525:b6eea347326e2bc17dfaa4ba356be72be9063373b0564d5effe11b339ce175c3adcaa95fc093167ff352af82abdbc520f2a16309a54e8dc38b5dc5e73176567e",
+    "role": "free",
+    "credits": 7,
+    "lastReset": 1779223502809,
+    "createdAt": 1779223502809
   }
 ]
