@@ -636,23 +636,31 @@ export function buildStrongInstruction(
     case "CINEMATIC_EDIT": {
       const extremeLine =
         intensity === "EXTREME"
-          ? `Apply EXTREME cinematic transformation — this must look like a frame from a $200M Hollywood production.`
+          ? `RENDER ENGINE — EXTREME RE-SYNTHESIS: re-generate this image as a frame from a $200M Hollywood production.`
           : intensity === "LOW" || intensity === "MEDIUM"
-          ? `Apply strong visible cinematic transformation — a clear and professional upgrade from the input.`
-          : `Apply powerful Hollywood-grade cinematic transformation.`;
+          ? `RENDER ENGINE — FULL RE-SYNTHESIS: re-generate this image with strong cinematic visual re-rendering.`
+          : `RENDER ENGINE — CINEMATIC RE-SYNTHESIS: re-generate this image with Hollywood-grade visual re-rendering.`;
       return (
-        `${extremeLine} Edit: ${p}. ` +
-        `LIGHTING: Physically restructure the lighting — apply a dramatic 3-point setup with a powerful directional key light, ` +
-        `controlled fill that shapes shadow depth, and a strong rim/backlight that clearly separates subject from background. ` +
-        `Lighting direction and quality MUST be visibly different from the input. ` +
-        `COLOR GRADE: Apply a strong professional film color palette — deep cool or teal shadows, warm neutral skin tones, ` +
-        `controlled luminous highlights. The overall color temperature and mood must be clearly shifted from the input. ` +
-        `CONTRAST: Shape an aggressive HDR contrast curve — deep crushed blacks, bright luminous highlights, rich cinematic midtone depth. ` +
-        `The tonal range must be dramatically broader and richer than the input. ` +
-        `ATMOSPHERE: Add subtle anamorphic lens bloom on highlights and light organic film grain for cinematic realism. ` +
-        `This must look physically relit and graded by a Hollywood cinematographer — ` +
-        `NOT a social media filter, NOT a subtle adjustment, NOT a near-identical output. ` +
-        `Subject identity, face, clothing, logos, and pose must remain completely unchanged.` +
+        `${extremeLine} Target instruction: ${p}. ` +
+        `\n\nRENDER ENGINE ANTI-FILTER RULE: Do NOT apply a color filter, Lightroom preset, or adjustment layer. ` +
+        `Do NOT perform pixel-preserving corrections. ` +
+        `RE-SYNTHESIZE the entire visual output — re-generate lighting, color, exposure, and atmosphere from scratch. ` +
+        `\n\nLIGHTING RE-DESIGN: Completely restructure the scene lighting. Re-design a dramatic 3-point setup: ` +
+        `powerful directional key light from a new angle, controlled fill to shape shadow depth, ` +
+        `strong rim/backlight that clearly separates subject from background. ` +
+        `The light direction and quality in the output MUST be materially different from the input — not a brightness change. ` +
+        `\n\nCOLOR RE-GENERATION: Re-synthesize the color palette from scratch using a strong cinematic film grade. ` +
+        `Choose from: teal-orange Hollywood grade, bleach bypass, warm editorial Kodak palette, cold moody Nordic look, ` +
+        `or rich film emulation. The overall color temperature and hue balance MUST be clearly different from the input. ` +
+        `\n\nCONTRAST RE-RENDER: Fully re-render the tonal curve. Apply a deep cinematic S-curve: ` +
+        `crushed rich blacks, luminous controlled highlights, bold midtone separation. ` +
+        `The tonal range MUST be dramatically broader and more cinematic than the input. ` +
+        `\n\nATMOSPHERE RE-CREATION: Re-synthesize the image's atmosphere — add subtle anamorphic lens bloom on highlights, ` +
+        `light organic film grain, and cinematic depth. The emotional/cinematic feel MUST be clearly different. ` +
+        `\n\nFINAL CHECK: The output must look like a Hollywood cinematographer physically relit and re-graded this scene — ` +
+        `NOT a social media filter, NOT a pixel-adjusted copy, NOT a near-identical enhanced version. ` +
+        `If it resembles the input with adjustments applied → it is a render failure. ` +
+        `\n\nIDENTITY LOCK (absolute): Subject face, identity, bone structure, pose, clothing, and logos must remain unchanged.` +
         VARIANCE_ENFORCEMENT_SUFFIX
       );
     }

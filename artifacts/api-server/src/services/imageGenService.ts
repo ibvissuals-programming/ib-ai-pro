@@ -486,19 +486,21 @@ const GEMINI_IMG2IMG_MODEL = "gemini-2.5-flash-image";
 
 // ── IMG2IMG MASTER CONTRACT ───────────────────────────────────────────────────
 // This preamble is prepended to EVERY instruction sent to the img2img model.
-// It encodes the pixel-anchor / immutability contract that must hold for every
-// edit request, regardless of mode or intensity.
+// It encodes the RENDER_ENGINE_MODE contract: full visual re-synthesis with
+// structural identity locks. The model re-generates lighting, color, exposure,
+// tone, and atmosphere from scratch — constrained ONLY by face/pose/geometry.
 //
-// DO NOT remove or shorten this contract. It is the primary mechanism that
-// prevents the model from drifting into generative / reconstructive behavior.
+// DO NOT remove or shorten this contract. It is the primary enforcement
+// mechanism for maximum visual transformation with identity preservation.
 
-export const IMG2IMG_MASTER_CONTRACT = `You are a professional Lightroom-style image editing engine operating in STRICT IMG2IMG MODE ONLY.
+export const IMG2IMG_MASTER_CONTRACT = `You are a professional RENDER ENGINE operating in PRO_TRANSFORM_MODE / RENDER_ENGINE_MODE.
 
-Your job is to perform true photographic enhancement only on an existing image.
+Your job is to RE-SYNTHESIZE the visual output of the input image — re-generating lighting, color, exposure, tone, and atmosphere from scratch — while preserving ONLY structural elements (identity, pose, scene geometry).
 
-You are NOT an image generator.
-You are NOT a creative or generative model.
-You are NOT allowed to reconstruct, reinterpret, or regenerate images.
+You are NOT a Lightroom filter.
+You are NOT applying adjustment layers.
+You are NOT performing pixel-preserving overlay corrections.
+You are a RENDER ENGINE: you re-generate the image's visual appearance, constrained only by structural identity locks.
 
 ------------------------------------------------------------
 INSTRUCTION PRIORITY HIERARCHY (read this first)
@@ -601,25 +603,37 @@ FORBIDDEN:
 ✖ AI reconstruction of facial features
 
 ------------------------------------------------------------
-LIGHTROOM MODE (ONLY ALLOWED OPERATIONS)
+RENDER ENGINE MODE — REQUIRED RE-SYNTHESIS OPERATIONS
 ------------------------------------------------------------
 
-You may perform these photographic edit operations (at STRONG intensity per mode):
+You are re-synthesizing the visual output, not applying filter overlays.
 
-✔ Exposure correction — strong lifts, aggressive highlight recovery, intentional over/under exposure
-✔ Contrast shaping — deep S-curves, rich shadow depth, punchy highlights, cinematic tonal range
-✔ White balance and color temperature — warm to cool shifts, strong tonal color changes
-✔ Color grading — STRONG: cinematic palettes (teal-orange, bleach bypass, film emulation), mood transformation
-✔ Shadow/highlight shaping — dramatic shadow depth, luminous highlights, split toning
-✔ Sharpening and clarity — strong local contrast, texture enhancement, micro-contrast
-✔ Noise reduction — clean grain while preserving texture
-✔ Skin texture preservation (NO plastic smoothing) — enhance without destroying realism
-✔ Lighting transformation — direction changes, cinematic relighting, 3-point lighting simulation: ALL ALLOWED
-✔ Cinematic atmosphere — film grain, lens character, anamorphic quality: ALL ALLOWED
+REQUIRED re-generation targets (all must change strongly):
 
-STRICT RULE:
-You are editing pixels, NOT recreating the image.
-Make the edit STRONG and VISIBLE — a near-identical output is a failure.
+✔ LIGHTING — re-design from scratch: new direction, new key/fill/rim setup, new intensity and shadow shaping
+✔ COLOR PALETTE — re-generate: new tonal grade, new film palette (teal-orange, bleach bypass, Kodak film, etc.)
+✔ EXPOSURE ENVIRONMENT — re-render: new shadow depth, new highlight luminance, new tonal weight distribution
+✔ CONTRAST CURVE — re-synthesize: new S-curve, new black point, new white point, new midtone richness
+✔ CINEMATIC ATMOSPHERE — re-create: new mood, new film grain character, new atmospheric depth
+✔ SCENE LIGHTING SIMULATION — physically restructure: 3-point studio lighting, cinematic relighting
+✔ SKIN TEXTURE PRESERVATION — maintain: real texture, real pores — NO plastic or AI-smoothed output
+
+ANTI-FILTER RULE (CRITICAL):
+You are NOT applying a Lightroom preset.
+You are NOT running a Photoshop adjustment layer.
+You are NOT performing a histogram correction on existing pixels.
+You are NOT overlaying a color grade on top of the original.
+
+You ARE re-synthesizing the image from its latent representation with new visual parameters.
+
+STRICTLY FORBIDDEN rendering approaches:
+✖ Lightroom-style pass on original image (pixel-preserving adjustment)
+✖ Color overlay or tonal curve applied to unchanged pixels
+✖ Exposure-only correction that preserves all other image data
+✖ "Enhance original" behavior — output resembling input with adjustments
+✖ Filter-only output that looks like a social media preset
+
+MAKE THE EDIT STRONG AND FULLY RE-SYNTHESIZED — a filter-only result is a failure.
 
 ------------------------------------------------------------
 FORBIDDEN OPERATIONS
@@ -706,11 +720,13 @@ TYPE 1 — NO-OP ESCALATED RETRY (near-identical output was the failure):
 → Push ALL 5 transformation axes to EXTREME: lighting, color, contrast, exposure, mood.
 → Do NOT produce a near-identical output again.
 
-TYPE 2 — QUALITY-FAIL PRESERVATION RETRY (identity drift or structural change was the failure):
-→ The previous attempt changed face, pose, or background geometry.
-→ ONLY apply: exposure correction, contrast adjustment, white balance correction.
-→ NO stylistic enhancement, color grading, or cinematic effects on this type of retry.
-→ The goal is structural safety — not visual transformation.
+TYPE 2 — IDENTITY-LOCKED STRONG RETRY (identity drift or structural change was the failure):
+→ The previous attempt changed face, pose, or background geometry. Do NOT repeat that.
+→ Apply MAXIMUM IDENTITY LOCK: same face geometry, same pose, same scene layout — absolutely fixed.
+→ WITHIN the identity lock: re-synthesize ALL visual elements at FULL STRENGTH.
+→ Lighting MUST be re-designed. Color MUST be re-graded. Contrast MUST be re-shaped. Mood MUST change.
+→ This is NOT a minimal edit. It is a full re-synthesis with structural constraints.
+→ Filter-only output on this retry = FAILURE.
 
 ------------------------------------------------------------
 FAIL-SAFE BEHAVIOR (PRO_EDIT_MODE)
@@ -776,41 +792,41 @@ PRO_EDIT_MODE MAXIMUM enforcement:
 → ALL 5 axes must be satisfied visibly — maximum transformation strength required
 
 ------------------------------------------------------------
-FINAL OUTPUT GOAL
+FINAL OUTPUT GOAL (RENDER_ENGINE_MODE)
 ------------------------------------------------------------
 
-The final image must be:
+The final image must be a FULL RE-SYNTHESIS with structural constraints:
 
-✔ Structurally identical to input — same person, same pose, same background objects
-✔ VISUALLY TRANSFORMED — clearly different lighting, tone, grading, and mood than input
-✔ Strongly color graded — professional Lightroom or cinematic DaVinci-quality enhancement
-✔ Realistic and camera-authentic — looks like a real DSLR or cinema camera edit
+✔ STRUCTURALLY IDENTICAL — same person, same pose, same background objects, same geometry
+✔ VISUALLY RE-SYNTHESIZED — lighting RE-DESIGNED, color RE-GRADED, exposure RE-RENDERED, mood RE-CREATED
+✔ MATERIALLY DIFFERENT — the viewer must immediately perceive a different visual world: new light, new color, new atmosphere
+✔ CINEMA/STUDIO QUALITY — looks like a Hollywood color grade or DaVinci Resolve render, not an Instagram filter
+✔ PHYSICALLY BELIEVABLE — real lighting physics, real skin texture, real camera character
 
-CRITICAL: Near-identical output = FAILURE.
-The edit MUST produce a clearly visible visual transformation.
-"Safe mode" output (minimal change) is NOT acceptable. It is an edit failure.
+FAILURE CONDITIONS — these outputs are INVALID and will trigger regeneration:
 
-NOT:
-
-✖ AI-generated plastic (over-smooth, reconstructed faces)
-✖ Structurally reconstructed (identity changed, background replaced)
-✖ Near-identical to input (no-op output is a failure, not a safe result)
+✖ Output looks like original with color/contrast adjustments applied
+✖ Output resembles a Lightroom preset run over the original pixels
+✖ Output feels like a social media filter overlay
+✖ Near-identical output — the viewer sees the same image with slight changes
+✖ Filter-only output — cosmetic tweaks without true visual re-synthesis
+✖ AI-generated plastic faces — over-smoothed, texture-erased, reconstructed features
+✖ Identity drift — different person, changed face structure, altered pose
 
 ------------------------------------------------------------
 SYSTEM ROLE SUMMARY
 ------------------------------------------------------------
 
-You are NOT a generator.
-
-You are a professional photographic enhancement engine operating in PRO_EDIT_MODE.
+You are a RENDER ENGINE operating in PRO_TRANSFORM_MODE / RENDER_ENGINE_MODE.
 
 Your job — in strict priority order:
-→ [1 — ABSOLUTE] Preserve structural integrity: face identity, pose, background geometry
-→ [2 — REQUIRED] Transform visual appearance STRONGLY: lighting, tone, color, mood, contrast
-→ [3 — NEVER] Do not reconstruct, regenerate, or replace any structural element
+→ [1 — ABSOLUTE] Preserve structural identity: face geometry, pose, background layout — these are identity locks, not excuses for conservative output
+→ [2 — REQUIRED] RE-SYNTHESIZE visual appearance: lighting re-designed, color re-graded, exposure re-rendered, atmosphere re-created at MAXIMUM STRENGTH
+→ [3 — NEVER] Do not reproduce a filter-only or pixel-preserving output — that is a failure
 
-"Preserve structure" = preserve who/what/where. It does NOT restrict how it looks.
-Lighting and color must change. Near-identical output is a failure, not a safe result.
+"Preserve structure" = preserve WHO and WHERE — face geometry, pose, scene objects.
+It does NOT mean preserve lighting, color, tone, atmosphere, or photographic grade.
+Those MUST be fully re-synthesized. Filter-only output = FAILURE. Near-identical output = FAILURE.
 
 ------------------------------------------------------------
 SPECIFIC EDIT INSTRUCTION:
@@ -1042,22 +1058,29 @@ function buildVerificationPrompt(
   userPrompt: string,
 ): string {
   const tierRules: Record<VerificationTier, string> = {
-    STRICT: `STRICT CHECKS — structural integrity only (PRO_EDIT_MODE v5):
-1. FACE/IDENTITY: If a person is present, they must be the same person (same face shape, bone structure, skin tone). A different person or face replacement = INVALID.
-2. BACKGROUND: The background must be the same environment — same objects, same spatial layout. A completely replaced or regenerated background scene = INVALID.
-3. OBJECTS: Same main objects must be present in approximately the same positions. Objects being inserted or removed (not requested) = INVALID.
-4. POSE: Subject's pose and body position must be preserved. A changed pose = INVALID.
-5. COMPOSITION: Same framing and crop. A drastically different camera angle = INVALID.
+    STRICT: `STRICT CHECKS — structural identity only (RENDER_ENGINE_MODE):
 
-EXPLICITLY ALLOWED — do NOT fail for any of these (they are expected, valid edits):
-✔ Lighting changes — directional light shifts, 3-point lighting, relighting
-✔ Exposure adjustments — lifted shadows, recovered highlights, brightened or darkened image
-✔ Contrast changes — deep shadows, bright highlights, HDR-style tonal curves
-✔ Color grading — teal-orange, warm tones, cool tones, cinematic palette shifts
-✔ Cinematic tonal shifts — film grain, anamorphic lens effects, color temperature
-✔ Clarity and sharpness improvements — local sharpening, texture enhancement
-✔ Mood and atmosphere changes — image looks more dramatic, moody, or cinematic
-✔ The image appearing more polished, professional, or AI-enhanced in tonal quality`,
+You are verifying STRUCTURAL PRESERVATION ONLY. Visual transformation is the goal — do NOT penalize it.
+
+STRUCTURAL CHECKS (these are the ONLY things you may fail):
+1. FACE/IDENTITY: If a person is present, they must be the same person — same bone structure, same face geometry. A replaced or clearly different face = INVALID.
+2. BACKGROUND GEOMETRY: Same objects in same spatial positions. A completely different scene or replaced environment = INVALID.
+3. OBJECTS: Same main objects present. Objects inserted or removed without instruction = INVALID.
+4. POSE: Subject's pose and body position must be preserved. A clearly different pose = INVALID.
+5. COMPOSITION: Same framing and camera angle. A drastically different crop = INVALID.
+
+EXPLICITLY REQUIRED — DO NOT FAIL FOR ANY OF THESE (they are the edit goal, not violations):
+✔ LIGHTING REDESIGN — new directional light, 3-point relighting, dramatic shadow reshaping, rim lighting: ALL VALID
+✔ COMPLETE COLOR TRANSFORMATION — teal-orange grade, bleach bypass, warm or cool film palette, entirely different color mood: ALL VALID
+✔ FULL EXPOSURE RE-RENDER — strongly lifted shadows, recovered highlights, intentional over/underexposure: ALL VALID
+✔ CONTRAST RESHAPE — deep crushed blacks, luminous bright highlights, cinematic S-curve: ALL VALID
+✔ ATMOSPHERE RECREATION — image dramatically more moody, dramatic, warm, dark, or cinematic: ALL VALID
+✔ FILM GRAIN AND LENS CHARACTER — grain, anamorphic quality, lens character: ALL VALID
+✔ DRAMATIC VISUAL DIFFERENCE — output looks materially different from input in light/color/mood: EXPECTED AND VALID
+
+CRITICAL VERIFIER RULE:
+If the output is visually very different from the input in lighting, color, or mood → that is CORRECT behavior, NOT a failure.
+Only fail if the PERSON or SCENE STRUCTURE changed. Visual re-synthesis is mandatory.`,
 
     IDENTITY: `IDENTITY CHECKS — must pass:
 1. FACE/IDENTITY: If a person is present, they must be recognizably the same person. Identity drift = INVALID.
@@ -1489,12 +1512,45 @@ export async function editImage(
     "[imageEdit] pipeline entered — IMG2IMG ONLY + LAYER 8 quality enforcement",
   );
 
-  // ── LAYER 4: Build instructions (PRO_EDIT_MODE v6) ───────────────────────
+  // ── RENDER ENGINE PROMPT PREPROCESSOR ─────────────────────────────────────
+  // Convert passive/filter-style prompt signals into re-synthesis directives.
+  // "enhance", "improve", "fix", "adjust" are Lightroom-filter verbs that signal
+  // pixel-level adjustment intent to the model. Convert them to re-render verbs
+  // so the model treats the edit as full re-synthesis from the start.
+  const FILTER_VERB_PATTERNS: [RegExp, string][] = [
+    [/\benhance\b/gi,                  "re-synthesize cinematically"],
+    [/\bimprove\b/gi,                  "re-render with cinematic quality"],
+    [/\badjust\b/gi,                   "re-generate"],
+    [/\bfix\b/gi,                      "re-synthesize and correct"],
+    [/\bclean up\b/gi,                 "re-synthesize cleanly"],
+    [/\bmake it (better|look better)\b/gi, "re-render with maximum cinematic quality"],
+    [/\btouch up\b/gi,                 "re-synthesize"],
+    [/\bedit\b/gi,                     "re-render"],
+  ];
+
+  let renderedPrompt = prompt;
+  for (const [pattern, replacement] of FILTER_VERB_PATTERNS) {
+    renderedPrompt = renderedPrompt.replace(pattern, replacement);
+  }
+
+  if (renderedPrompt !== prompt) {
+    logger.info(
+      {
+        stage:          "RENDER ENGINE PREPROCESSOR",
+        originalPrompt: prompt.slice(0, 80),
+        renderedPrompt: renderedPrompt.slice(0, 80),
+        converted:      true,
+      },
+      "[imageEdit] RENDER ENGINE PREPROCESSOR — filter verbs converted to re-synthesis directives",
+    );
+  }
+
+  // ── LAYER 4: Build instructions (RENDER_ENGINE_MODE) ──────────────────────
   // Cinematic Director Layer runs first — converts vague/short prompts into
-  // explicit visual transformation briefs (lighting direction, color grade style,
+  // explicit visual re-synthesis briefs (lighting design, color grade target,
   // exposure strategy, mood target). Structural modes are passed through unchanged.
   // Director brief feeds into buildStrongInstruction for full mode-specific build.
-  const directorBrief: string = buildCinematicDirectorBrief(prompt, mode);
+  const directorBrief: string = buildCinematicDirectorBrief(renderedPrompt, mode);
 
   logger.info(
     {
