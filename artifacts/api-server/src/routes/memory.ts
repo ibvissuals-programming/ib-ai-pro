@@ -31,8 +31,10 @@ const memoryPolicy = policyEngine({
 });
 
 const SetMemorySchema = z.object({
-  key:   z.string().min(1).max(MEMORY_LIMITS.maxKeyLength),
-  value: z.string().min(1).max(MEMORY_LIMITS.maxValueLength),
+  key:        z.string().min(1).max(MEMORY_LIMITS.maxKeyLength),
+  value:      z.string().min(1).max(MEMORY_LIMITS.maxValueLength),
+  type:       z.enum(["preference", "project", "behavior", "goal"]).optional(),
+  confidence: z.enum(["high", "medium"]).optional(),  // low is never accepted via API
 });
 
 // ── GET /api/memory ───────────────────────────────────────────────────────────
@@ -68,10 +70,10 @@ router.post("/memory", memoryPolicy, async (req: Request, res: Response) => {
     return;
   }
 
-  const { key, value } = parsed.data;
+  const { key, value, type, confidence } = parsed.data;
 
   try {
-    const entry = await setMemory(userId, key, value);
+    const entry = await setMemory(userId, key, value, type, confidence);
     res.status(200).json({ ok: true, entry });
   } catch (err) {
     logger.error({ err }, "[memory] POST failed");

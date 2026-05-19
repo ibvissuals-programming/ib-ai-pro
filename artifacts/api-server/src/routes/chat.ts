@@ -15,6 +15,7 @@ import { policyEngine, deductRequestCredits } from "../middleware/policyEngine";
 import { CREDIT_COSTS } from "../lib/userStore";
 import { getOrCreateSession, saveMessagePair } from "../services/chatStore";
 import { getUserMemoryMap, buildMemoryBlock } from "../services/memoryStore";
+import { extractAndStoreMemory } from "../services/memoryExtractor";
 
 const router = Router();
 
@@ -181,10 +182,12 @@ router.post(
 
     // Load user memory for context injection — fire-and-forget safe fallback.
     // Memory is secondary context only; conversation history remains primary.
+    // memMap is also retained so the extractor can use it for dedup key hints.
     let memoryBlock: string | null = null;
+    let memMap: Record<string, string> = {};
     if (req.user?.userId) {
       try {
-        const memMap = await getUserMemoryMap(req.user.userId);
+        memMap = await getUserMemoryMap(req.user.userId);
         const memCount = Object.keys(memMap).length;
         memoryBlock = buildMemoryBlock(memMap);
         if (memCount > 0) {
@@ -248,11 +251,12 @@ router.post(
       if (streamSucceeded) {
         deductRequestCredits(req);
 
+        const userId = req.user?.userId;
+
         // Fire-and-forget persistence — never blocks the stream response.
         // Only runs when session was successfully resolved and there is content.
-        if (resolvedSessionId && req.user?.userId && lastUserContent) {
+        if (resolvedSessionId && userId && lastUserContent) {
           const providerResult = getLastProviderResult();
-          const userId = req.user.userId;
           const sid = resolvedSessionId;
 
           saveMessagePair({
@@ -264,6 +268,19 @@ router.post(
             fallbackUsed:     providerResult?.fallbackUsed ?? false,
             latencyMs:        providerResult?.latencyMs ?? null,
           }).catch((e: unknown) => logger.error({ err: e }, "[chat] message persist failed"));
+        }
+
+        // Fire-and-forget memory extraction — runs after [DONE], zero latency impact.
+        // Passes the full conversation including the just-completed assistant turn so
+        // the extractor has the most complete context for signal detection.
+        if (userId && accumContent) {
+          const fullTurn: Array<{ role: "user" | "assistant"; content: string }> = [
+            ...rawMessages,
+            { role: "assistant", content: accumContent },
+          ];
+          extractAndStoreMemory(userId, fullTurn, memMap).catch(
+            (e: unknown) => logger.warn({ err: e }, "[extractor] unhandled error"),
+          );
         }
       }
       res.end();

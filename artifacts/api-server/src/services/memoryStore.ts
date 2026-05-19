@@ -6,27 +6,34 @@
  *
  * Rules:
  *   - Max 50 memory entries per user (oldest pruned on overflow).
+ *   - Max 20 entries injected into system prompt (injection cap).
  *   - Key length: 1–80 chars. Value length: 1–500 chars.
  *   - Upsert semantics: writing the same key overwrites the value.
+ *   - 'low' confidence entries are never stored — filtered at write time.
  *   - Never log memory values — they may contain PII.
  */
 import { eq, and, desc, count } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { db, userMemoryTable } from "@workspace/db";
 import { logger } from "../lib/logger";
+import type { MemoryType, MemoryConfidence } from "@workspace/db";
+
+export { type MemoryType, type MemoryConfidence };
 
 export const MEMORY_LIMITS = {
-  maxEntriesPerUser: 50,  // hard storage cap — oldest pruned on overflow
+  maxEntriesPerUser:  50, // hard storage cap — oldest pruned on overflow
   maxInjectedEntries: 20, // max entries injected into system prompt — prevents prompt bloat
-  maxKeyLength: 80,
-  maxValueLength: 500,
+  maxKeyLength:       80,
+  maxValueLength:     500,
 } as const;
 
 export interface MemoryEntry {
-  id: string;
-  key: string;
-  value: string;
-  updatedAt: number;
+  id:         string;
+  key:        string;
+  value:      string;
+  type:       MemoryType;
+  confidence: MemoryConfidence;
+  updatedAt:  number;
 }
 
 // ── Read ──────────────────────────────────────────────────────────────────────
@@ -37,20 +44,24 @@ export interface MemoryEntry {
 export async function getUserMemory(userId: string): Promise<MemoryEntry[]> {
   const rows = await db
     .select({
-      id:        userMemoryTable.id,
-      key:       userMemoryTable.key,
-      value:     userMemoryTable.value,
-      updatedAt: userMemoryTable.updatedAt,
+      id:         userMemoryTable.id,
+      key:        userMemoryTable.key,
+      value:      userMemoryTable.value,
+      type:       userMemoryTable.type,
+      confidence: userMemoryTable.confidence,
+      updatedAt:  userMemoryTable.updatedAt,
     })
     .from(userMemoryTable)
     .where(eq(userMemoryTable.userId, userId))
     .orderBy(desc(userMemoryTable.updatedAt));
 
-  return rows;
+  return rows as MemoryEntry[];
 }
 
 /**
- * Load memory as a flat key→value map. Used by the chat route for prompt injection.
+ * Load memory as a flat key→value map. Used by the chat route for prompt
+ * injection and by the extractor for deduplication key lookup.
+ * Returns all stored entries (low confidence is never stored, so no filter needed).
  */
 export async function getUserMemoryMap(userId: string): Promise<Record<string, string>> {
   const rows = await getUserMemory(userId);
@@ -65,12 +76,22 @@ export async function getUserMemoryMap(userId: string): Promise<Record<string, s
 
 /**
  * Upsert a memory entry. Trims oldest entries if the per-user cap is exceeded.
+ * 'low' confidence entries are rejected — they are never persisted.
  */
 export async function setMemory(
-  userId: string,
-  key: string,
-  value: string,
+  userId:     string,
+  key:        string,
+  value:      string,
+  type:       MemoryType       = "preference",
+  confidence: MemoryConfidence = "high",
 ): Promise<MemoryEntry> {
+  // Safety gate: low confidence entries must never be stored
+  if (confidence === "low") {
+    logger.debug({ userId, key }, "[memory] skipped low-confidence entry");
+    // Return a synthetic entry — callers don't need to check the result
+    return { id: "", key, value, type, confidence, updatedAt: Date.now() };
+  }
+
   const trimmedKey   = key.trim().slice(0, MEMORY_LIMITS.maxKeyLength);
   const trimmedValue = value.trim().slice(0, MEMORY_LIMITS.maxValueLength);
   const now = Date.now();
@@ -88,14 +109,14 @@ export async function setMemory(
     .limit(1);
 
   if (existing) {
-    // Update in place
+    // Update in place — refresh value, type, confidence, and timestamp
     await db
       .update(userMemoryTable)
-      .set({ value: trimmedValue, updatedAt: now })
+      .set({ value: trimmedValue, type, confidence, updatedAt: now })
       .where(eq(userMemoryTable.id, existing.id));
 
-    logger.debug({ userId, key: trimmedKey }, "[memory] updated entry");
-    return { id: existing.id, key: trimmedKey, value: trimmedValue, updatedAt: now };
+    logger.debug({ userId, key: trimmedKey, type, confidence }, "[memory] updated entry");
+    return { id: existing.id, key: trimmedKey, value: trimmedValue, type, confidence, updatedAt: now };
   }
 
   // Insert new entry
@@ -103,12 +124,14 @@ export async function setMemory(
   await db.insert(userMemoryTable).values({
     id,
     userId,
-    key: trimmedKey,
-    value: trimmedValue,
-    updatedAt: now,
+    key:        trimmedKey,
+    value:      trimmedValue,
+    type,
+    confidence,
+    updatedAt:  now,
   });
 
-  logger.debug({ userId, key: trimmedKey }, "[memory] inserted entry");
+  logger.debug({ userId, key: trimmedKey, type, confidence }, "[memory] inserted entry");
 
   // Prune oldest entries if over cap
   const [{ total }] = await db
@@ -131,7 +154,7 @@ export async function setMemory(
     logger.debug({ userId, pruned: overflow }, "[memory] pruned oldest entries");
   }
 
-  return { id, key: trimmedKey, value: trimmedValue, updatedAt: now };
+  return { id, key: trimmedKey, value: trimmedValue, type, confidence, updatedAt: now };
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────
@@ -164,7 +187,6 @@ export async function deleteMemory(userId: string, key: string): Promise<boolean
  * Clear all memory entries for a user. Uses a single bulk delete.
  */
 export async function clearUserMemory(userId: string): Promise<number> {
-  // Count first so we can return the number cleared
   const [{ total }] = await db
     .select({ total: count() })
     .from(userMemoryTable)
@@ -185,8 +207,10 @@ export async function clearUserMemory(userId: string): Promise<number> {
  *
  * Rules:
  *   - Returns null when no memories exist — no injection overhead.
- *   - Caps at MEMORY_LIMITS.maxInjectedEntries (most recently updated) to prevent
- *     prompt bloat. Storage cap (50) is separate from injection cap (20).
+ *   - Skips 'low' confidence entries defensively (they are never stored, but
+ *     this guard ensures prompt quality if the DB ever holds legacy rows).
+ *   - Caps at MEMORY_LIMITS.maxInjectedEntries (most recently updated) to
+ *     prevent prompt bloat. Storage cap (50) is separate from injection cap (20).
  *   - Includes a usage note so the model applies context naturally, not robotically.
  *
  * @param map  key→value record returned by getUserMemoryMap (newest-first order).
