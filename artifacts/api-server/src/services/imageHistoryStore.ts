@@ -17,6 +17,8 @@ import { promises as fs } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { logger } from "../lib/logger";
+import { USE_POSTGRES } from "../lib/storageFlag";
+import { pgLoadAllHistory, pgSaveEntry, pgDeleteEntry } from "./pgImageHistoryStore";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "../../data");
@@ -75,6 +77,16 @@ function entryToPublic(entry: HistoryEntry): HistoryEntryPublic {
 
 async function loadHistory(): Promise<HistoryEntry[]> {
   if (cache !== null) return cache;
+
+  if (USE_POSTGRES) {
+    try {
+      cache = await pgLoadAllHistory() as HistoryEntry[];
+      logger.info({ count: cache.length }, "[imageHistory] Loaded from PostgreSQL");
+      return cache;
+    } catch (err) {
+      logger.error({ err }, "[imageHistory] PG load failed — JSON fallback");
+    }
+  }
 
   let raw: string;
   try {
@@ -217,6 +229,8 @@ export async function saveToHistory(params: {
   entries.push(entry);
 
   // Trim: keep max MAX_PER_USER per user (remove oldest)
+  // Track evicted IDs so PG rows can be deleted too.
+  const evictedIds: string[] = [];
   const userEntries = entries.filter((e) => e.userId === userId);
   if (userEntries.length > MAX_PER_USER) {
     const toRemove = userEntries
@@ -225,6 +239,7 @@ export async function saveToHistory(params: {
     for (const old of toRemove) {
       const idx = entries.findIndex((e) => e.id === old.id);
       if (idx !== -1) entries.splice(idx, 1);
+      evictedIds.push(old.id);
       // Delete image file (fire and forget)
       fs.unlink(path.join(IMAGES_DIR, old.imageFile)).catch(() => {});
     }
@@ -238,12 +253,26 @@ export async function saveToHistory(params: {
     for (const old of globalOld) {
       const idx = entries.findIndex((e) => e.id === old.id);
       if (idx !== -1) entries.splice(idx, 1);
+      evictedIds.push(old.id);
       fs.unlink(path.join(IMAGES_DIR, old.imageFile)).catch(() => {});
     }
   }
 
   cache = entries;
-  await persistHistory(entries);
+
+  if (USE_POSTGRES) {
+    try {
+      await pgSaveEntry(entry);
+      for (const evId of evictedIds) {
+        await pgDeleteEntry(evId);
+      }
+    } catch (pgErr) {
+      logger.warn({ pgErr }, "[imageHistory] PG save failed — JSON fallback");
+      await persistHistory(entries);
+    }
+  } else {
+    await persistHistory(entries);
+  }
 
   logger.info(
     { userId, type, mode, intensity, id },
@@ -284,7 +313,17 @@ export async function deleteHistoryEntry(
 
   const [removed] = entries.splice(idx, 1);
   cache = entries;
-  await persistHistory(entries);
+
+  if (USE_POSTGRES) {
+    try {
+      await pgDeleteEntry(entryId);
+    } catch (pgErr) {
+      logger.warn({ pgErr }, "[imageHistory] PG delete failed — JSON fallback");
+      await persistHistory(entries);
+    }
+  } else {
+    await persistHistory(entries);
+  }
 
   // Delete image file (fire and forget)
   fs.unlink(path.join(IMAGES_DIR, removed.imageFile)).catch(() => {});

@@ -17,6 +17,8 @@ import { promises as fs } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { logger } from "./logger";
+import { USE_POSTGRES } from "./storageFlag";
+import { pgLoadAllUsers, pgPersistAllUsers } from "./pgUserStore";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "../../data");
@@ -128,6 +130,16 @@ async function persistStore(): Promise<void> {
   try {
     await prev; // wait for any in-progress write to finish
 
+    if (USE_POSTGRES) {
+      try {
+        await pgPersistAllUsers(Array.from(store.values()));
+        return;
+      } catch (pgErr) {
+        logger.warn({ pgErr }, "[userStore] PG write failed — JSON fallback");
+      }
+    }
+
+    // JSON atomic write (primary when PG disabled, fallback when PG fails)
     await fs.mkdir(DATA_DIR, { recursive: true });
     const data = JSON.stringify(Array.from(store.values()), null, 2);
     const tmp = USERS_FILE + ".tmp";
@@ -162,6 +174,19 @@ function scheduleSave(): void {
 // ── Load with schema validation ───────────────────────────────────────────────
 
 export async function loadUserStore(): Promise<void> {
+  if (USE_POSTGRES) {
+    try {
+      const users = await pgLoadAllUsers();
+      for (const u of users) {
+        store.set(u.id, u);
+      }
+      logger.info({ count: store.size }, "[userStore] Loaded from PostgreSQL");
+      return;
+    } catch (err) {
+      logger.error({ err }, "[userStore] PG load failed — JSON fallback");
+    }
+  }
+
   let raw: string;
   try {
     raw = await fs.readFile(USERS_FILE, "utf8");

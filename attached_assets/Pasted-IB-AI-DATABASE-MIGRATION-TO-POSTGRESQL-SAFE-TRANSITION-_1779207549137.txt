@@ -1,0 +1,151 @@
+IB AI — DATABASE MIGRATION TO POSTGRESQL (SAFE TRANSITION MODE)
+
+MISSION:
+Migrate all persistent JSON-based storage (users + image history) to PostgreSQL using existing Drizzle setup WITHOUT breaking runtime, auth, or pipeline behavior.
+
+CRITICAL RULES:
+- DO NOT change AI pipeline logic (image generation/editing stays untouched)
+- DO NOT modify frontend behavior
+- DO NOT alter auth system
+- DO NOT remove JSON fallback until DB is fully verified
+- DO NOT introduce new architecture layers
+
+This is a SAFE MIGRATION with fallback continuity.
+
+────────────────────────────
+STEP 1 — CURRENT STORAGE AUDIT
+────────────────────────────
+Identify and confirm:
+- userStore.json usage locations
+- image-history.json / imageHistoryStore usage
+- read/write patterns
+- atomic write logic
+- schema validation logic
+
+Map all usage points before modifying anything.
+
+────────────────────────────
+STEP 2 — DATABASE SCHEMA ALIGNMENT
+────────────────────────────
+Use existing Drizzle schema in /db.
+
+Ensure tables exist or are created:
+- users
+- image_history
+
+Verify fields match current JSON structure:
+Users:
+- id
+- username
+- role
+- credits
+- createdAt
+- lastActive
+
+Image history:
+- id
+- userId
+- prompt
+- imageUrl
+- mode
+- intensity
+- timestamp
+- metadata (JSON safe field)
+
+DO NOT remove existing fields.
+
+────────────────────────────
+STEP 3 — CREATE ADAPTER LAYER (CRITICAL)
+────────────────────────────
+DO NOT rewrite system calls directly.
+
+Instead:
+Create a storage abstraction layer:
+
+UserStorageAdapter:
+- getUser(id)
+- saveUser(user)
+- getAllUsers()
+- updateUser(id, patch)
+
+ImageHistoryAdapter:
+- addImage(record)
+- getUserImages(userId)
+- getRecentImages(limit)
+- deleteOldImages()
+
+This ensures:
+→ system keeps working during migration
+→ fallback to JSON remains possible
+
+────────────────────────────
+STEP 4 — HYBRID MODE (SAFETY MODE)
+────────────────────────────
+Implement dual-write strategy:
+
+ON WRITE:
+1. Write to PostgreSQL first
+2. If DB success → optionally mirror to JSON (temporary)
+3. If DB fails → fallback to JSON only
+
+ON READ:
+1. Try PostgreSQL first
+2. If DB empty or error → fallback to JSON
+
+This guarantees ZERO data loss.
+
+────────────────────────────
+STEP 5 — MIGRATION SCRIPT (ONE-TIME)
+────────────────────────────
+Create a safe migration script:
+
+- read all users from JSON
+- insert into PostgreSQL (ignore duplicates safely)
+- read image history JSON
+- insert into image_history table
+
+Must be:
+- idempotent
+- retry-safe
+- non-destructive
+
+────────────────────────────
+STEP 6 — SYSTEM SWITCH FLAG
+────────────────────────────
+Add feature flag:
+
+USE_POSTGRES_STORAGE = false (default initially)
+
+Flow:
+- false → full JSON system (current behavior unchanged)
+- true → PostgreSQL active + JSON fallback disabled
+
+DO NOT enable automatically.
+
+────────────────────────────
+STEP 7 — VALIDATION CHECKS
+────────────────────────────
+After implementation:
+
+Check:
+- user creation works
+- image generation logs correctly to DB
+- admin panel reads users correctly
+- no crashes on DB disconnect
+- fallback triggers correctly
+
+────────────────────────────
+STEP 8 — FINAL OUTPUT REPORT
+────────────────────────────
+Return:
+
+1. Migration Status (READY / PARTIAL / BLOCKED)
+2. Tables Created / Verified
+3. Adapters Working (YES / NO)
+4. Dual-write Active (YES / NO)
+5. Risk Assessment
+6. Safe-to-enable flag recommendation
+
+────────────────────────────
+FINAL GOAL:
+Move IB AI from file-based persistence to PostgreSQL WITHOUT downtime, data loss, or breaking existing AI pipeline behavior.
