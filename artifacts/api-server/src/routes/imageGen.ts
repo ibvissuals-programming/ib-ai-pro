@@ -2,9 +2,9 @@
  * Image generation + editing routes — IB AI Assistant
  *
  * POST /api/image/generate  — text-to-image via FLUX (Pollinations)
- * POST /api/image/edit      — deterministic img2img ONLY
- *                             Single model: gemini-2.0-flash-preview-image-generation
- *                             No fallback. No text-to-image. Fail-fast on model error.
+ * POST /api/image/edit      — unified cinematic img2img pipeline
+ *                             Single model: gemini-2.5-flash-image
+ *                             Flow: INPUT → RENDER PROMPT → IMAGE MODEL → SIMPLE RETRY
  *
  * ISOLATION: These routes are fully independent of /api/chat and the Gemini
  * integration. They share no state, no handlers, and no response logic.
