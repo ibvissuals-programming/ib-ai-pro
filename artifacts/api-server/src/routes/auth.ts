@@ -31,6 +31,15 @@ import { signToken } from "../lib/token";
 import { requireAuth, requireNormalAuth } from "../middleware/requireAuth";
 import { rateLimit } from "../middleware/rateLimit";
 import { logger } from "../lib/logger";
+import { addAuditEntry } from "../lib/auditLog";
+import {
+  incLoginSuccess,
+  incLoginFailure,
+  incSignupSuccess,
+  incSignupFailure,
+  incAuthError,
+} from "../lib/statsCounter";
+import { recordLogin } from "../lib/activityTracker";
 
 const router = Router();
 
@@ -93,6 +102,11 @@ router.post(
       recoverySession: false,
     });
 
+    incSignupSuccess();
+    addAuditEntry("signup_success", `New account: ${user.username}`, {
+      username: user.username,
+      ip: req.ip ?? undefined,
+    });
     logger.info({ username: user.username, role: user.role }, "[auth] Registered");
 
     res.status(201).json({
@@ -198,6 +212,12 @@ router.post(
     const user = authenticateUser(username, password);
 
     if (!user) {
+      incLoginFailure();
+      incAuthError();
+      addAuditEntry("login_failure", `Login failed: ${username}`, {
+        username,
+        ip: req.ip ?? undefined,
+      });
       res.status(401).json({ error: "Invalid username or password" });
       return;
     }
@@ -209,6 +229,13 @@ router.post(
       recoverySession: false,
     });
 
+    incLoginSuccess();
+    addAuditEntry("login_success", `Login: ${user.username}`, {
+      username: user.username,
+      ip: req.ip ?? undefined,
+      metadata: { role: user.role },
+    });
+    recordLogin(user.id, user.username, user.role);
     logger.info({ username: user.username, role: user.role }, "[auth] Login");
 
     res.json({

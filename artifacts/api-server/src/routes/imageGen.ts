@@ -20,6 +20,13 @@ import { generateImage, editImage, getContractConfig, type EditResult } from "..
 import { logger } from "../lib/logger";
 import { policyEngine, deductRequestCredits, appendCreditHeaders } from "../middleware/policyEngine";
 import { CREDIT_COSTS } from "../lib/userStore";
+import { addAuditEntry } from "../lib/auditLog";
+import {
+  incImageGenerated,
+  incImageGenFailed,
+  incImageEdited,
+  incImageEditFailed,
+} from "../lib/statsCounter";
 
 const router = Router();
 
@@ -110,8 +117,18 @@ router.post(
       const b64Image = await generateImage(parsed.data.prompt, req.user?.userId);
       deductRequestCredits(req);
       appendCreditHeaders(req, res);
+      incImageGenerated();
+      addAuditEntry("image_generate_success", "Image generated", {
+        username: req.user?.username,
+        ip: req.ip ?? undefined,
+      });
       res.json({ b64Image, status: "success" });
     } catch (err: unknown) {
+      incImageGenFailed();
+      addAuditEntry("image_generate_failure", `Image generate failed: ${err instanceof Error ? err.message.slice(0, 120) : "unknown"}`, {
+        username: req.user?.username,
+        ip: req.ip ?? undefined,
+      });
       logger.error({ err }, "[imageGen] generate failed");
       const message = toRouteError(err, "generate");
       res.status(503).json({ error: message });
@@ -155,6 +172,11 @@ router.post(
       const result: EditResult = await editImage(parsed.data.image, parsed.data.prompt, req.user?.userId);
       deductRequestCredits(req);
       appendCreditHeaders(req, res);
+      incImageEdited();
+      addAuditEntry("image_edit_success", "Image edited", {
+        username: req.user?.username,
+        ip: req.ip ?? undefined,
+      });
       res.json({
         b64Image:             result.b64Image,
         status:               "success",
@@ -166,6 +188,11 @@ router.post(
         contractVersionUsed:  result.contractVersionUsed,
       });
     } catch (err: unknown) {
+      incImageEditFailed();
+      addAuditEntry("image_edit_failure", `Image edit failed: ${err instanceof Error ? err.message.slice(0, 120) : "unknown"}`, {
+        username: req.user?.username,
+        ip: req.ip ?? undefined,
+      });
       logger.error({ err }, "[imageGen] edit failed");
       const message = toRouteError(err, "edit");
       const status =

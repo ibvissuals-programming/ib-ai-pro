@@ -15,8 +15,13 @@ import creditsRouter from "./credits";
 import imageGenRouter from "./imageGen";
 import imageHistoryRouter from "./imageHistory";
 import systemRouter from "./system";
+import adminRouter from "./admin";
+import { trackActivity } from "../middleware/trackActivity";
 
 const router: IRouter = Router();
+
+// Update lastSeenAt for every request that carries a valid token
+router.use(trackActivity);
 
 router.use(healthRouter);
 router.use(systemRouter);
@@ -26,5 +31,6 @@ router.use(imageAnalysisRouter);
 router.use(creditsRouter);
 router.use(imageGenRouter);
 router.use(imageHistoryRouter);
+router.use(adminRouter);
 
 export default router;
