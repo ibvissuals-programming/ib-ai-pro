@@ -10,7 +10,7 @@
  * No backend changes required. Pure frontend consumer of existing APIs.
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, Redirect } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -20,8 +20,9 @@ import {
   ChevronRight, ChevronDown, Cpu, Shield,
   LayoutDashboard, UsersRound,
   Film, Zap, CheckCircle, XCircle, SkipForward, Sparkles,
+  MessageSquare, ChevronUp, User,
 } from 'lucide-react';
-import { logout } from '../auth/authService';
+import { logout, getAuthHeaders } from '../auth/authService';
 import { useAdminPolling } from '../hooks/useAdminPolling';
 import { useTheme } from '../contexts/ThemeContext';
 import { UsersDirectoryPanel } from '../components/UsersDirectoryPanel';
@@ -733,6 +734,178 @@ function CinematicInsightsPanel({ data, loading, error, lastOk }) {
   );
 }
 
+// ── Panel 6: Chat Logs (CEO only) ─────────────────────────────────────────────
+
+function ChatLogsPanel() {
+  const [sessions, setSessions] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [lastOk, setLastOk] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
+  const [sessionMessages, setSessionMessages] = useState({});
+  const [loadingMsgs, setLoadingMsgs] = useState({});
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/chat-sessions?limit=100', {
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setSessions(await res.json());
+      setLastOk(Date.now());
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function toggleSession(id) {
+    if (expandedId === id) { setExpandedId(null); return; }
+    setExpandedId(id);
+    if (sessionMessages[id]) return;
+    setLoadingMsgs((p) => ({ ...p, [id]: true }));
+    try {
+      const res = await fetch(`/api/admin/chat-sessions/${id}/messages`, {
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const msgs = await res.json();
+      setSessionMessages((p) => ({ ...p, [id]: msgs }));
+    } catch (e) {
+      console.error('[ChatLogsPanel] failed to load messages:', e.message);
+    } finally {
+      setLoadingMsgs((p) => ({ ...p, [id]: false }));
+    }
+  }
+
+  const isEmpty = !loading && !error && (!sessions || sessions.length === 0);
+
+  return (
+    <Panel icon={MessageSquare} title="Chat Logs" lastOk={lastOk} loading={loading} error={error}>
+      <div className="flex items-center justify-between px-4 pt-3 pb-2">
+        <span className="text-[11px] text-muted-foreground/60">
+          {sessions ? `${sessions.length} session${sessions.length !== 1 ? 's' : ''}` : ''}
+        </span>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+        >
+          <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+          Refresh
+        </button>
+      </div>
+
+      {isEmpty && (
+        <p className="text-xs text-muted-foreground/50 text-center py-8">
+          No chat sessions yet — conversations will appear here as users chat.
+        </p>
+      )}
+
+      {sessions && sessions.length > 0 && (
+        <div className="divide-y divide-border/20">
+          {sessions.map((s) => {
+            const isExpanded = expandedId === s.id;
+            const msgs = sessionMessages[s.id];
+            const isLoadingMsgs = loadingMsgs[s.id];
+
+            return (
+              <div key={s.id}>
+                {/* Session row */}
+                <button
+                  onClick={() => toggleSession(s.id)}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary/30 transition-colors text-left group"
+                >
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <User size={11} className="text-muted-foreground/60" />
+                    <span className="text-[11px] font-medium text-primary/80 w-20 truncate">
+                      {s.username}
+                    </span>
+                  </div>
+                  <span className="flex-1 text-xs text-foreground/80 truncate min-w-0">
+                    {s.title}
+                  </span>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-[10px] text-muted-foreground/60 hidden sm:block">
+                      {s.messageCount} msg{s.messageCount !== 1 ? 's' : ''}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground/50 hidden md:block">
+                      {formatRelative(s.updatedAt)}
+                    </span>
+                    {isExpanded
+                      ? <ChevronUp size={12} className="text-muted-foreground" />
+                      : <ChevronDown size={12} className="text-muted-foreground/50 group-hover:text-muted-foreground" />
+                    }
+                  </div>
+                </button>
+
+                {/* Expanded messages */}
+                <AnimatePresence>
+                  {isExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.18 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="bg-secondary/20 border-t border-border/20 px-4 py-3 space-y-2 max-h-72 overflow-y-auto">
+                        {isLoadingMsgs && (
+                          <p className="text-[11px] text-muted-foreground/50 text-center py-2">Loading…</p>
+                        )}
+                        {msgs && msgs.length === 0 && (
+                          <p className="text-[11px] text-muted-foreground/50 text-center py-2">No messages</p>
+                        )}
+                        {msgs && msgs.map((m) => (
+                          <div
+                            key={m.id}
+                            className={`flex gap-2 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                          >
+                            <div className={`
+                              max-w-[80%] rounded-lg px-3 py-2 text-[11px] leading-relaxed
+                              ${m.role === 'user'
+                                ? 'bg-primary/15 text-foreground/90'
+                                : 'bg-secondary/60 text-foreground/80'
+                              }
+                            `}>
+                              <div className="flex items-center gap-1.5 mb-1 opacity-60">
+                                <span className="font-medium capitalize">{m.role}</span>
+                                {m.providerUsed && (
+                                  <span className="text-[9px] px-1 rounded border border-border/30">
+                                    {m.providerUsed}
+                                  </span>
+                                )}
+                                {m.fallbackUsed && (
+                                  <span className="text-[9px] text-amber-400/80">fallback</span>
+                                )}
+                                {m.latencyMs && (
+                                  <span className="text-[9px]">{m.latencyMs}ms</span>
+                                )}
+                              </div>
+                              <p className="whitespace-pre-wrap break-words line-clamp-6">
+                                {m.content ?? '[binary content]'}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 // ── Dashboard header ──────────────────────────────────────────────────────────
 
 function DashboardHeader({ user }) {
@@ -790,8 +963,9 @@ function DashboardHeader({ user }) {
 
 function TabBar({ activeTab, onTabChange }) {
   const tabs = [
-    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'users',    label: 'Users',    icon: UsersRound },
+    { id: 'overview',  label: 'Overview',   icon: LayoutDashboard },
+    { id: 'users',     label: 'Users',      icon: UsersRound },
+    { id: 'chatLogs',  label: 'Chat Logs',  icon: MessageSquare },
   ];
 
   return (
@@ -957,7 +1131,7 @@ export default function CeoDashboard() {
                 Live data — health 8s · stats 10s · users 12s · logs 15s · render analytics 20s · cinematic insights 25s · ai routing 30s · timeline 30s
               </p>
             </motion.div>
-          ) : (
+          ) : activeTab === 'users' ? (
             <motion.div
               key="users"
               initial={{ opacity: 0, y: 6 }}
@@ -968,6 +1142,19 @@ export default function CeoDashboard() {
               <UsersDirectoryPanel />
               <p className="text-center text-[10px] text-muted-foreground/40 mt-6 pb-4">
                 User list refreshes every 30s — read-only view
+              </p>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="chatLogs"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.16 }}
+            >
+              <ChatLogsPanel />
+              <p className="text-center text-[10px] text-muted-foreground/40 mt-6 pb-4">
+                All user conversations — click a session to expand messages
               </p>
             </motion.div>
           )}

@@ -7,6 +7,29 @@ export type ChatMessage = {
   content: string;
 };
 
+// ── Last-completion tracking ───────────────────────────────────────────────────
+// Stores the provider/fallback/latency result of the most recently completed
+// stream. Consumed once by the chat route for persistence. Not suitable for
+// high-concurrency environments (in-memory, single-process only).
+
+interface LastProviderResult {
+  provider: AiProvider;
+  fallbackUsed: boolean;
+  latencyMs: number;
+}
+
+let _lastProviderResult: LastProviderResult | null = null;
+
+/**
+ * Returns and clears the result of the most recently completed chat stream.
+ * Call immediately after the for-await loop in the chat route.
+ */
+export function getLastProviderResult(): LastProviderResult | null {
+  const r = _lastProviderResult;
+  _lastProviderResult = null;
+  return r;
+}
+
 export const CHAT_MODEL = "llama-3.1-8b-instant";
 const GEMINI_FALLBACK_MODEL = "gemini-2.5-flash";
 
@@ -38,6 +61,7 @@ async function* wrapTracked(
     }
     const latencyMs = Date.now() - startMs;
     recordCompletion(provider, fallbackTriggered, latencyMs, true);
+    _lastProviderResult = { provider, fallbackUsed: fallbackTriggered, latencyMs };
     logger.debug(
       { provider, fallbackTriggered, latencyMs, success: true },
       "[llm] stream completed",

@@ -12,12 +12,16 @@ const STREAM_TIMEOUT_MS = 55_000;
  * Stream a chat completion from the API server.
  *
  * Yields string chunks as they arrive from the SSE stream.
+ * Calls options.onSessionId(id) when the server emits a session event.
  * Throws a typed Error on network errors, non-2xx responses, or server errors.
  *
  * @param {Array<{role: string, content: string}>} messages
+ * @param {{ sessionId?: string, onSessionId?: (id: string) => void }} [options]
  * @returns {AsyncGenerator<string>}
  */
-export async function* streamChat(messages) {
+export async function* streamChat(messages, options = {}) {
+  const { sessionId, onSessionId } = options;
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), STREAM_TIMEOUT_MS);
 
@@ -29,7 +33,10 @@ export async function* streamChat(messages) {
         'Content-Type': 'application/json',
         ...getAuthHeaders(),
       },
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify({
+        messages,
+        ...(sessionId ? { sessionId } : {}),
+      }),
       signal: controller.signal,
     });
   } catch (err) {
@@ -80,6 +87,12 @@ export async function* streamChat(messages) {
 
         if (parsed.error) {
           throw new Error(`STREAM_ERROR:${parsed.code ?? 'unknown'}`);
+        }
+
+        // Session ID event — call callback, do not yield as content
+        if (parsed.sessionId && typeof parsed.sessionId === 'string') {
+          onSessionId?.(parsed.sessionId);
+          continue;
         }
 
         if (typeof parsed.content === 'string') {

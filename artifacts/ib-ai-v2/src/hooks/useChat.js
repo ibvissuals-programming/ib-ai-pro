@@ -3,6 +3,7 @@ import { getChats, saveChats, createDefaultChats } from '../utils/storage';
 import { streamChat } from '../services/api';
 import { analyzeImage } from '../services/imageApi';
 import { editImage } from '../services/imageToolsApi';
+import { fetchLatestSession } from '../services/chatHistoryApi';
 
 // ── Structured error classifiers ──────────────────────────────────────────────
 
@@ -64,12 +65,57 @@ export function useChat(username, { onCreditExhausted } = {}) {
 
   useEffect(() => {
     if (!username) return;
+
     let data = getChats(username);
+    const isNewDevice = !data;
+
     if (!data) {
       data = createDefaultChats();
       saveChats(username, data);
     }
+
     setChatData(data);
+
+    // ── New-device hydration ───────────────────────────────────────────────
+    // If this device has no chat history at all, try to load the latest
+    // session from the server. Best-effort — failures are silently ignored.
+    if (isNewDevice) {
+      fetchLatestSession()
+        .then((serverSession) => {
+          if (!serverSession?.messages?.length) return;
+
+          const serverMessages = serverSession.messages.map((m) => ({
+            id:        m.timestamp,
+            role:      m.role,
+            content:   m.content ?? '',
+            timestamp: new Date(m.timestamp).toISOString(),
+          }));
+
+          setChatData((prev) => {
+            if (!prev) return prev;
+            const activeId = prev.activeChatId;
+            if (!activeId) return prev;
+
+            const updated = {
+              ...prev,
+              chats: {
+                ...prev.chats,
+                [activeId]: {
+                  ...prev.chats[activeId],
+                  sessionId: serverSession.id,
+                  title:     serverSession.title,
+                  messages:  serverMessages,
+                },
+              },
+            };
+            saveChats(username, updated);
+            return updated;
+          });
+        })
+        .catch((err) => {
+          console.warn('[IB AI] Server hydration skipped:', err.message);
+        });
+    }
   }, [username]);
 
   const persist = useCallback((data) => {
@@ -170,6 +216,8 @@ export function useChat(username, { onCreditExhausted } = {}) {
     const aiMsgId = Date.now() + 1;
     const timestamp = new Date().toISOString();
 
+    // Live-streaming state builder (does not include sessionId — that arrives
+    // via the session SSE event at the end of the stream).
     const buildState = (content) => ({
       ...withUserMsg,
       chats: {
@@ -189,22 +237,45 @@ export function useChat(username, { onCreditExhausted } = {}) {
       .slice(-20)
       .map((m) => ({ role: m.role, content: m.content }));
 
+    // Carry the existing session ID and capture any new one assigned by server
+    const chatSessionId = chatData.chats[activeChatId]?.sessionId;
+    let resolvedSessionId = chatSessionId;
+
     let finalContent = '';
 
     try {
-      for await (const chunk of streamChat(contextMessages)) {
+      for await (const chunk of streamChat(contextMessages, {
+        sessionId:   chatSessionId,
+        onSessionId: (id) => { resolvedSessionId = id; },
+      })) {
         finalContent += chunk;
         setChatData(buildState(finalContent));
       }
       if (!finalContent) {
-        throw new Error('Empty response from Gemini');
+        throw new Error('Empty response from AI');
       }
     } catch (err) {
-      console.error('[IB AI Assistant] Gemini request failed:', err.message);
+      console.error('[IB AI Assistant] AI request failed:', err.message);
       finalContent = classifyStreamError(err);
     } finally {
       try {
-        persist(buildState(finalContent));
+        // Include the resolved sessionId in the persisted chat metadata so
+        // subsequent sends can append to the same server session.
+        const finalChatState = {
+          ...withUserMsg,
+          chats: {
+            ...withUserMsg.chats,
+            [activeChatId]: {
+              ...withUserMsg.chats[activeChatId],
+              sessionId: resolvedSessionId,
+              messages: [
+                ...updatedMessages,
+                { id: aiMsgId, role: 'assistant', content: finalContent, timestamp },
+              ],
+            },
+          },
+        };
+        persist(finalChatState);
       } catch (persistErr) {
         console.error('[IB AI Assistant] Failed to persist message state:', persistErr);
       }
@@ -339,7 +410,6 @@ export function useChat(username, { onCreditExhausted } = {}) {
     let finalMessages = updatedMessages;
 
     try {
-      // Auth token is sent via header in analyzeImage — no username needed
       const result = await analyzeImage(base64, mimeType);
 
       const aiMsg = {
@@ -354,8 +424,6 @@ export function useChat(username, { onCreditExhausted } = {}) {
       console.error('[IB AI Assistant] Image analysis failed:', err.message);
 
       if (err.code === 'CREDITS_EXHAUSTED') {
-        // Soft gate: show the result already generated (none), then trigger
-        // the upgrade modal. The message shown is informational, not an error.
         onCreditExhausted?.();
         finalMessages = [
           ...updatedMessages,

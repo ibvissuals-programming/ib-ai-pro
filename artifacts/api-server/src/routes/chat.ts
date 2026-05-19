@@ -8,11 +8,12 @@
 // ╚══════════════════════════════════════════════════════════════════╝
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import { createChatStream, type ChatMessage } from "../services/llm";
+import { createChatStream, getLastProviderResult, type ChatMessage } from "../services/llm";
 import { SYSTEM_PROMPT } from "../prompts/system";
 import { logger } from "../lib/logger";
 import { policyEngine, deductRequestCredits } from "../middleware/policyEngine";
 import { CREDIT_COSTS } from "../lib/userStore";
+import { getOrCreateSession, saveMessagePair } from "../services/chatStore";
 
 const router = Router();
 
@@ -94,7 +95,8 @@ const MessageSchema = z.object({
 });
 
 const ChatRequestSchema = z.object({
-  messages: z.array(MessageSchema).min(1).max(50),
+  messages:  z.array(MessageSchema).min(1).max(50),
+  sessionId: z.string().uuid().optional(),   // existing session to append to
 });
 
 // ─── SSE helper ───────────────────────────────────────────────────────────────
@@ -157,12 +159,20 @@ router.post(
       return;
     }
 
+    const { messages: rawMessages, sessionId: incomingSessionId } = parsed.data;
+
     logger.info(
-      { userId: req.user?.userId, messageCount: parsed.data.messages.length },
+      { userId: req.user?.userId, messageCount: rawMessages.length },
       "[chat] request received",
     );
 
-    const messages = buildContext(parsed.data.messages);
+    // Capture the last user message for session title + persistence.
+    // Uses raw input — not the context-windowed version.
+    const lastUserContent =
+      [...rawMessages].reverse().find((m) => m.role === "user")?.content ?? "";
+    const sessionTitle = lastUserContent.slice(0, 60) || "New Chat";
+
+    const messages = buildContext(rawMessages);
 
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -173,12 +183,30 @@ router.post(
     res.write(": connected\n\n");
 
     let streamSucceeded = false;
+    let accumContent = "";
+    let resolvedSessionId: string | undefined;
 
     try {
       const stream = await createChatStream(messages);
 
       for await (const chunk of stream) {
+        accumContent += chunk;
         res.write(sseEvent({ content: chunk }));
+      }
+
+      // Resolve (or create) the session and send the ID to the client
+      // before [DONE] so it can be stored immediately.
+      if (req.user?.userId) {
+        try {
+          resolvedSessionId = await getOrCreateSession({
+            sessionId: incomingSessionId,
+            userId: req.user.userId,
+            title: sessionTitle,
+          });
+          res.write(sseEvent({ sessionId: resolvedSessionId }));
+        } catch (sessionErr) {
+          logger.error({ err: sessionErr }, "[chat] session resolution failed — skipping");
+        }
       }
 
       res.write("data: [DONE]\n\n");
@@ -196,6 +224,24 @@ router.post(
     } finally {
       if (streamSucceeded) {
         deductRequestCredits(req);
+
+        // Fire-and-forget persistence — never blocks the stream response.
+        // Only runs when session was successfully resolved and there is content.
+        if (resolvedSessionId && req.user?.userId && lastUserContent) {
+          const providerResult = getLastProviderResult();
+          const userId = req.user.userId;
+          const sid = resolvedSessionId;
+
+          saveMessagePair({
+            sessionId:        sid,
+            userId,
+            userContent:      lastUserContent,
+            assistantContent: accumContent || null,
+            providerUsed:     providerResult?.provider ?? null,
+            fallbackUsed:     providerResult?.fallbackUsed ?? false,
+            latencyMs:        providerResult?.latencyMs ?? null,
+          }).catch((e: unknown) => logger.error({ err: e }, "[chat] message persist failed"));
+        }
       }
       res.end();
     }
