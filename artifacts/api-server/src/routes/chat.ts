@@ -14,6 +14,7 @@ import { logger } from "../lib/logger";
 import { policyEngine, deductRequestCredits } from "../middleware/policyEngine";
 import { CREDIT_COSTS } from "../lib/userStore";
 import { getOrCreateSession, saveMessagePair } from "../services/chatStore";
+import { getUserMemoryMap, buildMemoryBlock } from "../services/memoryStore";
 
 const router = Router();
 
@@ -62,10 +63,12 @@ function detectMode(messages: Array<{ role: string; content: string }>): Convers
   return "chat";
 }
 
-// ─── Date injection ───────────────────────────────────────────────────────────
+// ─── Date injection (Africa/Lagos, WAT = UTC+1) ───────────────────────────────
 
-function buildDatedSystemPrompt(): string {
-  const d = new Date();
+const WAT_OFFSET_MS = 60 * 60 * 1000; // UTC+1
+
+function buildDatedSystemPrompt(memoryBlock?: string | null): string {
+  const d = new Date(Date.now() + WAT_OFFSET_MS);
   const pad = (n: number) => String(n).padStart(2, "0");
 
   const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -82,9 +85,13 @@ function buildDatedSystemPrompt(): string {
   const mins = pad(d.getUTCMinutes());
 
   const dateStr = `${dayName}, ${month} ${date}, ${year}`;
-  const timeStr = `${hours}:${mins} UTC`;
+  const timeStr = `${hours}:${mins} WAT (West Africa Time)`;
 
-  return `${SYSTEM_PROMPT}\n\n## Current Date & Time\n${dateStr} — ${timeStr}`;
+  let prompt = `${SYSTEM_PROMPT}\n\n## Current Date & Time\n${dateStr} — ${timeStr}`;
+  if (memoryBlock) {
+    prompt += `\n\n${memoryBlock}`;
+  }
+  return prompt;
 }
 
 // ─── Validation schema ────────────────────────────────────────────────────────
@@ -109,7 +116,7 @@ function sseEvent(data: Record<string, unknown>): string {
 
 type RawMessage = { role: "user" | "assistant"; content: string };
 
-function buildContext(raw: RawMessage[]): ChatMessage[] {
+function buildContext(raw: RawMessage[], memoryBlock?: string | null): ChatMessage[] {
   const safeRaw = Array.isArray(raw) ? raw : [];
 
   const cleaned = safeRaw
@@ -129,10 +136,10 @@ function buildContext(raw: RawMessage[]): ChatMessage[] {
   const mode = detectMode(cleaned);
   const window = CONTEXT_LIMITS[mode];
 
-  logger.debug({ mode, window, total: cleaned.length }, "context built");
+  logger.debug({ mode, window, total: cleaned.length, hasMemory: !!memoryBlock }, "context built");
 
   return [
-    { role: "system", content: buildDatedSystemPrompt() },
+    { role: "system", content: buildDatedSystemPrompt(memoryBlock) },
     ...cleaned.slice(-window),
   ];
 }
@@ -172,7 +179,18 @@ router.post(
       [...rawMessages].reverse().find((m) => m.role === "user")?.content ?? "";
     const sessionTitle = lastUserContent.slice(0, 60) || "New Chat";
 
-    const messages = buildContext(rawMessages);
+    // Load user memory for context injection — fire-and-forget safe fallback
+    let memoryBlock: string | null = null;
+    if (req.user?.userId) {
+      try {
+        const memMap = await getUserMemoryMap(req.user.userId);
+        memoryBlock = buildMemoryBlock(memMap);
+      } catch (memErr) {
+        logger.warn({ err: memErr }, "[chat] memory load failed — continuing without it");
+      }
+    }
+
+    const messages = buildContext(rawMessages, memoryBlock);
 
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");

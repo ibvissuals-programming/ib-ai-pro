@@ -10,7 +10,7 @@ function exportChat(messages, title, format) {
 
   let content;
   if (format === 'md') {
-    const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Africa/Lagos' });
     content = `# ${title || 'IB AI Assistant Chat'}\n_Exported on ${date}_\n\n---\n\n` +
       messages.map(m => `**${m.role === 'user' ? 'You' : 'IB AI Assistant'}**:\n${m.content}`).join('\n\n---\n\n');
   } else {

@@ -19,6 +19,7 @@ import adminRouter from "./admin";
 import adminSystemRouter from "./adminSystem";
 import aiStatusRouter from "./aiStatus";
 import chatHistoryRouter from "./chatHistory";
+import memoryRouter from "./memory";
 import { trackActivity } from "../middleware/trackActivity";
 
 const router: IRouter = Router();
@@ -38,5 +39,6 @@ router.use(adminRouter);
 router.use(adminSystemRouter);
 router.use(aiStatusRouter);
 router.use(chatHistoryRouter);
+router.use(memoryRouter);
 
 export default router;

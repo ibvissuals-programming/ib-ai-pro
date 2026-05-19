@@ -23,7 +23,7 @@ function formatRelative(ms) {
   if (diff < 60_000)     return `${Math.floor(diff / 1_000)}s ago`;
   if (diff < 3_600_000)  return `${Math.floor(diff / 60_000)}m ago`;
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-  return new Date(ms).toLocaleDateString([], { month: 'short', day: 'numeric' });
+  return new Date(ms).toLocaleDateString([], { month: 'short', day: 'numeric', timeZone: 'Africa/Lagos' });
 }
 
 function TypeBadge({ type }) {

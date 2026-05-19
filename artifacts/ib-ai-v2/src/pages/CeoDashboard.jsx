@@ -52,7 +52,7 @@ function formatRelative(ms) {
 
 function formatTime(ms) {
   if (!ms) return '—';
-  return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Africa/Lagos' });
 }
 
 function formatLastOk(ms) {
