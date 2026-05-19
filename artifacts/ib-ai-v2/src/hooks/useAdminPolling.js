@@ -106,6 +106,14 @@ export function useUserDirectory() {
   return useEndpointPoll('/admin/users', 30_000);
 }
 
+/**
+ * Poll the activity timeline — 100 most recent audit events, refreshed every 30 s.
+ * Uses a higher limit than the LogsPanel (50) to give the timeline more history.
+ */
+export function useActivityTimeline() {
+  return useEndpointPoll('/admin/logs?limit=100', 30_000);
+}
+
 export function useAdminPolling() {
   const health             = useEndpointPoll('/admin/health',               8_000);
   const stats              = useEndpointPoll('/admin/stats',               10_000);
@@ -113,6 +121,7 @@ export function useAdminPolling() {
   const logs               = useEndpointPoll('/admin/logs?limit=50',       15_000);
   const renderAnalytics    = useEndpointPoll('/admin/render-analytics',    20_000);
   const cinematicInsights  = useEndpointPoll('/admin/cinematic-insights',  25_000);
+  const activityTimeline   = useEndpointPoll('/admin/logs?limit=100',      30_000);
 
   // Bubble up the most critical auth error code
   const allEndpoints = [health, stats, activeUsers, logs, renderAnalytics, cinematicInsights];
@@ -123,5 +132,5 @@ export function useAdminPolling() {
         ? 'forbidden'
         : null;
 
-  return { health, stats, activeUsers, logs, renderAnalytics, cinematicInsights, globalErrorCode };
+  return { health, stats, activeUsers, logs, renderAnalytics, cinematicInsights, activityTimeline, globalErrorCode };
 }

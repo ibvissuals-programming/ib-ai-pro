@@ -27,6 +27,7 @@ import {
   ACTIVE_THRESHOLD_MS,
 } from "../lib/activityTracker";
 import { getAllUsers, getUserById, adjustCredits, setUserRole } from "../lib/userStore";
+import { getUserHistory } from "../services/imageHistoryStore";
 import { getBootState } from "../lib/bootState";
 import { getRenderTelemetry, getRenderTelemetryStats, type RenderTelemetryEntry } from "../lib/renderTelemetry";
 
@@ -168,6 +169,29 @@ router.get("/admin/users", requireCeo, (_req: Request, res: Response) => {
     count:     result.length,
     users:     result,
   });
+});
+
+// ── GET /api/admin/users/:userId/history ──────────────────────────────────────
+// Returns the CEO view of a specific user's image generation history.
+// Reuses getUserHistory() from imageHistoryStore — admin-only wrapper.
+
+router.get("/admin/users/:userId/history", requireCeo, async (req: Request, res: Response) => {
+  const { userId } = req.params;
+  const rawLimit = Number(req.query["limit"]) || 20;
+  const limit = Math.max(1, Math.min(rawLimit, 50));
+
+  const user = getUserById(userId);
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  try {
+    const entries = await getUserHistory(userId, limit);
+    res.json({ userId, username: user.username, entries, count: entries.length });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load user history" });
+  }
 });
 
 // ── PATCH /api/admin/users/:userId/credits ────────────────────────────────────

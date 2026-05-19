@@ -25,6 +25,7 @@ import { logout } from '../auth/authService';
 import { useAdminPolling } from '../hooks/useAdminPolling';
 import { useTheme } from '../contexts/ThemeContext';
 import { UsersDirectoryPanel } from '../components/UsersDirectoryPanel';
+import { ActivityTimelinePanel } from '../components/ActivityTimelinePanel';
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
@@ -834,7 +835,7 @@ function TabBar({ activeTab, onTabChange }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function CeoDashboard() {
-  const { health, stats, activeUsers, logs, renderAnalytics, cinematicInsights, globalErrorCode } = useAdminPolling();
+  const { health, stats, activeUsers, logs, renderAnalytics, cinematicInsights, activityTimeline, globalErrorCode } = useAdminPolling();
   const [activeTab, setActiveTab] = useState('overview');
 
   // Handle global auth errors
@@ -931,8 +932,18 @@ export default function CeoDashboard() {
                 />
               </div>
 
+              {/* Activity Timeline — full width */}
+              <div className="mt-4">
+                <ActivityTimelinePanel
+                  data={activityTimeline.data}
+                  loading={activityTimeline.loading}
+                  error={activityTimeline.error}
+                  lastOk={activityTimeline.lastOk}
+                />
+              </div>
+
               <p className="text-center text-[10px] text-muted-foreground/40 mt-6 pb-4">
-                Live data — health 8s · stats 10s · users 12s · logs 15s · render analytics 20s · cinematic insights 25s
+                Live data — health 8s · stats 10s · users 12s · logs 15s · render analytics 20s · cinematic insights 25s · timeline 30s
               </p>
             </motion.div>
           ) : (

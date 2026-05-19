@@ -21,10 +21,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Users, ChevronLeft, ChevronRight,
   RefreshCw, AlertCircle, UserX, Filter,
-  Plus, Minus, Crown, AlertTriangle,
+  Plus, Minus, Crown, AlertTriangle, History,
 } from 'lucide-react';
 import { useUserDirectory } from '../hooks/useAdminPolling';
 import { getAuthHeaders } from '../auth/authService';
+import { UserHistoryModal } from './UserHistoryModal';
 
 const PAGE_SIZE = 20;
 
@@ -138,7 +139,7 @@ function CreditBtn({ delta, pending, onClick }) {
 
 // ── User row ──────────────────────────────────────────────────────────────────
 
-function UserRow({ user, overrides, pending, rowError, onCreditAdjust, onRoleChange }) {
+function UserRow({ user, overrides, pending, rowError, onCreditAdjust, onRoleChange, onViewHistory }) {
   const credits = overrides?.credits ?? user.credits;
   const role    = overrides?.role    ?? user.role;
   const isCeo   = role === 'ceo';
@@ -168,6 +169,13 @@ function UserRow({ user, overrides, pending, rowError, onCreditAdjust, onRoleCha
                 <Crown size={10} className={role === 'premium' ? 'text-muted-foreground' : 'text-blue-400'} />
               </button>
             )}
+            <button
+              onClick={() => onViewHistory(user.id, user.username)}
+              title="View image history"
+              className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-secondary ml-0.5"
+            >
+              <History size={10} className="text-muted-foreground hover:text-foreground transition-colors" />
+            </button>
           </div>
         </td>
 
@@ -231,6 +239,9 @@ export function UsersDirectoryPanel() {
   const [roleFilter,   setRoleFilter]   = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [page,         setPage]         = useState(1);
+
+  // History modal state
+  const [historyUser, setHistoryUser] = useState(null); // { id, username } | null
 
   // Mutation state
   const [pending,    setPending]    = useState(null);         // userId in flight
@@ -332,6 +343,14 @@ export function UsersDirectoryPanel() {
   const showingTo   = Math.min(pageStart + PAGE_SIZE, filtered.length);
 
   return (
+    <>
+    {historyUser && (
+      <UserHistoryModal
+        userId={historyUser.id}
+        username={historyUser.username}
+        onClose={() => setHistoryUser(null)}
+      />
+    )}
     <div className="glass-card rounded-xl flex flex-col min-h-0">
       {/* Panel header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-border/30">
@@ -469,6 +488,7 @@ export function UsersDirectoryPanel() {
                   rowError={rowErrors[user.id]}
                   onCreditAdjust={handleCreditAdjust}
                   onRoleChange={handleRoleChange}
+                  onViewHistory={(id, username) => setHistoryUser({ id, username })}
                 />
               ))}
             </tbody>
@@ -507,5 +527,6 @@ export function UsersDirectoryPanel() {
         </div>
       )}
     </div>
+    </>
   );
 }
