@@ -770,13 +770,38 @@ export function downgradedIntensity(intensity: IntensityLevel): IntensityLevel {
   }
 }
 
-// Stage 3 temperature per intensity level (clamped 0.3–1.3 per spec)
-const STAGE_3_TEMPERATURES: Record<IntensityLevel, number> = {
-  LOW:     0.80,
-  MEDIUM:  1.00,
-  HIGH:    1.10,
-  EXTREME: 1.20,
+// ── Control hierarchy — Stage 3 temperature ───────────────────────────────────
+//
+//  HIERARCHY:
+//    1. editMode  — PRIMARY DRIVER — defines pipeline structure, contract, identity lock
+//    2. intensity — SECONDARY MODIFIER — adjusts output strength within mode boundaries
+//    3. stages    — INTERNAL EXECUTION — not user-controlled
+//
+//  TEMPERATURE RULE:
+//    Stage 3 temp = STAGE_3_BASE[mode] + INTENSITY_MODIFIER[intensity]
+//    Clamped to [0.3, 1.3].
+//
+//  Mode wins for structure. Intensity only adjusts strength inside the mode's boundaries.
+//  portrait_safe has no Stage 3 — intensity affects only Stage 2 enhancement for that mode.
+
+const STAGE_3_BASE_TEMPERATURES: Record<EditMode, number> = {
+  portrait_safe:  0.80,
+  cinematic:      1.00,
+  style_transfer: 1.05,
+  creative:       1.10,
 };
+
+const INTENSITY_TEMPERATURE_MODIFIERS: Record<IntensityLevel, number> = {
+  LOW:     -0.20,
+  MEDIUM:   0.00,
+  HIGH:    +0.10,
+  EXTREME: +0.20,
+};
+
+function computeStage3Temperature(mode: EditMode, intensity: IntensityLevel): number {
+  const raw = STAGE_3_BASE_TEMPERATURES[mode] + INTENSITY_TEMPERATURE_MODIFIERS[intensity];
+  return Math.min(1.3, Math.max(0.3, raw));
+}
 
 // Instruction addenda injected into Stage 1 based on intensity
 const S1_INTENSITY_ADDENDUM: Record<IntensityLevel, string> = {
@@ -803,7 +828,7 @@ type StageDescriptor = {
 };
 
 function buildStagePlan(mode: EditMode, intensity: IntensityLevel): StageDescriptor[] {
-  const s3Temp = STAGE_3_TEMPERATURES[intensity];
+  const s3Temp = computeStage3Temperature(mode, intensity);
 
   const s1: StageDescriptor = {
     stageNum:    1,
@@ -1074,7 +1099,7 @@ export async function editImage(
         // ── Intensity-downgrade failsafe: retry Stage 3 at reduced intensity ─
         const downgradedInt = downgradedIntensity(resolvedIntensity);
         if (downgradedInt !== resolvedIntensity) {
-          const intRetryTemp = STAGE_3_TEMPERATURES[downgradedInt];
+          const intRetryTemp = computeStage3Temperature(resolvedMode, downgradedInt);
           advanceJob(job, "retrying", `Intensity downgrade (${resolvedIntensity} → ${downgradedInt}) — retrying Stage 3`);
           logger.info(
             { from: resolvedIntensity, to: downgradedInt, temperature: intRetryTemp },

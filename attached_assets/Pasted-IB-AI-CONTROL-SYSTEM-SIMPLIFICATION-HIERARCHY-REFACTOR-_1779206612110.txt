@@ -1,0 +1,130 @@
+IB AI — CONTROL SYSTEM SIMPLIFICATION & HIERARCHY REFACTOR
+
+MISSION:
+Simplify and unify all existing generation control systems so that IB AI behavior remains powerful but predictable.
+
+DO NOT:
+- add new features
+- add new stages
+- change AI models
+- modify pipeline structure
+
+ONLY:
+- reorganize control logic
+- define hierarchy
+- remove ambiguity between overlapping systems
+
+────────────────────────────
+CURRENT CONTROL SYSTEMS
+────────────────────────────
+The system currently has 4 overlapping controls:
+
+1. editMode (portrait_safe / cinematic / style_transfer / creative)
+2. intensity (LOW / MEDIUM / HIGH / EXTREME)
+3. stage pipeline (Stage 1 / 2 / 3)
+4. temperature per stage
+
+These currently influence output simultaneously, creating ambiguity.
+
+────────────────────────────
+OBJECTIVE
+────────────────────────────
+
+Define a strict control hierarchy so that:
+- every output has ONE primary driver
+- all other controls become modifiers (not competing systems)
+- output behavior becomes predictable and explainable
+
+────────────────────────────
+NEW CONTROL HIERARCHY RULE
+────────────────────────────
+
+PRIMARY DRIVER:
+→ editMode
+
+SECONDARY MODIFIER:
+→ intensity
+
+INTERNAL EXECUTION LAYER:
+→ stage pipeline + temperature mapping
+
+────────────────────────────
+DECISION RULES
+────────────────────────────
+
+STEP 1 — MODE DEFINES STRUCTURE
+editMode determines:
+- which stages run
+- which contracts apply
+- identity lock strength baseline
+
+STEP 2 — INTENSITY MODIFIES BEHAVIOR
+intensity ONLY modifies:
+- Stage 3 temperature
+- stylistic aggressiveness
+- enhancement strength
+
+intensity MUST NOT:
+- change pipeline structure
+- override mode selection
+- skip or add stages
+
+STEP 3 — STAGES REMAIN INTERNAL ONLY
+Stages are NOT user controls.
+They are execution layers only.
+
+────────────────────────────
+STRICT CONFLICT RESOLUTION RULE
+────────────────────────────
+
+If mode and intensity conflict:
+
+- mode ALWAYS wins for structure decisions
+- intensity ONLY adjusts output strength inside allowed stage boundaries
+
+Example:
+- cinematic + LOW → still cinematic pipeline, but restrained output
+- portrait_safe + EXTREME → still portrait-safe structure, but slightly stronger enhancement in Stage 2 only
+
+────────────────────────────
+TEMPERATURE RULE (FINAL OVERRIDE)
+────────────────────────────
+
+Stage 3 temperature is now computed as:
+
+BASE (by mode):
+- portrait_safe → 0.80
+- cinematic → 1.00
+- style_transfer → 1.05
+- creative → 1.10
+
+THEN APPLY intensity modifier:
+- LOW → -0.20
+- MEDIUM → 0.00
+- HIGH → +0.10
+- EXTREME → +0.20
+
+Clamp final value between 0.3 and 1.3
+
+────────────────────────────
+INTENT OF THIS REFACTOR
+────────────────────────────
+
+This system must:
+- eliminate conflicting control signals
+- make outputs predictable
+- preserve creative flexibility
+- simplify debugging and reasoning
+- reduce “why did this happen?” complexity
+
+────────────────────────────
+FINAL GOAL
+────────────────────────────
+
+IB AI should behave like a professional editing system where:
+
+- Mode = structure
+- Intensity = strength
+- Stages = execution only
+
+No overlapping authority between systems.
