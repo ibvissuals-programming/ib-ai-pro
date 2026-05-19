@@ -1,0 +1,73 @@
+IB AI — PRODUCTION HARDENING + STABLE SNAPSHOT (v1.0)
+
+MISSION:
+Stabilize the current working IB AI system into a production-grade baseline by cleaning logs, fixing scripts, and preparing a safe versioned snapshot for future upgrades.
+
+PRIMARY GOAL:
+Ensure the system is fully stable, clean, and reproducible before any feature expansion.
+
+---
+
+1. LOG CLEANUP (OBSERVABILITY POLISH)
+- Convert all excessive INFO logs to DEBUG level where appropriate:
+  - userStore atomic write success logs
+  - policy request allowed logs with full user details
+- Ensure production logs only show:
+  - errors
+  - warnings
+  - essential system startup events
+- Remove noisy repetitive logs from runtime console output
+
+---
+
+2. SCRIPT RELIABILITY FIX
+Fix post-merge.sh script:
+- Replace incorrect pnpm filter usage:
+  FROM:
+    pnpm --filter db push
+  TO:
+    pnpm --filter @workspace/db run push
+- Ensure all monorepo scripts use correct package-scoped filtering
+- Validate script runs in clean CI-like environment
+
+---
+
+3. SYSTEM STABILITY VALIDATION
+- Confirm backend starts without errors
+- Confirm frontend builds and runs without warnings
+- Confirm database connection is stable
+- Confirm JWT auth flow works without regression
+- Confirm AI routing (Groq/Gemini fallback) still functions correctly
+
+---
+
+4. SECURITY + CLEAN OUTPUT
+- Ensure no sensitive user data is logged in production logs
+- Ensure no internal secrets appear in console output
+- Ensure error messages are sanitized
+
+---
+
+5. VERSION SNAPSHOT PREPARATION
+Once system is stable:
+- Create a clean version tag:
+  "IB AI STABLE SNAPSHOT v1.0"
+- Ensure this version represents:
+  - working backend
+  - working frontend
+  - stable database integration
+  - stable AI routing system
+  - clean logs
+
+---
+
+6. OUTPUT GOAL
+System must now be:
+- clean
+- stable
+- production-safe
+- reproducible
+- ready for next-phase upgrades (image system, Groq optimization, identity orchestration)
+
+FINAL STATE:
+A hardened, production-ready IB AI base system with no noise, no script fragility, and a stable deployment baseline.

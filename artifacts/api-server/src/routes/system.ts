@@ -6,7 +6,7 @@
  * Public (no auth required) — returns no secrets, only boolean status.
  */
 import { Router } from "express";
-import { VERSION, BUILD_DATE, checkProviders } from "../lib/env";
+import { VERSION, BUILD_DATE, SNAPSHOT, checkProviders } from "../lib/env";
 
 const router = Router();
 
@@ -17,6 +17,7 @@ router.get("/system/version", (_req, res) => {
   res.json({
     version: VERSION,
     build: BUILD_DATE,
+    snapshot: SNAPSHOT,
     environment: process.env["NODE_ENV"] || "development",
     uptime: Math.floor((Date.now() - BOOT_TIME) / 1000),
     img2imgEnabled: s.gemini,

@@ -14,7 +14,8 @@
 import { logger } from "./logger";
 
 export const VERSION = "1.0.0";
-export const BUILD_DATE = "2026-05-15";
+export const BUILD_DATE = "2026-05-19";
+export const SNAPSHOT = "IB AI STABLE SNAPSHOT v1.0";
 
 export interface ProviderStatus {
   gemini: boolean;
@@ -47,7 +48,7 @@ export function logProviderHealth(): void {
   const s = checkProviders();
   const env = process.env["NODE_ENV"] || "development";
 
-  logger.info("[system] IB AI Stable Build");
+  logger.info({ snapshot: SNAPSHOT }, "[system] IB AI Stable Build");
   logger.info({ version: VERSION, build: BUILD_DATE, environment: env }, "[system] version");
 
   if (!s.gemini) {
