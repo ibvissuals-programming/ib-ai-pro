@@ -277,9 +277,15 @@ function validateImageResponse(result: string): void {
 }
 
 // ── LAYER 6: Near-identical output detection ──────────────────────────────────
-// Detects when Gemini returns a visually unchanged image.
-// Check 1 (exact): byte-for-byte match → same image.
-// Check 2 (size + prefix): size differs < 3% AND first 800 chars match → near-duplicate.
+// Detects when Gemini returns a visually unchanged or lightly-filtered image.
+// PRO_TRANSFORM_MODE: threshold is aggressive — filter-only outputs must be caught.
+//
+// Check 1 (exact):        byte-for-byte match → same image.
+// Check 2 (size + prefix): size differs < 12% AND first 300 chars match → near-duplicate.
+//                          12% catches filter-only passes that alter only color metadata;
+//                          300-char prefix is a strong structural-bytes sentinel.
+// Check 3 (prefix-only):  first 120 chars identical → likely same JPEG header structure
+//                          even if later bytes differ slightly → treat as near-identical.
 
 function isNearIdenticalOutput(
   inputBase64: string,
@@ -287,14 +293,21 @@ function isNearIdenticalOutput(
 ): boolean {
   if (outputBase64 === inputBase64) return true;
 
-  const sizeDiff = Math.abs(outputBase64.length - inputBase64.length);
+  const sizeDiff  = Math.abs(outputBase64.length - inputBase64.length);
   const sizeRatio = sizeDiff / Math.max(inputBase64.length, 1);
 
-  if (sizeRatio < 0.03) {
-    const prefixLen = Math.min(800, inputBase64.length, outputBase64.length);
+  // Check 2: size within 12% AND first 300 structural bytes match
+  if (sizeRatio < 0.12) {
+    const prefixLen = Math.min(300, inputBase64.length, outputBase64.length);
     if (inputBase64.slice(0, prefixLen) === outputBase64.slice(0, prefixLen)) {
       return true;
     }
+  }
+
+  // Check 3: first 120 bytes identical — strong signal of JPEG header re-use → filter-only
+  const shortPrefixLen = Math.min(120, inputBase64.length, outputBase64.length);
+  if (shortPrefixLen >= 120 && inputBase64.slice(0, 120) === outputBase64.slice(0, 120)) {
+    return true;
   }
 
   return false;
@@ -853,7 +866,7 @@ async function tryGeminiImg2Img(
         ],
       },
     ],
-    config: { responseModalities: ["TEXT", "IMAGE"] },
+    config: { responseModalities: ["TEXT", "IMAGE"], temperature: 1.9 },
   };
 
   logger.info(
@@ -1193,41 +1206,41 @@ async function verifyEditOutput(
 // Builds the quality-retry instruction for Attempt 2 when Attempt 1 failed the
 // LAYER 8 quality check (identity drift, background replaced, pose changed, etc.).
 //
-// RETRY BEHAVIOR RULE: per the IMG2IMG contract, a quality-fail retry is reduced
-// to ONLY: exposure correction + contrast adjustment + white balance correction.
-// NO stylistic enhancement, color grading, sharpening, or lighting effects are
-// permitted on retry. The goal is the safest possible minimal adjustment that
-// preserves full structural integrity.
+// PRO_TRANSFORM_MODE: quality-fail retry is NOT reduced to a minimal pass.
+// The retry must still produce a STRONGLY TRANSFORMED result, but with an
+// explicit MAXIMUM IDENTITY LOCK that prevents the specific structural violation
+// the verifier detected. Transformation strength is maintained at FULL.
 function buildPreservationInstruction(
   mode: EditMode,
   userPrompt: string,
   qualityIssues: string[],
 ): string {
-  const issueContext =
-    qualityIssues.length > 0
-      ? `The previous attempt introduced these problems: ${qualityIssues.join(", ")}. These MUST NOT appear in the output.`
-      : "";
+  const issueList = qualityIssues.length > 0 ? qualityIssues.join("; ") : "structural drift";
+  const modeLabel = getEditModeLabel(mode);
 
   return (
-    `QUALITY-FAIL RETRY — reduced to minimal safe enhancement ONLY.\n` +
-    `Original edit type: ${getEditModeLabel(mode)}. Original request: "${userPrompt.slice(0, 100)}"\n` +
-    (issueContext ? `${issueContext}\n` : "") +
+    `IDENTITY-LOCKED STRONG RETRY — PRO_TRANSFORM_MODE.\n` +
+    `Edit type: ${modeLabel}. Original request: "${userPrompt.slice(0, 100)}"\n` +
     `\n` +
-    `RETRY BEHAVIOR RULE — apply ONLY these three operations:\n` +
-    `1. Exposure correction (subtle lift of shadows, gentle recovery of highlights)\n` +
-    `2. Contrast adjustment (natural tonal distribution — no crushing)\n` +
-    `3. White balance correction (remove color cast, achieve neutral accurate tones)\n` +
+    `CRITICAL — The previous attempt violated these structural rules: [${issueList}].\n` +
+    `These violations MUST NOT recur. Everything else must be transformed at FULL strength.\n` +
     `\n` +
-    `NO stylistic enhancement on retry.\n` +
-    `NO color grading, sharpening, lighting effects, or cinematic treatment on retry.\n` +
-    `Apply the absolute minimum adjustment needed to produce a visible but structurally safe result.\n` +
+    `MAXIMUM IDENTITY LOCK (absolute — these elements must NOT change):\n` +
+    `- Face and identity: same bone structure, same facial geometry, same person — NO identity drift\n` +
+    `- Pose: same body position, same limb angles, same orientation — NO pose change\n` +
+    `- Background: same objects, same spatial layout, same environment — NO scene replacement\n` +
+    `- Composition: same camera angle, same framing — NO crop or perspective change\n` +
     `\n` +
-    `ABSOLUTE PRESERVATION RULES (non-negotiable):\n` +
-    `- Keep the exact same face, identity, and bone structure\n` +
-    `- Keep the exact same pose and body position\n` +
-    `- Keep the exact same background — object-for-object, spatially unchanged\n` +
-    `- Keep the exact same composition and camera angle\n` +
-    `- Do NOT replace, regenerate, reconstruct, or restructure ANY element`
+    `TRANSFORMATION REQUIRED (these must be visibly strong in the output):\n` +
+    `- LIGHTING: Dramatically relight the scene — new directional key light, shaped shadows, strong rim light\n` +
+    `- COLOR: Apply a strong cinematic color grade — shift temperature, palette, or film look significantly\n` +
+    `- CONTRAST: Deep cinematic S-curve — crushed blacks, luminous highlights, bold tonal separation\n` +
+    `- EXPOSURE: Boldly redistribute — lift shadows dramatically OR recover highlights significantly\n` +
+    `- MOOD: The overall atmosphere must feel clearly different and more cinematic than the input\n` +
+    `\n` +
+    `The identity lock prevents structural changes. The transformation directives above are not optional.\n` +
+    `Output must look: same person, same pose, same scene — but dramatically transformed in visual quality.\n` +
+    `Near-identical output = FAILURE even on retry. Transformation must be visible and strong.`
   );
 }
 
@@ -1297,10 +1310,15 @@ export function getContractConfig(debugMode = false): Record<string, unknown> {
       verifierTimeoutMs:          VERIFY_TIMEOUT_MS,
       verifierModel:              GEMINI_VERIFY_MODEL,
       verifierPassthroughOnError: true,
+      proTransformMode:           true,
       retryPolicy:
-        "quality-fail → preservation retry (exposure + contrast + WB only). " +
-        "no-op + SIMPLE → fast-fail immediately (no retry). " +
-        "no-op + STANDARD/HEAVY → escalated retry once.",
+        "quality-fail → identity-locked STRONG retry (full transformation, maximum identity lock). " +
+        "no-op (all complexity) → EXTREME escalated retry (PRO_TRANSFORM_MODE: no SIMPLE fast-fail). " +
+        "verifier error (infra) → pass-through with warning.",
+      nearIdenticalDetection:
+        "size diff < 12% + first 300 chars match → near-identical. " +
+        "OR first 120 chars identical → filter-only (JPEG header reuse). " +
+        "Both trigger EXTREME escalated retry.",
     },
   };
 
@@ -1626,21 +1644,13 @@ export async function editImage(
     }
     // r1 === null (no-op) falls through with attempt2Trigger = "no-op"
 
-    // ── SIMPLE fast-fail on no-op (no retry) ──────────────────────────────────
-    // SIMPLE complexity means the model couldn't apply even a trivial single-op
-    // edit. Retrying with an EXTREME instruction risks identity drift on a simple
-    // request — fail immediately per fast-mode enforcement rules.
-    if (r1 === null && attempt2Trigger === "no-op" && complexity === "SIMPLE") {
-      const failMsg = "Image editing returned no visible change — please try a more descriptive instruction.";
-      failJob(job, "SIMPLE no-op — fast-fail (no retry)");
-      logger.warn(
-        { complexity, mode: getEditModeLabel(mode), fastFail: true },
-        "[imageEdit] SIMPLE no-op fast-fail — skipping retry per fast-mode enforcement",
-      );
-      throw new Error(failMsg);
-    }
+    // ── PRO_TRANSFORM_MODE: No fast-fail on SIMPLE no-op ──────────────────────
+    // All complexity levels escalate to Attempt 2 if Attempt 1 produces no output.
+    // SIMPLE requests that produce near-identical output are still failures and
+    // must be retried at EXTREME strength — not silently dropped.
+    // "If uncertain → REGENERATE at higher strength." (PRO_TRANSFORM_MODE rule)
 
-    // ── Attempt 2: escalated (no-op path) OR preservation (quality-fail path) ──
+    // ── Attempt 2: escalated (no-op path) OR identity-locked strong (quality-fail path) ──
     const attempt2Instruction =
       attempt2Trigger === "quality-fail"
         ? buildPreservationInstruction(mode, prompt, qualityRetryIssues)
@@ -1648,8 +1658,8 @@ export async function editImage(
 
     const attempt2Label =
       attempt2Trigger === "quality-fail"
-        ? `Attempt 2 — ${GEMINI_IMG2IMG_MODEL} | PRESERVATION retry (quality enforcement)`
-        : `Attempt 2 — ${GEMINI_IMG2IMG_MODEL} | EXTREME escalated (no-op recovery)`;
+        ? `Attempt 2 — ${GEMINI_IMG2IMG_MODEL} | IDENTITY-LOCKED STRONG retry (quality enforcement, PRO_TRANSFORM_MODE)`
+        : `Attempt 2 — ${GEMINI_IMG2IMG_MODEL} | EXTREME escalated (no-op recovery, PRO_TRANSFORM_MODE)`;
 
     advanceJob(job, "retrying", attempt2Label, { retryCount: 1 });
 
