@@ -1,0 +1,92 @@
+IB AI — MODEL ROUTING & STAGE SPECIALIZATION SYSTEM v1
+
+MISSION:
+Improve image quality by assigning different AI processing strategies to each pipeline stage without changing overall architecture.
+
+CORE PRINCIPLE:
+The pipeline structure remains the same (Stage 1 → Stage 2 → Stage 3),
+but each stage behaves like a specialized AI tool instead of a generic model call.
+
+────────────────────────────
+STAGE SPECIALIZATION RULES
+────────────────────────────
+
+STAGE 1 — CLEANUP / INPAINTING SPECIALIST
+Purpose: Remove unwanted elements and reconstruct image base
+
+Behavior:
+- maximum precision object removal
+- reconstruct missing areas naturally
+- strict identity preservation
+- no aesthetic enhancement
+
+Target capability:
+"inpainting + reconstruction accuracy"
+
+────────────────────────────
+
+STAGE 2 — DETAIL & REALISM ENHANCER
+Purpose: Improve realism and visual fidelity
+
+Behavior:
+- enhance lighting naturally
+- improve facial detail and texture
+- fix exposure and contrast
+- preserve identity strictly
+
+Target capability:
+"photoreal enhancement model behavior"
+
+────────────────────────────
+
+STAGE 3 — CINEMATIC STYLE ENGINE
+Purpose: Apply professional visual aesthetics
+
+Behavior:
+- cinematic color grading
+- film-style lighting shifts
+- depth and atmospheric mood
+- aesthetic transformation
+
+Target capability:
+"diffusion-style artistic model behavior"
+
+────────────────────────────
+ROUTING RULE
+────────────────────────────
+
+Each stage MUST behave like an independent specialist tool.
+
+DO NOT:
+- reuse identical processing logic across stages
+- treat all stages as generic prompt variations
+
+DO:
+- treat each stage as a different AI “expert system”
+
+────────────────────────────
+QUALITY OPTIMIZATION RULE
+────────────────────────────
+
+If output quality is weak:
+- DO NOT increase pipeline length
+- DO NOT retry full pipeline
+- ONLY adjust Stage 3 intensity or style weighting
+
+────────────────────────────
+CREDIT OPTIMIZATION RULE
+────────────────────────────
+
+- Avoid full pipeline re-execution
+- Re-run only the failing stage when needed
+- Prefer stage tuning over regeneration
+
+────────────────────────────
+FINAL OBJECTIVE
+────────────────────────────
+
+Transform IB AI from a generic pipeline system into a:
+- modular AI editing engine
+- where each stage behaves like a specialized AI model
+
+WITHOUT CHANGING EXISTING ARCHITECTURE.

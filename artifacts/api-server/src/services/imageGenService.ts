@@ -555,6 +555,7 @@ async function runImg2Img(
   instruction: string,
   timeoutMs:   number,
   contract:    string,
+  temperature: number = 1.0,
 ): Promise<string | null> {
   if (!parsed.base64 || parsed.base64.length < 1000) {
     throw new Error("Invalid image input — image data too short.");
@@ -565,7 +566,7 @@ async function runImg2Img(
   const fullInstruction = contract + instruction;
 
   logger.info(
-    { model: GEMINI_IMG2IMG_MODEL, instructionLen: instruction.length },
+    { model: GEMINI_IMG2IMG_MODEL, instructionLen: instruction.length, temperature },
     "[imageEdit] calling img2img model",
   );
 
@@ -581,7 +582,7 @@ async function runImg2Img(
           { text: fullInstruction },
         ],
       }],
-      config: { responseModalities: ["TEXT", "IMAGE"], temperature: 1.0 },
+      config: { responseModalities: ["TEXT", "IMAGE"], temperature },
     }),
     new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => reject(new Error(`Img2img timeout after ${timeoutMs}ms`)), timeoutMs);
@@ -619,78 +620,82 @@ async function runImg2Img(
 // Three specialized contracts applied in sequence.
 // Each stage's output data URL becomes the next stage's input image.
 
-const STAGE_1_CLEANUP_CONTRACT = `You are a professional photo compositor and image preparation specialist.
+const STAGE_1_CLEANUP_CONTRACT = `You are a precision inpainting and image reconstruction engine.
 
-TASK: Clean and prepare this image as a base for subsequent professional editing stages.
-OUTPUT STANDARD: "Clean, distraction-free base image — ready for enhancement."
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ACTIONS TO PERFORM — cleanup only
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-• Remove overlaid text, emoji, stickers, watermarks, UI elements, or any visual artifact
-• Fix distracting background elements that compete with the subject
-• Stabilize composition — correct obvious tilt or misalignment where needed
-• Neutralize heavily over-processed looks (flatten crushed blacks, blown highlights)
-• Remove noise or compression artifacts that are clearly visible
+OPERATING MODE: Maximum precision — deterministic reconstruction.
+TASK: Remove all unwanted elements and reconstruct the clean image base with perfect fidelity.
+OUTPUT STANDARD: "Surgically clean source image — artifacts removed, structure intact."
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STRICT RULES
+SPECIALIST BEHAVIOR — INPAINTING MODE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-• DO NOT apply stylistic changes, color grading, or artistic effects
-• DO NOT alter lighting quality, color tone, or mood
-• DO NOT change facial structure, age, ethnicity, or subject identity
-• If the image is already clean, output it nearly unchanged — do not invent changes
-• Output must look like a clean, neutral base version of the original
+• Detect and remove: overlaid text, emoji, stickers, watermarks, UI chrome, compression blocks
+• Reconstruct removed areas using surrounding context — fill must be seamless and natural
+• Correct distracting background elements that compete with the primary subject
+• Neutralize over-processing: recover crushed blacks, restore blown highlights to natural values
+• Eliminate visible JPEG / compression noise while preserving edge detail
 
-FINAL EDIT GOAL (context only — do NOT apply yet):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PRECISION RULES — NO CREATIVE DEVIATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• ZERO stylistic changes — no color shifts, no mood alteration, no artistic interpretation
+• ZERO lighting modification — ambient, shadows, and highlights remain as-is
+• ZERO identity change — facial structure, age, ethnicity, body unchanged
+• If the image is already clean: output it nearly unchanged — do not invent improvements
+• Reconstruction fills must match the local texture, color, and luminance context exactly
+
+RECONSTRUCTION TARGET (context only — preserve faithfully, do NOT transform):
 `;
 
-const STAGE_2_ENHANCEMENT_CONTRACT = `You are a professional photo retoucher and image quality specialist.
+const STAGE_2_ENHANCEMENT_CONTRACT = `You are a computational photography realism engine operating in controlled enhancement mode.
 
-TASK: Enhance the realism, quality, and visual clarity of this image.
-OUTPUT STANDARD: "High-quality, realistic photograph — professional retouching grade."
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ACTIONS TO PERFORM — quality only
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-• Adjust lighting naturally — reduce harsh shadows, add gentle fill where needed
-• Improve contrast and dynamic range — preserve shadow detail, recover highlights
-• Enhance facial clarity — sharpen eye detail, improve micro-contrast
-• Refine skin texture — smooth without plasticizing, keep pores and natural character
-• Improve overall sharpness and micro-detail throughout the image
-• Enhance depth perception — subtle subject-background separation if applicable
-• Correct color balance and exposure neutrally (not artistically)
+OPERATING MODE: Physically-grounded realism — no subjective aesthetics.
+TASK: Improve the photographic fidelity and visual quality of this image to professional standards.
+OUTPUT STANDARD: "Premium RAW-processed photograph — technically flawless, natural realism."
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STRICT RULES
+SPECIALIST BEHAVIOR — REALISM ENGINE MODE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-• DO NOT apply cinematic or artistic color grading
-• DO NOT alter facial structure, age, or subject identity
-• DO NOT introduce stylistic effects or filter looks
-• Output must look like a professionally retouched, realistic photograph
+• Lighting correction: simulate natural ambient fill, reduce harsh specular shadows, model soft diffuse wrap
+• Dynamic range: recover crushed shadows and blown highlights using tone-curve expansion
+• Facial rendering: sharpen iris micro-detail, improve eyelash separation, refine skin microstructure
+• Skin texture: smooth unevenness while preserving pores, hair follicle detail, and natural skin topography
+• Global sharpness: apply adaptive unsharp masking — increase acuity without introducing halation
+• Depth separation: gentle bokeh or luminance falloff to distinguish subject plane from background
+• Chromatic accuracy: neutralize color casts, correct white balance to D65 daylight standard
 
-ENHANCEMENT PASS — instruction:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STRICT RULES — CONTROLLED REALISM ONLY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• DO NOT apply cinematic color grading, LUTs, or stylistic tone shifts
+• DO NOT alter facial geometry, age, ethnicity, or subject identity
+• DO NOT introduce film grain, haze, vignette, or atmospheric effects
+• Output must pass as a professionally retouched photograph from a high-end DSLR sensor
+
+REALISM ENHANCEMENT — instruction:
 `;
 
-const STAGE_3_CINEMATIC_CONTRACT = `You are a professional cinematic colorist and image finishing specialist.
+const STAGE_3_CINEMATIC_CONTRACT = `You are a Hollywood digital intermediate colorist and cinematic image finishing engine.
 
-TASK: Apply the final cinematic aesthetic transformation described below.
-OUTPUT STANDARD: "Cinema-grade finished image — professional aesthetic."
+OPERATING MODE: Full artistic expressiveness — deliberate aesthetic transformation.
+TASK: Apply a professional cinematic grade and atmosphere to this image as described below.
+OUTPUT STANDARD: "Digital intermediate — film-release grade cinematic image."
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ACTIONS TO PERFORM — cinematic finishing
+SPECIALIST BEHAVIOR — CINEMATIC GRADING ENGINE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-• Apply professional cinematic color grading — controlled palette, tonal depth, no crushing
-• Set the mood: warm, cool, moody, dramatic, neutral, or as specified by the instruction
-• Apply DSLR / film-style tone mapping — rich midtones, not flat, not over-saturated
-• Add atmospheric depth — soft environmental enhancement, haze, or clarity as fits the mood
-• Apply subtle vignette if it improves the composition (never heavy)
-• Deliver the professional portrait or scene aesthetic as a finished product
+• Primary color grade: apply a film-stock LUT simulation — rich shadows, controlled midtones, open highlights
+• Mood palette: intentionally shift the color palette to match the requested mood (warm, cold, moody, neutral, dramatic)
+• Tone mapping: S-curve contrast with shoulder roll-off — avoid crushing blacks or clipping whites
+• Atmosphere: add haze, fog, or environmental depth to extend spatial dimension
+• Vignette: subtle optical falloff at corners if it improves composition focus (never forced)
+• Film character: introduce gentle grain, halation, or lens softness to create organic film texture
+• Lighting direction: add or shift light sources to match the cinematic mood if needed
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 IDENTITY RULES
@@ -700,7 +705,7 @@ IDENTITY RULES
 • Do NOT alter facial structure or body proportions
 • Do NOT distort photorealism unless the instruction explicitly calls for it
 
-CINEMATIC FINISHING INSTRUCTION:
+CINEMATIC GRADING INSTRUCTION:
 `;
 
 // ── Stage runner — executes one stage using a data URL as input ───────────────
@@ -710,13 +715,14 @@ async function runStage(
   instruction:  string,
   contract:     string,
   stageNum:     number,
+  temperature:  number = 1.0,
 ): Promise<string | null> {
   const parsed = parseAndValidateImage(inputDataUrl);
   logger.info(
-    { stageNum, instructionLen: instruction.length, inputBytes: parsed.base64.length },
+    { stageNum, instructionLen: instruction.length, inputBytes: parsed.base64.length, temperature },
     `[imageEdit] running stage ${stageNum}`,
   );
-  return runImg2Img(parsed, instruction, STAGE_TIMEOUT_MS, contract);
+  return runImg2Img(parsed, instruction, STAGE_TIMEOUT_MS, contract, temperature);
 }
 
 // ── Mode stage plan ───────────────────────────────────────────────────────────
@@ -724,46 +730,71 @@ async function runStage(
 // Returns an ordered list of stage descriptors for the given edit mode.
 // Each descriptor carries the contract and an instruction builder.
 
+// ── Stage specialization temperatures ────────────────────────────────────────
+//
+// Each stage is tuned to behave like a different AI expert system via temperature.
+//
+//  Stage 1 — Inpainting specialist (0.35):  deterministic, precision reconstruction,
+//            minimal creative deviation, maximum fidelity to source content.
+//
+//  Stage 2 — Realism enhancer (0.65):       controlled realism improvement, physically
+//            grounded lighting, no subjective aesthetics, balanced quality output.
+//
+//  Stage 3 — Cinematic/artistic engine (1.0): full artistic expressiveness, film-stock
+//            simulation, deliberate aesthetic interpretation, diffusion-style output.
+
+const STAGE_TEMPERATURES = {
+  cleanup:    0.35,
+  enhancement: 0.65,
+  cinematic:   1.0,
+} as const;
+
 type StageDescriptor = {
   stageNum:    number;
   label:       string;
   contract:    string;
+  temperature: number;
   instruction: (userPrompt: string) => string;
 };
 
 function buildStagePlan(mode: EditMode): StageDescriptor[] {
   const s1: StageDescriptor = {
     stageNum:    1,
-    label:       "Structure Cleanup",
+    label:       "Inpainting Specialist",
     contract:    STAGE_1_CLEANUP_CONTRACT,
+    temperature: STAGE_TEMPERATURES.cleanup,
     instruction: (p) => `Final edit goal (context only — do not apply yet): ${p}`,
   };
 
   const s2: StageDescriptor = {
     stageNum:    2,
-    label:       "Lighting + Enhancement",
+    label:       "Realism Enhancer",
     contract:    STAGE_2_ENHANCEMENT_CONTRACT,
+    temperature: STAGE_TEMPERATURES.enhancement,
     instruction: (_) => "Enhance this image: improve lighting, contrast, dynamic range, sharpness, and skin texture naturally. Do not apply artistic styling.",
   };
 
   const s3Cinematic: StageDescriptor = {
     stageNum:    3,
-    label:       "Cinematic Grading",
+    label:       "Cinematic Engine",
     contract:    STAGE_3_CINEMATIC_CONTRACT,
+    temperature: STAGE_TEMPERATURES.cinematic,
     instruction: (p) => p,
   };
 
   const s3StyleTransfer: StageDescriptor = {
     stageNum:    3,
-    label:       "Style Transfer",
+    label:       "Style Engine",
     contract:    CONTRACT_STYLE_TRANSFER,
+    temperature: STAGE_TEMPERATURES.cinematic,
     instruction: (p) => p,
   };
 
   const s3Creative: StageDescriptor = {
     stageNum:    3,
-    label:       "Creative Pass",
+    label:       "Creative Engine",
     contract:    CONTRACT_CREATIVE,
+    temperature: STAGE_TEMPERATURES.cinematic,
     instruction: (p) => p,
   };
 
@@ -932,7 +963,7 @@ export async function editImage(
         let failureReason: string | undefined;
 
         try {
-          stageOut = await runStage(currentDataUrl, instruction, stage.contract, stage.stageNum);
+          stageOut = await runStage(currentDataUrl, instruction, stage.contract, stage.stageNum, stage.temperature);
           if (!stageOut) failureReason = "model_rejection";
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -972,6 +1003,7 @@ export async function editImage(
             lastStage.instruction(renderPrompt) + " Apply this transformation clearly and visibly.",
             lastStage.contract,
             3,
+            lastStage.temperature,
           );
         } catch (err) {
           logger.error({ err }, "[imageEdit] Stage 3 retry threw");
