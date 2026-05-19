@@ -822,6 +822,136 @@ DO NOT verify or penalize:
 Those changes are the SUCCESS condition, not a failure condition.
 
 ------------------------------------------------------------
+IDENTITY DRIFT STABILIZER (IDS)
+------------------------------------------------------------
+
+The render engine MUST continuously compare the generated face against the extracted identity vectors during ALL rendering stages. Identity vectors are ABSOLUTE anchors — they do not loosen at any render pass.
+
+IMMUTABLE FACIAL STRUCTURES — these must survive every render pass without deviation:
+✖ Eye spacing — do NOT alter the distance between the eyes
+✖ Eye shape — do NOT alter eye width, height, or orbital shape
+✖ Eyelid structure — do NOT alter eyelid fold, thickness, or droop
+✖ Eyebrow placement — do NOT alter eyebrow height, arch, or distance from eyes
+✖ Nose bridge — do NOT alter bridge width or slope
+✖ Nostril geometry — do NOT alter nostril shape, flare, or placement
+✖ Lip contour — do NOT alter lip line, cupid's bow, or lip fullness
+✖ Jawline shape — do NOT alter jaw angle or width
+✖ Chin geometry — do NOT alter chin projection, width, or shape
+✖ Cheekbone structure — do NOT alter cheekbone prominence or placement
+✖ Forehead proportions — do NOT alter forehead height or width
+✖ Hairstyle silhouette — do NOT alter hairline shape or overall hair volume/shape
+✖ Facial proportions — do NOT alter overall face width-to-height ratio
+
+IDENTITY DRIFT REJECTION — the engine MUST reject:
+✖ Facial reinterpretation — generating a new face from the structural cues
+✖ Identity hallucination — the AI inventing facial features not in the source
+✖ Cinematic face redesign — "improving" or "enhancing" facial structure
+✖ Beauty-regeneration drift — AI-driven beautification causing identity deviation
+✖ AI-generated facial replacement — producing a generic attractive face
+✖ Synthetic face enhancement — smoothing, reshaping, or idealizing facial structure
+✖ Age transformation — making the subject younger or older
+✖ Ethnicity transformation — shifting perceived ethnicity in any way
+
+The subject MUST remain the exact same human. Identity drift of any magnitude = IDS FAILURE.
+
+------------------------------------------------------------
+STRUCTURAL ANCHOR REINFORCEMENT (SAR)
+------------------------------------------------------------
+
+The system MUST treat structure as HARD-LOCKED geometry. Structure does not soften or flex under any rendering condition.
+
+HARD-LOCKED structure (immutable — do NOT touch):
+✖ Face — geometry, proportions, identity
+✖ Pose — body position, limb angles, orientation
+✖ Body proportions — build, height impression, frame
+✖ Framing — camera angle, subject placement, crop
+✖ Object positions — where things are in the scene
+✖ Background topology — what occupies the background space
+✖ Spatial relationships — what is near/far, left/right relative to each other
+
+FLEXIBLE render layer (these are the ONLY things the engine may regenerate):
+✔ Cinematic appearance — all rendering decisions
+✔ Exposure system — metering, tonal weight, brightness
+✔ Lighting physics — direction, quality, intensity, color
+✔ Atmosphere — mood, depth, environmental feel, haze
+✔ Lens rendering — depth of field, aberration, focus behavior
+✔ Dynamic range — shadow depth, highlight rolloff
+✔ Sensor response — grain, noise floor, response curves
+
+CRITICAL SAR RULE:
+The render layer is fully flexible. The structure layer is NOT.
+The engine MUST NEVER reinterpret, regenerate, redesign, or alter geometry.
+Structure reinterpretation = SAR FAILURE.
+
+------------------------------------------------------------
+TEMPORAL CONSISTENCY GUARD (TCG)
+------------------------------------------------------------
+
+The render engine MUST maintain identity consistency across ALL render passes.
+
+Identity vectors extracted in Pass 1 are the SINGLE SOURCE OF TRUTH for the entire pipeline.
+They MUST be referenced at every subsequent pass without reinterpretation.
+
+TCG RULE PER PASS:
+✔ Pass 1 (Structure Extraction) — extract identity vectors precisely, no beautification
+✔ Pass 2 (Latent Reinitialization) — identity vectors remain locked, visual state resets
+✔ Pass 3 (Cinematic Recapture) — render layer regenerated, identity vectors actively enforced
+✔ Pass 4 (Structural Verification) — identity vectors compared against output, drift triggers rejection
+
+NO render pass is permitted to:
+✖ Reinterpret the subject
+✖ Regenerate new facial characteristics
+✖ Stylize anatomy
+✖ Beautify facial structure
+✖ Modify ethnicity
+✖ Modify age identity
+
+TCG DOMAIN BOUNDARY — cinematic rendering applies ONLY to:
+✔ Light — direction, quality, intensity, shadow behavior
+✔ Atmosphere — depth, mood, environmental character
+✔ Optics — lens physics, depth of field
+✔ Tone — exposure mapping, dynamic range, tonal weight
+✔ Sensor behavior — grain, noise floor, response curves
+
+Cinematic rendering does NOT apply to human anatomy. Human anatomy = TCG-locked.
+
+------------------------------------------------------------
+ANTI-FACE-SWAP ENFORCEMENT
+------------------------------------------------------------
+
+HARD FAILURE CONDITIONS — any of these in the output = IMMEDIATE REJECTION:
+✖ Different eye spacing from source
+✖ Different nose structure from source
+✖ Different jawline from source
+✖ Different face proportions from source
+✖ Different hairstyle geometry from source
+✖ Different ethnicity appearance from source
+✖ Different age identity from source
+✖ AI beauty-face replacement — generic attractive AI face replacing the real subject
+✖ Cinematic facial redesign — "improving" the face during rendering
+✖ Synthetic influencer-face effect — the output resembles a social media AI face, not the real person
+
+The output MUST NEVER resemble:
+✖ A different person
+✖ An AI-generated model
+✖ A beautified replacement human
+✖ A face-swapped render
+✖ A stylized avatar of the subject
+
+------------------------------------------------------------
+FINAL STABILIZATION DIRECTIVE
+------------------------------------------------------------
+
+Preserve: WHO the person is.
+Transform: HOW the photograph feels.
+
+Identity preservation is ABSOLUTE.
+Cinematic rendering is SECONDARY.
+
+If the engine is forced to choose between identity accuracy and cinematic intensity:
+ALWAYS preserve identity. Reduce cinematic intensity if necessary. Never reduce identity fidelity.
+
+------------------------------------------------------------
 STRUCTURE LAYER — WHAT MUST NOT CHANGE
 ------------------------------------------------------------
 
@@ -1073,16 +1203,20 @@ Your 5-step task — execute in order:
 → [PASS 4 — VERIFY BEFORE OUTPUT] Confirm identity locked, pose locked, composition locked — then confirm lighting/color/tone/atmosphere are DIFFERENT from input (those MUST change)
 → [PASS 5 — NEVER] Do not reproduce a filter output, a tonal adjustment, or a pixel-preserving result — that is an engine failure
 
-IDENTITY LOCK (highest priority):
-Same person. Same face geometry. Same eye spacing, nose, lips, jawline. Same ethnicity, age, gender. Same pose and proportions.
-Identity preservation outranks ALL rendering decisions.
+IDENTITY LOCK — IDS/SAR/TCG ACTIVE (highest priority — outranks ALL rendering decisions):
+Same person. Same face geometry. Same eye spacing, eyelids, eyebrows, nose bridge, nostril geometry, lip contour, jawline, chin, cheekbones, forehead, hairstyle silhouette. Same ethnicity, age, gender, pose, body proportions.
+If cinematic intensity conflicts with identity accuracy → sacrifice cinematic intensity. NEVER sacrifice identity fidelity.
+Identity drift = IDS FAILURE. Face-swap output = ANTI-FACE-SWAP FAILURE. Anatomy reinterpretation = SAR FAILURE.
 
-LATENT DIVERGENCE (required):
+TEMPORAL CONSISTENCY (TCG):
+Identity vectors from Pass 1 are the single source of truth across ALL passes. No pass may reinterpret, beautify, stylize, or hallucinate facial characteristics. Cinematic rendering applies to light/atmosphere/optics/tone/sensor ONLY — never to human anatomy.
+
+LATENT DIVERGENCE (required — LDE active):
 Lighting MUST diverge. Color MUST diverge. Tone MUST diverge. Atmosphere MUST diverge.
 Convergence toward source-image visual state = LDE FAILURE.
 
 The final result must feel like the SAME person photographed by a cinema camera under a completely new professional lighting and color system.
-Filter-only output = FAILURE. Pixel-preserving output = FAILURE. Identity drift = FAILURE.
+Filter-only output = FAILURE. Pixel-preserving output = FAILURE. Identity drift = FAILURE. AI face replacement = FAILURE.
 
 ------------------------------------------------------------
 SPECIFIC EDIT INSTRUCTION:
@@ -1498,16 +1632,36 @@ function buildPreservationInstruction(
   const modeLabel = getEditModeLabel(mode);
 
   return (
-    `IDENTITY-LOCKED STRONG RETRY — PRO_TRANSFORM_MODE.\n` +
+    `IDENTITY-LOCKED STRONG RETRY — PRO_TRANSFORM_MODE + IDS/SAR/TCG ACTIVE.\n` +
     `Edit type: ${modeLabel}. Original request: "${userPrompt.slice(0, 100)}"\n` +
     `\n` +
     `CRITICAL — The previous attempt violated these structural rules: [${issueList}].\n` +
     `These violations MUST NOT recur. Everything else must be transformed at FULL strength.\n` +
     `\n` +
-    `MAXIMUM IDENTITY LOCK (absolute — these elements must NOT change):\n` +
-    `- Face and identity: same bone structure, same facial geometry, same person — NO identity drift\n` +
+    `IDENTITY DRIFT STABILIZER (IDS) — GRANULAR FACIAL LOCK (absolute — zero tolerance for ANY deviation):\n` +
+    `- Eye spacing: same distance between eyes — do NOT move eyes closer or further apart\n` +
+    `- Eye shape: same eye width, height, orbital shape — do NOT redesign eyes\n` +
+    `- Eyelid structure: same eyelid fold, thickness — do NOT alter eyelid\n` +
+    `- Eyebrow placement: same arch, height, distance from eyes — do NOT move or reshape brows\n` +
+    `- Nose bridge + nostril geometry: same bridge width, slope, nostril shape — do NOT alter nose\n` +
+    `- Lip contour: same lip line, cupid's bow, lip fullness — do NOT alter lips\n` +
+    `- Jawline + chin: same jaw angle, width, chin projection — do NOT alter jaw or chin\n` +
+    `- Cheekbone structure: same prominence, placement — do NOT alter cheeks\n` +
+    `- Forehead proportions: same height, width — do NOT alter forehead\n` +
+    `- Hairstyle silhouette: same hairline, same hair volume/shape — lighting may change, shape may NOT\n` +
+    `- Facial proportions: same overall face width-to-height ratio — do NOT alter\n` +
+    `- Ethnicity: do NOT shift perceived ethnicity in any direction\n` +
+    `- Age identity: do NOT make younger, older, smoother, or more aged\n` +
+    `\n` +
+    `ANTI-FACE-SWAP ENFORCEMENT — these are HARD FAILURES:\n` +
+    `- AI beauty-face replacement: do NOT produce a generic attractive AI face\n` +
+    `- Cinematic facial redesign: do NOT "improve" the face during rendering\n` +
+    `- Synthetic influencer-face: output must be the real person, not a stylized AI avatar\n` +
+    `- Identity hallucination: do NOT invent facial features not present in the source\n` +
+    `\n` +
+    `STRUCTURAL ANCHOR REINFORCEMENT (SAR) — hard-locked geometry:\n` +
     `- Pose: same body position, same limb angles, same orientation — NO pose change\n` +
-    `- Background: same objects, same spatial layout, same environment — NO scene replacement\n` +
+    `- Background: same objects, same spatial layout — NO scene replacement\n` +
     `- Composition: same camera angle, same framing — NO crop or perspective change\n` +
     `\n` +
     `TRANSFORMATION REQUIRED (these must be visibly strong in the output):\n` +
@@ -1517,9 +1671,9 @@ function buildPreservationInstruction(
     `- EXPOSURE: Boldly redistribute — lift shadows dramatically OR recover highlights significantly\n` +
     `- MOOD: The overall atmosphere must feel clearly different and more cinematic than the input\n` +
     `\n` +
-    `The identity lock prevents structural changes. The transformation directives above are not optional.\n` +
+    `STABILIZATION DIRECTIVE: If cinematic intensity conflicts with identity accuracy → reduce cinematic intensity. NEVER reduce identity fidelity.\n` +
     `Output must look: same person, same pose, same scene — but dramatically transformed in visual quality.\n` +
-    `Near-identical output = FAILURE even on retry. Transformation must be visible and strong.`
+    `Near-identical output = FAILURE even on retry. Identity drift = FAILURE. Transformation must be visible and strong.`
   );
 }
 

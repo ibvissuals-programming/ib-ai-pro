@@ -1,0 +1,212 @@
+IDENTITY DRIFT STABILIZER (IDS)
++
+TEMPORAL CONSISTENCY GUARD (TCG)
++
+STRUCTURAL ANCHOR REINFORCEMENT (SAR)
+
+MISSION:
+Stabilize the cinematic recapture pipeline and eliminate identity drift during aggressive latent-space rendering.
+
+The system MUST maintain:
+
+- same exact person
+- same facial geometry
+- same structural anatomy
+- same hairstyle structure
+- same human identity
+
+while still allowing:
+
+- complete cinematic recapture
+- lighting redesign
+- color science replacement
+- atmosphere reconstruction
+- dynamic range regeneration
+- sensor emulation
+- tonal re-synthesis
+
+══════════════════════
+IDENTITY DRIFT STABILIZER (IDS)
+══════════════════════
+
+The render engine MUST continuously compare the generated face against the extracted identity vectors during ALL rendering stages.
+
+Identity vectors are ABSOLUTE anchors.
+
+The following facial structures are IMMUTABLE:
+
+- eye spacing
+- eye shape
+- eyelid structure
+- eyebrow placement
+- nose bridge
+- nostril geometry
+- lip contour
+- jawline shape
+- chin geometry
+- cheekbone structure
+- forehead proportions
+- hairstyle silhouette
+- facial proportions
+
+The render engine MUST reject:
+
+- facial reinterpretation
+- identity hallucination
+- cinematic face redesign
+- beauty-regeneration drift
+- AI-generated facial replacement
+- synthetic face enhancement
+- age transformation
+- ethnicity transformation
+
+The subject MUST remain:
+the exact same human.
+
+══════════════════════
+STRUCTURAL ANCHOR REINFORCEMENT (SAR)
+══════════════════════
+
+The system MUST treat structure as HARD-LOCKED geometry.
+
+Structure includes:
+
+- face
+- pose
+- body proportions
+- framing
+- camera angle
+- object positions
+- background topology
+- spatial relationships
+
+The render engine MAY ONLY regenerate:
+
+- render layer
+- cinematic appearance
+- exposure system
+- lighting physics
+- atmosphere
+- lens rendering
+- dynamic range
+- sensor response
+
+The render engine MUST NEVER:
+
+- reinterpret structure
+- regenerate anatomy
+- redesign face
+- alter geometry
+- change framing
+- reposition features
+
+CRITICAL RULE:
+The render layer is flexible.
+The structure layer is NOT.
+
+══════════════════════
+TEMPORAL CONSISTENCY GUARD (TCG)
+══════════════════════
+
+The render engine MUST maintain identity consistency across ALL render passes.
+
+Pass 1 identity extraction
+Pass 2 latent reinitialization
+Pass 3 cinematic recapture
+Pass 4 verification
+
+ALL passes MUST reference:
+the SAME identity vectors.
+
+No render pass is allowed to:
+
+- reinterpret the subject
+- regenerate new facial characteristics
+- stylize anatomy
+- beautify facial structure
+- modify ethnicity
+- modify age identity
+
+Cinematic rendering applies ONLY to:
+
+- light
+- atmosphere
+- optics
+- tone
+- sensor behavior
+
+NOT:
+human anatomy.
+
+══════════════════════
+ANTI-FACE-SWAP ENFORCEMENT
+══════════════════════
+
+The following are HARD FAILURES:
+
+✖ different eye spacing
+✖ different nose structure
+✖ different jawline
+✖ different face proportions
+✖ different hairstyle geometry
+✖ different ethnicity appearance
+✖ different age identity
+✖ AI beauty-face replacement
+✖ cinematic facial redesign
+✖ synthetic influencer-face effect
+
+The output MUST NEVER resemble:
+
+- a different person
+- an AI-generated model
+- a beautified replacement human
+- a face-swapped render
+
+══════════════════════
+CINEMATIC RECAPTURE SAFETY RULE
+══════════════════════
+
+A cinematic recapture means:
+
+NEW:
+
+- lighting
+- exposure
+- atmosphere
+- optics
+- color science
+- dynamic range
+- tonal rendering
+
+while preserving:
+
+SAME:
+
+- identity
+- face
+- geometry
+- composition
+- anatomy
+- structure
+
+The engine MUST behave like:
+a professional cinematographer re-photographing the SAME person.
+
+NOT:
+an AI generating a replacement person.
+
+══════════════════════
+FINAL STABILIZATION DIRECTIVE
+══════════════════════
+
+Preserve:
+WHO the person is.
+
+Transform:
+HOW the photograph feels.
+
+Identity preservation is ABSOLUTE.
+Cinematic rendering is SECONDARY.
+
+If forced to choose:
+ALWAYS preserve identity over cinematic intensity.
