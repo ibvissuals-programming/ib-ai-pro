@@ -49,6 +49,25 @@ function delay(ms: number): Promise<void> {
 
 // ── Edit result ───────────────────────────────────────────────────────────────
 
+export interface StageDebugRecord {
+  status:   "success" | "failed" | "skipped";
+  time_ms:  number;
+  effect:   "cleanup" | "enhancement" | "color_grading" | "style_transfer" | "creative_pass" | "none";
+  reason?:  string;
+}
+
+export interface PipelineDebug {
+  mode:            string;
+  pipeline_status: "success" | "partial" | "failed";
+  stages: {
+    stage_1_cleanup:     StageDebugRecord;
+    stage_2_enhancement: StageDebugRecord;
+    stage_3_cinematic:   StageDebugRecord;
+  };
+  bottleneck:     string;
+  recommendation: string;
+}
+
 export interface EditResult {
   b64Image:            string;
   job:                 ReturnType<typeof jobSummary>;
@@ -57,6 +76,7 @@ export interface EditResult {
   qualityVerified:     boolean;
   qualityIssues:       string[];
   contractVersionUsed: string;
+  pipelineDebug?:      PipelineDebug;
 }
 
 // ── Contract config (diagnostic endpoint) ────────────────────────────────────
@@ -799,7 +819,7 @@ export async function editImage(
 
   const pipelineStartMs = Date.now();
 
-  const succeedEdit = (b64Image: string, retryCount: number, usedMode: EditMode): EditResult => {
+  const succeedEdit = (b64Image: string, retryCount: number, usedMode: EditMode, pipelineDebug?: PipelineDebug): EditResult => {
     const usedLabel  = MODE_LABELS[usedMode];
     const latencyMs  = Date.now() - pipelineStartMs;
     completeJob(job, "gemini-img2img");
@@ -831,6 +851,7 @@ export async function editImage(
       qualityVerified:     false,
       qualityIssues:       [],
       contractVersionUsed: CONTRACT_VERSION,
+      pipelineDebug,
     };
   };
 
@@ -839,12 +860,62 @@ export async function editImage(
       const stages    = buildStagePlan(resolvedMode);
       const lastStage = stages[stages.length - 1]!;
 
-      // ── Multi-stage execution ─────────────────────────────────────────────
-      // Each stage receives the previous stage's output as its input image.
-      // If a stage returns null (model refused / no image), we fall through
-      // using the last successful output so the pipeline always completes.
+      // ── Per-stage debug records (all start as skipped) ────────────────────
+      type StageKey = "stage_1_cleanup" | "stage_2_enhancement" | "stage_3_cinematic";
 
-      let currentDataUrl: string = imageDataUrl;   // start with original
+      const stageRecords: Record<StageKey, StageDebugRecord> = {
+        stage_1_cleanup:     { status: "skipped", time_ms: 0, effect: "none", reason: "not_run" },
+        stage_2_enhancement: { status: "skipped", time_ms: 0, effect: "none", reason: "not_run" },
+        stage_3_cinematic:   { status: "skipped", time_ms: 0, effect: "none", reason: "not_run" },
+      };
+
+      const stageKeyOf = (n: number): StageKey =>
+        n === 1 ? "stage_1_cleanup" : n === 2 ? "stage_2_enhancement" : "stage_3_cinematic";
+
+      const effectOf = (n: number): StageDebugRecord["effect"] => {
+        if (n === 1) return "cleanup";
+        if (n === 2) return "enhancement";
+        if (resolvedMode === "style_transfer") return "style_transfer";
+        if (resolvedMode === "creative")       return "creative_pass";
+        return "color_grading";
+      };
+
+      // ── Build final debug summary from collected records ──────────────────
+      const buildDebug = (
+        pipelineStatus: PipelineDebug["pipeline_status"],
+        completedCount: number,
+        overrideMode?:  EditMode,
+      ): PipelineDebug => {
+        const usedLabel  = MODE_LABELS[overrideMode ?? resolvedMode];
+        const entries    = Object.entries(stageRecords) as [StageKey, StageDebugRecord][];
+        const failed     = entries.filter(([, r]) => r.status === "failed");
+        const succeeded  = entries.filter(([, r]) => r.status === "success");
+
+        const bottleneck =
+          failed.length > 0
+            ? failed[0]![0].replace(/_/g, " ")
+            : succeeded.length > 0
+            ? succeeded.sort(([, a], [, b]) => b.time_ms - a.time_ms)[0]![0].replace(/_/g, " ")
+            : "none";
+
+        let recommendation: string;
+        if (pipelineStatus === "success") {
+          recommendation = `Pipeline ran cleanly — ${completedCount} stage(s) completed`;
+        } else if (stageRecords.stage_3_cinematic.status === "failed" && completedCount > 0) {
+          recommendation = "Cinematic grading failed — output is enhanced but not color graded. Try a simpler instruction or switch to Cinematic mode.";
+        } else if (stageRecords.stage_2_enhancement.status === "failed" && stageRecords.stage_1_cleanup.status === "success") {
+          recommendation = "Enhancement pass failed — output is cleaned but not enhanced. Try Portrait Safe mode for more stable results.";
+        } else if (stageRecords.stage_1_cleanup.status === "failed") {
+          recommendation = "Cleanup stage failed — try a less complex image or simpler instruction.";
+        } else {
+          recommendation = "Full pipeline failed — model may be overloaded. Try a simpler instruction or a different edit mode.";
+        }
+
+        return { mode: usedLabel, pipeline_status: pipelineStatus, stages: stageRecords, bottleneck, recommendation };
+      };
+
+      // ── Multi-stage execution ─────────────────────────────────────────────
+      let currentDataUrl: string = imageDataUrl;
       let stagesCompleted        = 0;
 
       for (const stage of stages) {
@@ -854,36 +925,46 @@ export async function editImage(
           `Stage ${stage.stageNum}/${stages.length} — ${stage.label}`,
         );
 
-        const instruction = stage.instruction(renderPrompt);
-
+        const key          = stageKeyOf(stage.stageNum);
+        const instruction  = stage.instruction(renderPrompt);
+        const stageStartMs = Date.now();
         let stageOut: string | null = null;
+        let failureReason: string | undefined;
+
         try {
           stageOut = await runStage(currentDataUrl, instruction, stage.contract, stage.stageNum);
+          if (!stageOut) failureReason = "model_rejection";
         } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          failureReason = msg.toLowerCase().includes("timeout") ? "timeout" : "model_rejection";
           logger.error({ err, stageNum: stage.stageNum }, "[imageEdit] stage threw — continuing with prior output");
         }
+
+        const stageMs = Date.now() - stageStartMs;
 
         if (stageOut) {
           currentDataUrl = stageOut;
           stagesCompleted++;
-          logger.info({ stageNum: stage.stageNum, stagesCompleted }, "[imageEdit] stage completed");
+          stageRecords[key] = { status: "success", time_ms: stageMs, effect: effectOf(stage.stageNum) };
+          logger.info({ stageNum: stage.stageNum, stagesCompleted, time_ms: stageMs }, "[imageEdit] stage completed");
         } else {
-          logger.warn({ stageNum: stage.stageNum }, "[imageEdit] stage returned no image — using prior output");
+          stageRecords[key] = { status: "failed", time_ms: stageMs, effect: "none", reason: failureReason };
+          logger.warn({ stageNum: stage.stageNum, reason: failureReason }, "[imageEdit] stage returned no image — using prior output");
         }
       }
 
-      // ── Check if we got a usable final output ─────────────────────────────
-      // If at least one stage produced output, treat as success.
+      // ── At least one stage produced output — pipeline success / partial ───
       if (stagesCompleted > 0) {
-        return succeedEdit(currentDataUrl, 0, resolvedMode);
+        const pipelineStatus = stagesCompleted === stages.length ? "success" : "partial";
+        return succeedEdit(currentDataUrl, 0, resolvedMode, buildDebug(pipelineStatus, stagesCompleted));
       }
 
       // ── Failsafe: all stages returned null — retry Stage 3 once ──────────
-      // Spec: if output is weak → rerun Stage 3 once → if still weak → downgrade
       if (lastStage.stageNum === 3) {
         advanceJob(job, "retrying", `Failsafe — retrying Stage 3 (${lastStage.label})`);
         logger.info("[imageEdit] All stages returned null — retrying Stage 3");
 
+        const retryStartMs = Date.now();
         let retryOut: string | null = null;
         try {
           retryOut = await runStage(
@@ -896,7 +977,14 @@ export async function editImage(
           logger.error({ err }, "[imageEdit] Stage 3 retry threw");
         }
 
-        if (retryOut) return succeedEdit(retryOut, 1, resolvedMode);
+        if (retryOut) {
+          stageRecords.stage_3_cinematic = {
+            status: "success", time_ms: Date.now() - retryStartMs,
+            effect: effectOf(3), reason: "retry_succeeded",
+          };
+          return succeedEdit(retryOut, 1, resolvedMode, buildDebug("partial", 1));
+        }
+        stageRecords.stage_3_cinematic.reason = "weak_transformation";
       }
 
       // ── Final fallback: downgrade mode, single-shot attempt ───────────────
@@ -920,7 +1008,7 @@ export async function editImage(
         throw new Error("Image editing failed. Please try again.");
       }
 
-      if (fallbackOut) return succeedEdit(fallbackOut, 2, fallbackMode);
+      if (fallbackOut) return succeedEdit(fallbackOut, 2, fallbackMode, buildDebug("partial", 0, fallbackMode));
 
       failJob(job, "All pipeline stages and fallback returned no image output");
       throw new Error("Image editing failed — model returned no output after the full pipeline. Please try a different instruction.");

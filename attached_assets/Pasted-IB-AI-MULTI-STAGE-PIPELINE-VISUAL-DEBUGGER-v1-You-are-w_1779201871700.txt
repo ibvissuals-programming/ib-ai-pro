@@ -1,0 +1,98 @@
+IB AI — MULTI-STAGE PIPELINE VISUAL DEBUGGER v1
+
+You are working inside IB AI, a multi-stage image editing system with a 3-stage pipeline:
+
+STAGE 1: CLEANUP
+STAGE 2: ENHANCEMENT
+STAGE 3: CINEMATIC GRADING
+
+MISSION:
+Add a lightweight debugging and visualization layer to the existing pipeline WITHOUT changing core logic.
+
+CRITICAL RULE:
+DO NOT modify image generation logic.
+DO NOT add new models.
+DO NOT increase pipeline complexity.
+ONLY add observability and structured reporting.
+
+────────────────────────────
+DEBUGGING REQUIREMENTS
+────────────────────────────
+
+For every image edit request, track and report:
+
+1. PIPELINE FLOW TRACKING
+- Stage 1 status: success / failure
+- Stage 2 status: success / failure
+- Stage 3 status: success / failure
+
+2. STAGE OUTPUT METADATA
+For each stage, record:
+- processing time (ms)
+- whether image was modified significantly (yes/no)
+- type of change detected:
+  - cleanup
+  - enhancement
+  - color grading
+  - structural change
+
+3. FAILURE POINT DETECTION
+If pipeline fails:
+- identify exact stage of failure
+- log reason:
+  - timeout
+  - model rejection
+  - weak transformation
+  - identity lock override
+  - prompt conflict
+
+────────────────────────────
+VISUAL DEBUG OUTPUT FORMAT
+────────────────────────────
+
+Return a structured debug object:
+
+{
+  "mode": "<editMode>",
+  "pipeline_status": "success | partial | failed",
+  "stages": {
+    "stage_1_cleanup": {
+      "status": "",
+      "time_ms": 0,
+      "effect": ""
+    },
+    "stage_2_enhancement": {
+      "status": "",
+      "time_ms": 0,
+      "effect": ""
+    },
+    "stage_3_cinematic": {
+      "status": "",
+      "time_ms": 0,
+      "effect": ""
+    }
+  },
+  "bottleneck": "",
+  "recommendation": ""
+}
+
+────────────────────────────
+CREDIT OPTIMIZATION RULE
+────────────────────────────
+
+- DO NOT re-run failed stages automatically
+- DO NOT retry full pipeline unless explicitly required
+- ONLY retry the failed stage if necessary
+- Prioritize logging over regeneration
+
+────────────────────────────
+GOAL
+────────────────────────────
+
+Make IB AI fully observable so that:
+- failures are visible
+- stage behavior is measurable
+- pipeline bottlenecks are identified
+- future upgrades can be data-driven
+
+WITHOUT CHANGING CORE IMAGE GENERATION SYSTEM.

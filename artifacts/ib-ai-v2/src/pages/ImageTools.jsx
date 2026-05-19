@@ -496,9 +496,10 @@ function EditTab() {
       );
       setOutput(res.b64Image);
       setOutputMeta({
-        mode:                  res.mode     ?? null,
-        intensity:             res.intensity ?? null,
+        mode:                  res.mode          ?? null,
+        intensity:             res.intensity      ?? null,
         cinematicAnalysisUsed: res.cinematicAnalysisUsed ?? false,
+        pipelineDebug:         res.pipelineDebug  ?? null,
       });
     } catch (err) {
       setError(err.message);
@@ -689,6 +690,96 @@ function EditTab() {
                 )}
               </div>
             )}
+
+            {/* Pipeline debug tracker */}
+            {outputMeta?.pipelineDebug && (() => {
+              const dbg = outputMeta.pipelineDebug;
+              const STATUS_ICON = { success: '✓', failed: '✗', skipped: '—' };
+              const STATUS_COLOR = {
+                success: 'text-emerald-400 border-emerald-400/30 bg-emerald-500/8',
+                failed:  'text-red-400 border-red-400/30 bg-red-500/8',
+                skipped: 'text-muted-foreground border-border/40 bg-transparent',
+              };
+              const EFFECT_LABEL = {
+                cleanup:        'Cleanup',
+                enhancement:    'Enhancement',
+                color_grading:  'Color Grade',
+                style_transfer: 'Style',
+                creative_pass:  'Creative',
+                none:           '—',
+              };
+              const PIPELINE_STATUS_COLOR = {
+                success: 'text-emerald-400',
+                partial: 'text-amber-400',
+                failed:  'text-red-400',
+              };
+
+              const stageList = [
+                { key: 'stage_1_cleanup',     num: 1, label: 'Cleanup' },
+                { key: 'stage_2_enhancement', num: 2, label: 'Enhance' },
+                { key: 'stage_3_cinematic',   num: 3, label: 'Grade' },
+              ];
+
+              return (
+                <div className="rounded-xl border border-border/40 bg-background/40 overflow-hidden">
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-border/30">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary/60 inline-block" />
+                      Pipeline
+                    </span>
+                    <span className={`text-[10px] font-semibold capitalize ${PIPELINE_STATUS_COLOR[dbg.pipeline_status]}`}>
+                      {dbg.pipeline_status}
+                    </span>
+                  </div>
+
+                  {/* Stage rows */}
+                  <div className="divide-y divide-border/20">
+                    {stageList.map(({ key, num, label }) => {
+                      const rec = dbg.stages[key];
+                      const colorClass = STATUS_COLOR[rec.status];
+                      return (
+                        <div key={key} className="flex items-center gap-2.5 px-3 py-2">
+                          {/* Stage number */}
+                          <span className="text-[9px] font-bold text-muted-foreground/50 w-3 shrink-0">{num}</span>
+                          {/* Status badge */}
+                          <span className={`text-[9px] font-bold w-3.5 shrink-0 ${PIPELINE_STATUS_COLOR[rec.status] || 'text-muted-foreground'}`}>
+                            {STATUS_ICON[rec.status]}
+                          </span>
+                          {/* Label */}
+                          <span className={`text-[11px] font-medium flex-1 ${rec.status === 'skipped' ? 'text-muted-foreground/40' : 'text-foreground'}`}>
+                            {label}
+                          </span>
+                          {/* Effect pill */}
+                          {rec.status !== 'skipped' && rec.effect !== 'none' && (
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded-md border font-medium ${colorClass}`}>
+                              {EFFECT_LABEL[rec.effect] ?? rec.effect}
+                            </span>
+                          )}
+                          {/* Failure reason */}
+                          {rec.status === 'failed' && rec.reason && rec.reason !== 'model_rejection' && (
+                            <span className="text-[9px] text-red-400/70 font-medium capitalize">{rec.reason.replace(/_/g, ' ')}</span>
+                          )}
+                          {/* Time */}
+                          {rec.status !== 'skipped' && rec.time_ms > 0 && (
+                            <span className="text-[9px] text-muted-foreground/50 tabular-nums shrink-0">
+                              {rec.time_ms >= 1000 ? `${(rec.time_ms / 1000).toFixed(1)}s` : `${rec.time_ms}ms`}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Recommendation footer — only when not a clean success */}
+                  {dbg.pipeline_status !== 'success' && (
+                    <div className="px-3 py-2 border-t border-border/30 bg-amber-500/5">
+                      <p className="text-[10px] text-amber-400/80 leading-snug">{dbg.recommendation}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Side-by-side comparison */}
             <div className="grid grid-cols-2 gap-3">
