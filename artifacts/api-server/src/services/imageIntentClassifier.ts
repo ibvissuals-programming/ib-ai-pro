@@ -111,8 +111,9 @@ export function detectEditIntensity(
   }
 
   if (LOW_SIGNALS.some((s) => lower.includes(s))) return "LOW";
-  if (HIGH_SIGNALS.some((s) => lower.includes(s))) return "HIGH";
-  return "MEDIUM";
+  // PRO_EDIT_MODE: HIGH is the default minimum — no silent fallback to MEDIUM.
+  // MEDIUM is only used when an explicit LOW signal was detected above.
+  return "HIGH";
 }
 
 // ── LAYER 1: Mode classification rules ───────────────────────────────────────

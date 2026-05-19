@@ -79,13 +79,24 @@ const POLLINATIONS_RETRY_BASE_MS       = 1_500;
 // CONTRACT_VERSION identifies which enforcement ruleset is active.
 // It is included in every edit response and surfaced by GET /api/image/contract.
 // Increment when the IMG2IMG_MASTER_CONTRACT text is materially updated.
-export const CONTRACT_VERSION = "v4" as const;
+export const CONTRACT_VERSION = "v5" as const;
+
+// PRO_EDIT_MODE — the new system-wide default for all image edits.
+// When true:
+//   - Default edit strength = HIGH (no silent fallback to MEDIUM or LOW)
+//   - Strong tonal transformation and cinematic grading are expected outputs
+//   - Visible lighting and contrast changes are REQUIRED, not optional
+//   - Identity, background, and pose locks remain active (structural only)
+//   - No cleanup, cropping, or content-aware reconstruction operations
+//   - AGGRESSIVE_RECONSTRUCTION and CINEMATIC EXTREME run at full intensity
+export const PRO_EDIT_MODE = true as const;
 
 const CONTRACT_VERSION_HISTORY: Record<string, string> = {
   v1: "Basic IMG2IMG enforcement — identity lock, background lock, Lightroom-style allowed operations only",
   v2: "Quality verifier system added — retry-once enforcement; identity/background/pose/composition validation",
   v3: "Anti-AI look system added — prevents plastic skin, HDR overprocessing, fake cinematic glow, over-smoothed faces; forces DSLR realism",
   v4: "Retry behavior rule locked — on retry ONLY exposure correction + contrast + white balance; all stylistic enhancement removed on retry",
+  v5: "PRO_EDIT_MODE enabled — HIGH is the default minimum strength; AGGRESSIVE_RECONSTRUCTION and CINEMATIC EXTREME run at full intensity; verifier relaxed to allow all tonal/cinematic changes; FAIL-SAFE uncertainty rule replaced with maintain-HIGH policy",
 };
 
 type AcceptedMime = (typeof ACCEPTED_MIMES)[number];
@@ -641,13 +652,16 @@ ONLY apply:
 NO stylistic enhancement allowed on retry.
 
 ------------------------------------------------------------
-FAIL-SAFE BEHAVIOR
+FAIL-SAFE BEHAVIOR (PRO_EDIT_MODE)
 ------------------------------------------------------------
 
-If unsure:
-→ Choose safest option (least change possible)
+If unsure about HOW to apply an edit:
+→ Maintain HIGH transformation strength — do NOT reduce edit intensity
+→ Do NOT self-downgrade to a safer or weaker version of the edit
+→ Only reduce prompt complexity if needed — NEVER reduce image transformation strength
+→ A near-identical or minimally changed output is a FAILURE, not a safe choice
 
-If model cannot comply:
+If model cannot comply with the structural locks:
 → RETURN ERROR
 → DO NOT generate fallback image
 → DO NOT recreate image
@@ -913,13 +927,22 @@ function buildVerificationPrompt(
   userPrompt: string,
 ): string {
   const tierRules: Record<VerificationTier, string> = {
-    STRICT: `STRICT CHECKS — all must pass:
-1. FACE/IDENTITY: If a person is present, they must be the same person (same face shape, skin tone). Any face swap or identity change = INVALID.
-2. BACKGROUND: The background layout must be the same environment. A replaced or regenerated background = INVALID.
-3. OBJECTS: Same main objects must be present in approximately the same positions. Inserted or removed objects = INVALID.
-4. POSE: Subject's pose must be preserved. Changed pose = INVALID.
-5. COMPOSITION: Same framing and crop. Drastically different angle = INVALID.
-Allowed: lighting changes, color grading, sharpness adjustment, exposure correction, color tone shifts.`,
+    STRICT: `STRICT CHECKS — structural integrity only (PRO_EDIT_MODE v5):
+1. FACE/IDENTITY: If a person is present, they must be the same person (same face shape, bone structure, skin tone). A different person or face replacement = INVALID.
+2. BACKGROUND: The background must be the same environment — same objects, same spatial layout. A completely replaced or regenerated background scene = INVALID.
+3. OBJECTS: Same main objects must be present in approximately the same positions. Objects being inserted or removed (not requested) = INVALID.
+4. POSE: Subject's pose and body position must be preserved. A changed pose = INVALID.
+5. COMPOSITION: Same framing and crop. A drastically different camera angle = INVALID.
+
+EXPLICITLY ALLOWED — do NOT fail for any of these (they are expected, valid edits):
+✔ Lighting changes — directional light shifts, 3-point lighting, relighting
+✔ Exposure adjustments — lifted shadows, recovered highlights, brightened or darkened image
+✔ Contrast changes — deep shadows, bright highlights, HDR-style tonal curves
+✔ Color grading — teal-orange, warm tones, cool tones, cinematic palette shifts
+✔ Cinematic tonal shifts — film grain, anamorphic lens effects, color temperature
+✔ Clarity and sharpness improvements — local sharpening, texture enhancement
+✔ Mood and atmosphere changes — image looks more dramatic, moody, or cinematic
+✔ The image appearing more polished, professional, or AI-enhanced in tonal quality`,
 
     IDENTITY: `IDENTITY CHECKS — must pass:
 1. FACE/IDENTITY: If a person is present, they must be recognizably the same person. Identity drift = INVALID.
@@ -1143,10 +1166,16 @@ export function getContractConfig(debugMode = false): Record<string, unknown> {
       HEAVY:    { timeoutMs: complexityTimeout("HEAVY"),    retriesOnNoOp: 1 },
     },
 
+    proEditMode: {
+      enabled:                     PRO_EDIT_MODE,
+      defaultStrength:             "HIGH",
+      aggressiveReconstructionCap: "NONE — runs at full detected intensity",
+      cinematicExtremeCap:         "NONE — runs at full EXTREME intensity",
+      minimumVisualChangeEnforced: true,
+      nearIdenticalOutputIsFailure: true,
+    },
+
     modes: {
-      aggressiveReconstructionDowngradeTo:       "SUBTLE_ENHANCEMENT",
-      aggressiveReconstructionIntensityOverride: "MEDIUM",
-      cinematicEditMaxIntensityCap:              "HIGH",
       looseTierVerifierSkip:                      true,
       looseTierModes: [
         "STYLE_TRANSFER",
@@ -1315,26 +1344,11 @@ export async function editImage(
   //
   // These downgrades enforce the "fast, stable, deterministic" contract and
   // ensure the pipeline stays within the 40s global deadline.
-  let fastModeDowngraded = false;
-  const originalMode      = mode;
-  const originalIntensity = intensity;
-
-  if (mode === "AGGRESSIVE_RECONSTRUCTION") {
-    mode                = "SUBTLE_ENHANCEMENT";
-    intensity           = "MEDIUM";
-    fastModeDowngraded  = true;
-    logger.warn(
-      { originalMode, downgraded: mode, reason: "AGGRESSIVE_RECONSTRUCTION auto-downgraded — heavy generative operation" },
-      "[imageEdit] FAST MODE — mode downgraded to SUBTLE_ENHANCEMENT",
-    );
-  } else if (mode === "CINEMATIC_EDIT" && intensity === "EXTREME") {
-    intensity          = "HIGH";
-    fastModeDowngraded = true;
-    logger.warn(
-      { mode, originalIntensity, downgraded: intensity, reason: "CINEMATIC EXTREME auto-capped to HIGH" },
-      "[imageEdit] FAST MODE — CINEMATIC intensity capped at HIGH",
-    );
-  }
+  // PRO_EDIT_MODE v5: auto-downgrade blocks REMOVED.
+  // AGGRESSIVE_RECONSTRUCTION runs at full detected intensity (HIGH/EXTREME).
+  // CINEMATIC_EDIT EXTREME runs without intensity cap.
+  // The MINIMUM VISUAL CHANGE THRESHOLD is now enforced — near-identical output
+  // is a FAILURE state (Layer 6) that triggers escalated retry, not a downgrade.
 
   const verifyTier = getVerificationTier(mode);
 
@@ -1350,30 +1364,25 @@ export async function editImage(
       verifyModel: GEMINI_VERIFY_MODEL,
       mode,
       intensity,
-      fastModeDowngraded,
+      proEditMode: PRO_EDIT_MODE,
     },
     "[imageEdit] pipeline entered — IMG2IMG ONLY + LAYER 8 quality enforcement",
   );
 
-  // ── LAYER 4: Build instructions ────────────────────────────────────────────
-  // When fast-mode downgrade was applied, bypass buildStrongInstruction entirely
-  // and use the strict minimal-ops instruction. This is the hard production-safety
-  // boundary — the model receives an instruction that explicitly forbids the heavy
-  // operations the original mode would have triggered, regardless of mode label.
-  const primaryInstruction: string = fastModeDowngraded
-    ? buildFastModeInstruction(originalMode, prompt)
-    : buildStrongInstruction(mode, intensity, prompt);
+  // ── LAYER 4: Build instructions (PRO_EDIT_MODE v5) ───────────────────────
+  // All modes run at full detected intensity — no fast-mode downgrade path.
+  // Primary instruction = mode-specific strong instruction at detected intensity.
+  // Escalated instruction = same mode at EXTREME, used for no-op recovery.
+  const primaryInstruction: string = buildStrongInstruction(mode, intensity, prompt);
 
-  // Escalated instruction — same model, stronger prompt, used for no-op recovery.
-  // Fast-mode downgraded requests still use the safe fast-mode template on retry
-  // (escalating a fast-mode downgrade back to heavy ops would defeat the policy).
-  const escalatedInstruction: string = fastModeDowngraded
-    ? buildFastModeInstruction(originalMode, prompt + " — IMPORTANT: apply a clearly visible but minimal correction.")
-    : buildStrongInstruction(
-        mode,
-        "EXTREME",
-        prompt + " — IMPORTANT: this edit MUST be visually transformative. Make a strong, clearly visible change.",
-      );
+  // Escalated instruction — same model, EXTREME strength, used for no-op recovery.
+  // MINIMUM VISUAL CHANGE THRESHOLD: if Attempt 1 was near-identical, Attempt 2
+  // escalates to EXTREME to force a visible transformation — never downgrades.
+  const escalatedInstruction: string = buildStrongInstruction(
+    mode,
+    "EXTREME",
+    prompt + " — IMPORTANT: this edit MUST be visually transformative. Make a strong, clearly visible change.",
+  );
 
   const hasPreservationLock = detectPreservationLock(prompt);
   const expandedPrompt      = buildStructuredPrompt(prompt, hasPreservationLock);
