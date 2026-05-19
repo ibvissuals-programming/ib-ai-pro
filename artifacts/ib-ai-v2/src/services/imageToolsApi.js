@@ -49,15 +49,15 @@ export async function generateImage(prompt) {
  * Edit an existing image using a natural-language instruction.
  * @param {string} imageBase64 — data URL (data:image/...;base64,...)
  * @param {string} prompt — edit instruction
- * @param {string} [cinematicProfile] — optional EditMode override (e.g. "CINEMATIC_EDIT")
+ * @param {string} [editMode] — "portrait_safe" | "cinematic" | "style_transfer" | "creative" (auto-detected if omitted)
  * @param {string} [intensity] — optional intensity override ("LOW"|"MEDIUM"|"HIGH"|"EXTREME")
  * @param {boolean} [useCinematicAnalysis] — if true, backend runs Gemini vision pre-analysis
  * @returns {Promise<{ b64Image: string, status: string, mode?: string, intensity?: string, cinematicAnalysisUsed?: boolean }>}
  */
-export async function editImage(imageBase64, prompt, cinematicProfile, intensity, useCinematicAnalysis) {
+export async function editImage(imageBase64, prompt, editMode, intensity, useCinematicAnalysis) {
   let res;
   const body = { image: imageBase64, prompt };
-  if (cinematicProfile)      body.cinematicProfile      = cinematicProfile;
+  if (editMode)              body.editMode              = editMode;
   if (intensity)             body.intensity             = intensity;
   if (useCinematicAnalysis)  body.useCinematicAnalysis  = true;
 

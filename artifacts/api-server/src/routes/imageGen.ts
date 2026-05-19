@@ -54,12 +54,15 @@ const VALID_CINEMATIC_PROFILES = [
 
 const VALID_INTENSITIES = ["LOW", "MEDIUM", "HIGH", "EXTREME"] as const;
 
+const VALID_EDIT_MODES = ["portrait_safe", "cinematic", "style_transfer", "creative"] as const;
+
 const EditSchema = z.object({
   image: z.string().min(10, "Image is required"),
   prompt: z
     .string()
     .min(1, "Edit instruction is required")
     .max(2000, "Prompt too long"),
+  editMode: z.enum(VALID_EDIT_MODES).optional(),
   cinematicProfile: z.enum(VALID_CINEMATIC_PROFILES).optional(),
   intensity: z.enum(VALID_INTENSITIES).optional(),
   useCinematicAnalysis: z.boolean().optional(),
@@ -194,7 +197,7 @@ router.post(
       "[imageEdit] edit request received",
     );
 
-    const { useCinematicAnalysis } = parsed.data;
+    const { useCinematicAnalysis, editMode } = parsed.data;
     let effectivePrompt = parsed.data.prompt;
 
     // ── AI Director pre-analysis ──────────────────────────────────────────────
@@ -225,7 +228,7 @@ router.post(
         parsed.data.image,
         effectivePrompt,
         req.user?.userId,
-        parsed.data.cinematicProfile,
+        editMode,
         parsed.data.intensity,
       );
       deductRequestCredits(req);

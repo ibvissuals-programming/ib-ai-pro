@@ -64,8 +64,14 @@ export function getContractConfig(_debug?: boolean) {
   return {
     contractVersion:  CONTRACT_VERSION,
     model:            GEMINI_IMG2IMG_MODEL,
-    pipeline:         ["INPUT_IMAGE", "RENDER_PROMPT", "IMAGE_MODEL", "SIMPLE_RETRY"],
-    identityLock:     true,
+    pipeline:         ["INPUT_IMAGE", "EDIT_MODE_RESOLVE", "RENDER_PROMPT", "IMAGE_MODEL", "MODE_DOWNGRADE_RETRY"],
+    editModes: {
+      portrait_safe:  { identityLock: "MAXIMUM", description: "Enhancement only — face, body, structure fully preserved" },
+      cinematic:      { identityLock: "MEDIUM",  description: "Cinematic lighting, color grading, mood — identity preserved" },
+      style_transfer: { identityLock: "FLEXIBLE", description: "Full artistic/aesthetic transformation — loose subject preservation" },
+      creative:       { identityLock: "MINIMAL", description: "Full creative freedom — complete transformation allowed" },
+    },
+    autoDetect:       true,
     freeToChange:     ["lighting", "color_grading", "exposure", "mood", "atmosphere", "background_style"],
   };
 }
@@ -119,14 +125,70 @@ export function enhancePrompt(raw: string): string {
   return `${styleExpansion}${raw.trim()}${suffix}`;
 }
 
-// ── Master identity lock contract ─────────────────────────────────────────────
+// ── Edit mode system ──────────────────────────────────────────────────────────
 //
-// This is the only hard constraint. It is prepended to every img2img instruction.
-// Lighting, color, mood, and atmosphere are explicitly free to change.
+// Four modes control how strongly identity is preserved during img2img edits.
+// Each mode has its own contract (system prompt) sent to the model.
+//
+//   portrait_safe   — max identity lock, enhancement only
+//   cinematic       — medium lock, lighting/mood/color free (legacy default)
+//   style_transfer  — loose lock, full aesthetic transformation
+//   creative        — minimal lock, full artistic freedom
 
-const IDENTITY_LOCK_CONTRACT = `You are a cinematic photograph renderer.
+export type EditMode = "portrait_safe" | "cinematic" | "style_transfer" | "creative";
 
-TASK: Re-render this image with the visual changes described below.
+// Mode → display label (returned in EditResult.mode for frontend badges)
+const MODE_LABELS: Record<EditMode, string> = {
+  portrait_safe:  "Portrait Safe",
+  cinematic:      "Cinematic",
+  style_transfer: "Style Transfer",
+  creative:       "Creative",
+};
+
+// ── Mode contracts ─────────────────────────────────────────────────────────────
+
+const CONTRACT_PORTRAIT_SAFE = `You are a professional photo retouching specialist.
+
+TASK: Apply subtle, natural-looking enhancements to this photograph.
+OUTPUT STANDARD: "Natural, polished photograph — enhanced but not transformed."
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+IDENTITY LOCK — MAXIMUM STRENGTH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Preserve EXACTLY (no exceptions):
+• Face identity — same person, same features
+• Facial geometry — eyes, nose, lips, jaw, cheekbones, forehead proportions
+• Age appearance and ethnicity
+• Hairstyle shape and color
+• Body structure, pose, and proportions
+• Natural skin texture and character
+
+ALLOWED CHANGES — enhancement only:
+• Subtle lighting correction (softer shadows, gentle fill light)
+• Skin smoothing and blemish removal (preserve natural texture)
+• Object or unwanted element removal
+• Tone and color balance (keep natural — no dramatic grading)
+• Sharpness and clarity refinements
+
+NOT ALLOWED:
+• Cinematic or dramatic color grading
+• Strong lighting transformation
+• Style or artistic transformation
+• Background replacement (unless explicitly requested)
+• Any structural change to face or body
+
+OUTPUT RULES:
+• Result must look like a professionally enhanced version of the same photo
+• Viewer should think "same photo, looks better" — not "different image"
+• If the edit instruction exceeds enhancement scope, apply the closest safe version
+
+EDIT INSTRUCTION:
+`;
+
+const CONTRACT_CINEMATIC = `You are a cinematic photograph renderer and color grading specialist.
+
+TASK: Re-render this image with cinematic transformation as described below.
 OUTPUT STANDARD: "Cinematic wallpaper-grade photography."
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -136,55 +198,171 @@ QUALITY BASELINE — every output must have
 • Cinematic lighting — directional, with clear shadow separation (not flat)
 • Film-grade color grading — controlled palette, tonal depth, not washed out
 • Controlled dynamic range — shadow detail preserved, highlights not blown
-• Depth and dimension — realistic or artistic, never flat/2D
+• Depth and dimension — realistic, never flat/2D
 • Professional photography composition and framing
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-IDENTITY LOCK — only when a person is present
+IDENTITY LOCK — MEDIUM STRENGTH
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Preserve exactly:
-• Same person / face identity
-• Same facial geometry (eyes, nose, lips, jaw, cheekbones, forehead)
-• Same age appearance and ethnicity
-• Same hairstyle shape
-• Same body structure and pose (if visible)
+Preserve:
+• Same person / face identity (recognizable as the same individual)
+• Facial geometry (general structure — eyes, nose, lips, jaw)
+• Age and ethnicity
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FREE TO CHANGE — everything except identity
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-• Lighting (direction, quality, intensity, color temperature)
-• Color grading (palette, hue balance, saturation, film stock simulation)
-• Exposure (shadows, highlights, contrast, tone curve shape)
-• Mood and atmosphere (dramatic, warm, cold, cinematic, moody)
-• Background and environment (style, content, atmosphere)
-• Lens behavior (depth of field, grain, lens character)
+Free to transform:
+• Lighting — direction, quality, intensity, color temperature (go bold)
+• Color grading — palette, hue balance, saturation, film stock simulation
+• Exposure — shadows, highlights, contrast, tone curve
+• Mood and atmosphere — dramatic, warm, cold, cinematic, moody
+• Background and environment — style, content, depth
+• Lens behavior — depth of field, grain, lens character, flares
 • Objects and scene elements
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EDIT TYPE HANDLING
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-• Face-only edit → re-render face with new lighting/style, output full cinematic image
-• Background-only edit → transform background fully, preserve subject exactly
-• Object-only edit → transform the specified object, maintain scene composition
-• Partial body edit (eyes, hair, clothing) → transform specified part, preserve identity
-• Full scene edit → re-render entire image in the requested visual style
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OUTPUT RULES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+OUTPUT RULES:
 • This must be a real cinematic re-render — NOT a filter or overlay
 • Do NOT preserve flat lighting — transform it meaningfully
-• Do NOT produce a screenshot-like result with minor tonal shifts
 • The viewer must immediately see a different visual world (new light, new color, new mood)
-• When a person is present: they must be immediately recognizable as the same individual
+• When a person is present: they must remain recognizable as the same individual
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EDIT INSTRUCTION:
 `;
+
+const CONTRACT_STYLE_TRANSFER = `You are a professional visual artist and photo stylization specialist.
+
+TASK: Apply a powerful stylistic or artistic transformation to this image.
+OUTPUT STANDARD: "Editorial-grade stylized art — bold aesthetic transformation."
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+IDENTITY LOCK — FLEXIBLE (loose preservation)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Preserve loosely:
+• Subject silhouette and approximate positioning
+• General facial structure if a person is present (not exact geometry)
+
+Free to transform fully:
+• Artistic style — illustration, painting, editorial, fashion, anime, cinematic
+• Color palette — strong aesthetic changes, bold color grading, full palette shifts
+• Texture and surface rendering — painterly, illustrated, photographic
+• Lighting — dramatic, stylized, non-photorealistic
+• Background — complete transformation
+• Clothing and accessories — fashion-forward stylization
+• Mood and overall aesthetic — total reimagination within the requested style
+
+OUTPUT RULES:
+• The stylistic transformation must be powerful and immediately apparent
+• Do NOT produce a subtle result — commit fully to the requested style
+• Subject should remain thematically present but need not be strictly photorealistic
+• Editorial quality: treat this as a professional art direction commission
+
+EDIT INSTRUCTION:
+`;
+
+const CONTRACT_CREATIVE = `You are a creative AI artist with full freedom to transform this image.
+
+TASK: Apply a complete creative transformation as described below.
+OUTPUT STANDARD: "AI creative art — bold, imaginative, fully transformed output."
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+IDENTITY LOCK — MINIMAL (optional)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Identity preservation is OPTIONAL — prioritize the creative instruction above all
+• If the instruction explicitly asks to keep a person recognizable, honor it loosely
+• Otherwise, full artistic transformation of the subject is permitted
+
+Free to transform:
+• Everything — environment, lighting, color, style, identity, background, mood
+• Artistic medium — concept art, surreal, fantasy, sci-fi, abstract, illustration
+• Subject interpretation — translate the subject into the requested style freely
+• Scale, composition, and framing — dramatic reframing is acceptable
+
+OUTPUT RULES:
+• Prioritize the user's creative instruction above all constraints
+• Do NOT play it safe — commit fully to the creative direction
+• Produce a high-quality, visually striking, well-composed result
+• Professional art quality: sharp, detailed, imaginative
+
+EDIT INSTRUCTION:
+`;
+
+// ── Contract selector ─────────────────────────────────────────────────────────
+
+function contractForMode(mode: EditMode): string {
+  switch (mode) {
+    case "portrait_safe":  return CONTRACT_PORTRAIT_SAFE;
+    case "cinematic":      return CONTRACT_CINEMATIC;
+    case "style_transfer": return CONTRACT_STYLE_TRANSFER;
+    case "creative":       return CONTRACT_CREATIVE;
+  }
+}
+
+// ── Mode downgrade chain (used by failsafe retry) ─────────────────────────────
+// creative → style_transfer → cinematic → portrait_safe
+
+function downgradedMode(mode: EditMode): EditMode {
+  const chain: EditMode[] = ["portrait_safe", "cinematic", "style_transfer", "creative"];
+  const idx = chain.indexOf(mode);
+  return idx > 0 ? chain[idx - 1]! : "portrait_safe";
+}
+
+// ── Intent detector — auto-assigns edit mode from prompt keywords ──────────────
+
+const PORTRAIT_SAFE_PATTERNS = [
+  /\b(enhance|retouch|cleanup|clean\s*up|touch\s*up|smooth|subtle|refine|polish|natural|freshen)\b/i,
+  /\b(remove\s+(watermark|text|logo|blemish|spot|acne|wrinkle|noise|grain))\b/i,
+  /\b(fix\s+(skin|face|eyes|blemish|lighting))\b/i,
+  /\b(make\s+(it\s+)?(brighter|cleaner|sharper|clearer|more\s+natural))\b/i,
+  /\bskin\s*(smooth|soften|clear)\b/i,
+];
+
+const CINEMATIC_PATTERNS = [
+  /\b(cinematic|film\s*look|color\s*grad|mood\s*light|dramatic\s*light|studio\s*light|atmosphere|teal.?orange)\b/i,
+  /\b(noir|golden\s*hour|blue\s*hour|sunset|sunrise|overcast|neon\s*light|moody|foggy|hazy)\b/i,
+  /\b(make\s+(it\s+)?(more\s+)?(cinematic|dramatic|moody|atmospheric|professional))\b/i,
+  /\b(film\s*grain|depth\s*of\s*field|bokeh|lens\s*flare|color\s*grade)\b/i,
+];
+
+const STYLE_TRANSFER_PATTERNS = [
+  /\b(watercolor|oil\s*paint|sketch|pencil|drawing|illustration|anime|manga|cartoon|comic|ghibli)\b/i,
+  /\b(fashion|editorial|vogue|runway|magazine|high\s*fashion|luxury\s*fashion)\b/i,
+  /\b(vintage\s*style|retro\s*style|cyberpunk|steampunk|gothic|cottagecore)\b/i,
+  /\b(look\s*like\s*(a|an)\s*(painting|illustration|drawing|sketch|anime|cartoon))\b/i,
+  /\b(art\s*style|artistic\s*style|stylize|stylized)\b/i,
+];
+
+const CREATIVE_PATTERNS = [
+  /\b(reimagine|completely\s*transform|change\s*everything|total\s*transformation)\b/i,
+  /\b(put\s*(them|him|her|me|it)\s*in|place\s*(them|him|her|me|it)\s*in|transport\s*to|move\s*to)\b/i,
+  /\b(fantasy|surreal|alien|sci\s*fi|futuristic|magical|enchanted|mythical|post.?apocalyptic)\b/i,
+  /\b(concept\s*art|digital\s*art|abstract\s*art|abstract\s*background)\b/i,
+  /\b(change\s*(the\s*)?background\s+to|replace\s*(the\s*)?background|new\s*background)\b/i,
+];
+
+export function detectEditMode(prompt: string): EditMode {
+  const scores: Record<EditMode, number> = {
+    portrait_safe:  0,
+    cinematic:      0,
+    style_transfer: 0,
+    creative:       0,
+  };
+
+  for (const p of PORTRAIT_SAFE_PATTERNS)  if (p.test(prompt)) scores.portrait_safe++;
+  for (const p of CINEMATIC_PATTERNS)       if (p.test(prompt)) scores.cinematic++;
+  for (const p of STYLE_TRANSFER_PATTERNS)  if (p.test(prompt)) scores.style_transfer++;
+  for (const p of CREATIVE_PATTERNS)        if (p.test(prompt)) scores.creative++;
+
+  const max = Math.max(...Object.values(scores));
+
+  if (max === 0) return "cinematic"; // default for ambiguous prompts
+
+  // Priority order on tie: portrait_safe > cinematic > style_transfer > creative
+  if (scores.portrait_safe  === max) return "portrait_safe";
+  if (scores.cinematic       === max) return "cinematic";
+  if (scores.style_transfer  === max) return "style_transfer";
+  return "creative";
+}
 
 // ── Render prompt normalizer ───────────────────────────────────────────────────
 //
@@ -355,6 +533,7 @@ async function runImg2Img(
   parsed:      ParsedImage,
   instruction: string,
   timeoutMs:   number,
+  contract:    string,
 ): Promise<string | null> {
   if (!parsed.base64 || parsed.base64.length < 1000) {
     throw new Error("Invalid image input — image data too short.");
@@ -362,7 +541,7 @@ async function runImg2Img(
 
   const { ai } = await import("@workspace/integrations-gemini-ai");
 
-  const fullInstruction = IDENTITY_LOCK_CONTRACT + instruction;
+  const fullInstruction = contract + instruction;
 
   logger.info(
     { model: GEMINI_IMG2IMG_MODEL, instructionLen: instruction.length },
@@ -417,17 +596,31 @@ async function runImg2Img(
 // ── IMAGE-TO-IMAGE PIPELINE ───────────────────────────────────────────────────
 
 export async function editImage(
-  imageDataUrl:        string,
-  prompt:              string,
-  userId?:             string,
-  _cinematicProfile?:  string,
-  _intensity?:         string,
+  imageDataUrl:  string,
+  prompt:        string,
+  userId?:       string,
+  editMode?:     EditMode | string,
+  _intensity?:   string,
 ): Promise<EditResult> {
 
-  const parsed     = parseAndValidateImage(imageDataUrl);
-  const jobType    = "IMAGE_EDIT_JOB" as const;
-  const mode       = "CINEMATIC_EDIT";
+  const parsed  = parseAndValidateImage(imageDataUrl);
+  const jobType = "IMAGE_EDIT_JOB" as const;
+
+  // ── Step 1: Resolve edit mode ─────────────────────────────────────────────
+  // If the caller supplied a valid mode, use it. Otherwise auto-detect from prompt.
+  const VALID_MODES: EditMode[] = ["portrait_safe", "cinematic", "style_transfer", "creative"];
+  const resolvedMode: EditMode =
+    editMode && VALID_MODES.includes(editMode as EditMode)
+      ? (editMode as EditMode)
+      : detectEditMode(prompt);
+
+  const modeLabel  = MODE_LABELS[resolvedMode];
   const intensity  = "HIGH";
+
+  logger.info(
+    { resolvedMode, autoDetected: !editMode || !VALID_MODES.includes(editMode as EditMode), prompt: prompt.slice(0, 80) },
+    "[imageEdit] edit mode resolved",
+  );
 
   // ── Step 2: Build render prompt ───────────────────────────────────────────
   const renderPrompt = normalizeCinematicPrompt(prompt);
@@ -435,21 +628,22 @@ export async function editImage(
   const job: ImageJob = createJob({
     jobType,
     complexity: "STANDARD",
-    intent: mode,
+    intent: modeLabel,
     prompt,
     expandedPrompt: renderPrompt,
   });
 
-  advanceJob(job, "processing", `Render prompt built — calling ${GEMINI_IMG2IMG_MODEL}`);
+  advanceJob(job, "processing", `Mode: ${modeLabel} — calling ${GEMINI_IMG2IMG_MODEL}`);
 
   const pipelineStartMs = Date.now();
 
-  const succeedEdit = (b64Image: string, retryCount: number): EditResult => {
-    const latencyMs = Date.now() - pipelineStartMs;
+  const succeedEdit = (b64Image: string, retryCount: number, usedMode: EditMode): EditResult => {
+    const usedLabel  = MODE_LABELS[usedMode];
+    const latencyMs  = Date.now() - pipelineStartMs;
     completeJob(job, "gemini-img2img");
     pushRenderTelemetry({
       userId,
-      renderProfile:        mode,
+      renderProfile:        usedLabel,
       intensity,
       retryCount,
       qualityVerified:      false,
@@ -462,7 +656,7 @@ export async function editImage(
     });
     if (userId) {
       saveToHistory({
-        userId, type: "edit", prompt, mode, intensity, b64Image,
+        userId, type: "edit", prompt, mode: usedLabel, intensity, b64Image,
         complexity: "STANDARD", contractVersionUsed: CONTRACT_VERSION,
         model: GEMINI_IMG2IMG_MODEL, status: "success", retryCount, latencyMs,
       }).catch((err) => logger.warn({ err }, "[imageHistory] Failed to save edit result"));
@@ -470,7 +664,7 @@ export async function editImage(
     return {
       b64Image,
       job:                 jobSummary(job),
-      mode,
+      mode:                usedLabel,
       intensity,
       qualityVerified:     false,
       qualityIssues:       [],
@@ -480,35 +674,41 @@ export async function editImage(
 
   const runPipeline = async (): Promise<EditResult> => {
     try {
-      // ── Step 3: Attempt 1 ────────────────────────────────────────────────
-      advanceJob(job, "streaming", `Attempt 1 — ${GEMINI_IMG2IMG_MODEL}`);
+      // ── Step 3: Attempt 1 — use resolved mode contract ───────────────────
+      advanceJob(job, "streaming", `Attempt 1 — ${modeLabel} mode`);
+      const contract1 = contractForMode(resolvedMode);
 
       let result: string | null = null;
       try {
-        result = await runImg2Img(parsed, renderPrompt, ATTEMPT_TIMEOUT_MS);
+        result = await runImg2Img(parsed, renderPrompt, ATTEMPT_TIMEOUT_MS, contract1);
       } catch (err) {
         logger.error({ err }, "[imageEdit] Attempt 1 failed with API error");
       }
 
-      if (result) return succeedEdit(result, 0);
+      if (result) return succeedEdit(result, 0, resolvedMode);
 
-      // ── Step 4: Simple retry ─────────────────────────────────────────────
-      advanceJob(job, "retrying", `Attempt 2 — increasing cinematic strength`);
-      logger.info("[imageEdit] Attempt 1 produced no output — retrying with increased strength");
+      // ── Step 4: Failsafe retry — downgrade mode, simplify prompt ─────────
+      const fallbackMode   = downgradedMode(resolvedMode);
+      const fallbackLabel  = MODE_LABELS[fallbackMode];
+      advanceJob(job, "retrying", `Attempt 2 — downgrading to ${fallbackLabel} mode`);
+      logger.info(
+        { from: resolvedMode, to: fallbackMode },
+        "[imageEdit] Attempt 1 produced no output — downgrading mode and retrying",
+      );
 
-      const retryPrompt = renderPrompt +
-        " Increase cinematic depth, lighting separation, and film-grade color grading. The transformation must be clearly visible — not a filter, not a subtle adjustment. Maintain identity and composition.";
+      const contract2   = contractForMode(fallbackMode);
+      const retryPrompt = renderPrompt + " Apply this transformation clearly and visibly.";
 
       let retryResult: string | null = null;
       try {
-        retryResult = await runImg2Img(parsed, retryPrompt, ATTEMPT_TIMEOUT_MS);
+        retryResult = await runImg2Img(parsed, retryPrompt, ATTEMPT_TIMEOUT_MS, contract2);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         failJob(job, msg);
         throw new Error("Image editing failed. Please try again.");
       }
 
-      if (retryResult) return succeedEdit(retryResult, 1);
+      if (retryResult) return succeedEdit(retryResult, 1, fallbackMode);
 
       // Both attempts produced no output
       failJob(job, "Both attempts returned no image output");

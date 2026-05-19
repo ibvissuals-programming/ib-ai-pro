@@ -225,23 +225,47 @@ function GenerateTab() {
   );
 }
 
-// ── Render profile + intensity options ────────────────────────────────────────
-const CINEMATIC_PROFILES = [
-  { value: '',                        label: 'Auto-Detect (recommended)' },
-  { value: 'CINEMATIC_EDIT',          label: 'Cinematic Edit' },
-  { value: 'COLOR_MOOD_EDIT',         label: 'Color & Mood' },
-  { value: 'SUBTLE_ENHANCEMENT',      label: 'Subtle Enhancement' },
-  { value: 'AGGRESSIVE_RECONSTRUCTION', label: 'Aggressive Reconstruction' },
-  { value: 'STYLE_TRANSFER',          label: 'Style Transfer' },
-  { value: 'BACKGROUND_TRANSFORMATION', label: 'Background Swap' },
-  { value: 'SCREENSHOT_CLEANUP',      label: 'Screenshot Cleanup' },
-  { value: 'TEXT_REMOVAL',            label: 'Text Removal' },
-  { value: 'WALLPAPER_UPGRADE',       label: 'Wallpaper Upgrade' },
-  { value: 'OBJECT_MANIPULATION',     label: 'Object Manipulation' },
+// ── Edit mode options ─────────────────────────────────────────────────────────
+const EDIT_MODES = [
+  {
+    value:       '',
+    label:       'Auto-Detect',
+    description: 'Let AI choose the best mode based on your instruction',
+    icon:        '✦',
+    color:       'text-muted-foreground',
+  },
+  {
+    value:       'portrait_safe',
+    label:       'Portrait Safe',
+    description: 'Enhancement only — face & body structure fully preserved',
+    icon:        '🛡',
+    color:       'text-emerald-400',
+  },
+  {
+    value:       'cinematic',
+    label:       'Cinematic',
+    description: 'Cinematic lighting, color grading & mood — identity kept',
+    icon:        '🎬',
+    color:       'text-blue-400',
+  },
+  {
+    value:       'style_transfer',
+    label:       'Style Transfer',
+    description: 'Full artistic transformation — loose subject preservation',
+    icon:        '🎨',
+    color:       'text-violet-400',
+  },
+  {
+    value:       'creative',
+    label:       'Creative',
+    description: 'Full artistic freedom — complete transformation allowed',
+    icon:        '⚡',
+    color:       'text-orange-400',
+  },
 ];
 
 const INTENSITY_LEVELS = [
-  { value: '',        label: 'Auto-Detect' },
+  { value: '',        label: 'Auto' },
   { value: 'LOW',     label: 'Low' },
   { value: 'MEDIUM',  label: 'Medium' },
   { value: 'HIGH',    label: 'High' },
@@ -428,20 +452,21 @@ function EditTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [dragOver, setDragOver] = useState(false);
-  const [cinematicProfile, setCinematicProfile] = useState('');
+  const [editMode, setEditMode] = useState('');
   const [intensityLevel, setIntensityLevel] = useState('');
   const [useDirectorAnalysis, setUseDirectorAnalysis] = useState(false);
   const fileInputRef = useRef(null);
   const checkRate = useRateLimit();
 
-  const EXAMPLES = [
-    'Make it look like a watercolor painting',
-    'Convert to black and white film noir style',
-    'Add dramatic cinematic lighting',
-    'Make the background a sunset beach',
-    'Remove the watermark',
-    'Screenshot cleanup — remove UI elements',
-  ];
+  const EXAMPLES_BY_MODE = {
+    '':               ['Add dramatic cinematic lighting', 'Make it look like a watercolor painting', 'Remove the watermark', 'Make the background a sunset beach'],
+    portrait_safe:    ['Smooth skin and improve lighting', 'Remove blemishes naturally', 'Fix the exposure and make it brighter', 'Clean up the background slightly'],
+    cinematic:        ['Add dramatic cinematic lighting', 'Convert to black and white film noir style', 'Apply golden hour warm tones', 'Add moody blue-hour atmosphere'],
+    style_transfer:   ['Make it look like a watercolor painting', 'Convert to Studio Ghibli anime style', 'Apply editorial fashion photography look', 'Render as an oil painting'],
+    creative:         ['Transport them to a fantasy forest', 'Reimagine as a sci-fi concept art', 'Place them in a neon cyberpunk city', 'Transform into a surreal dreamscape'],
+  };
+
+  const examples = EXAMPLES_BY_MODE[editMode] ?? EXAMPLES_BY_MODE[''];
 
   const readFile = (file) => {
     if (!file || !file.type.startsWith('image/')) { setError('Please upload a valid image file (JPG, PNG, WebP).'); return; }
@@ -465,7 +490,7 @@ function EditTab() {
       const res = await editImage(
         sourceImage,
         prompt.trim(),
-        cinematicProfile     || undefined,
+        editMode             || undefined,
         intensityLevel       || undefined,
         useDirectorAnalysis  || undefined,
       );
@@ -535,42 +560,64 @@ function EditTab() {
       </div>
 
       <div className="flex flex-wrap gap-1.5">
-        {EXAMPLES.map((ex) => (
+        {examples.map((ex) => (
           <button key={ex} onClick={() => setPrompt(ex)} className="text-[11px] px-2.5 py-1 rounded-full border border-border/60 text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-all">{ex}</button>
         ))}
       </div>
 
-      {/* ── Render Profile + Intensity selectors ── */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
-            <Film size={9} />
-            Render Profile
-          </label>
-          <select
-            value={cinematicProfile}
-            onChange={(e) => setCinematicProfile(e.target.value)}
-            className="w-full bg-background/60 border border-input rounded-xl px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring/40 focus:border-primary/50 transition-all cursor-pointer"
-          >
-            {CINEMATIC_PROFILES.map(({ value, label }) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
+      {/* ── Edit Mode selector ── */}
+      <div className="space-y-2">
+        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+          <Film size={9} />
+          Edit Mode
+        </label>
+        <div className="grid grid-cols-1 gap-1.5">
+          {EDIT_MODES.map(({ value, label, description, icon, color }) => (
+            <button
+              key={value}
+              onClick={() => setEditMode(value)}
+              className={`flex items-start gap-3 px-3 py-2.5 rounded-xl border text-left transition-all ${
+                editMode === value
+                  ? 'border-primary/60 bg-primary/8 shadow-sm'
+                  : 'border-border/50 hover:border-primary/30 hover:bg-secondary/40 bg-transparent'
+              }`}
+            >
+              <span className={`text-base leading-none mt-0.5 ${color}`}>{icon}</span>
+              <div className="flex-1 min-w-0">
+                <div className={`text-[12px] font-semibold leading-tight ${editMode === value ? 'text-primary' : 'text-foreground'}`}>
+                  {label}
+                  {value === '' && <span className="ml-1.5 text-[10px] font-normal text-muted-foreground/70">(recommended)</span>}
+                </div>
+                <div className="text-[10px] text-muted-foreground/70 mt-0.5 leading-snug">{description}</div>
+              </div>
+              {editMode === value && (
+                <div className="w-2 h-2 rounded-full bg-primary mt-1 flex-shrink-0" />
+              )}
+            </button>
+          ))}
         </div>
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
-            <Zap size={9} />
-            Intensity
-          </label>
-          <select
-            value={intensityLevel}
-            onChange={(e) => setIntensityLevel(e.target.value)}
-            className="w-full bg-background/60 border border-input rounded-xl px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring/40 focus:border-primary/50 transition-all cursor-pointer"
-          >
-            {INTENSITY_LEVELS.map(({ value, label }) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
+      </div>
+
+      {/* ── Intensity selector ── */}
+      <div className="space-y-1.5">
+        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+          <Zap size={9} />
+          Intensity
+        </label>
+        <div className="flex flex-wrap gap-1.5">
+          {INTENSITY_LEVELS.map(({ value, label }) => (
+            <button
+              key={value}
+              onClick={() => setIntensityLevel(value)}
+              className={`px-3 py-1.5 rounded-lg border text-[11px] font-medium transition-all ${
+                intensityLevel === value
+                  ? 'border-primary/60 bg-primary/10 text-primary'
+                  : 'border-border/50 text-muted-foreground hover:text-foreground hover:border-primary/30 hover:bg-secondary/40'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
