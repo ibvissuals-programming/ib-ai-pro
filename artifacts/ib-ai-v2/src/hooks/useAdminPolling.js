@@ -122,6 +122,7 @@ export function useAdminPolling() {
   const renderAnalytics    = useEndpointPoll('/admin/render-analytics',    20_000);
   const cinematicInsights  = useEndpointPoll('/admin/cinematic-insights',  25_000);
   const activityTimeline   = useEndpointPoll('/admin/logs?limit=100',      30_000);
+  const aiStatus           = useEndpointPoll('/system/ai-status',          30_000);
 
   // ── Control Center endpoints ──────────────────────────────────────────────
   const systemHealth  = useEndpointPoll('/admin/system/health',       10_000);
@@ -139,7 +140,7 @@ export function useAdminPolling() {
 
   return {
     health, stats, activeUsers, logs, renderAnalytics, cinematicInsights,
-    activityTimeline,
+    activityTimeline, aiStatus,
     systemHealth, pipelineStats, actionLogs,
     globalErrorCode,
   };

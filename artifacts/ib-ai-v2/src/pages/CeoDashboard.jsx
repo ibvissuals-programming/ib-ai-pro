@@ -26,6 +26,7 @@ import { useAdminPolling } from '../hooks/useAdminPolling';
 import { useTheme } from '../contexts/ThemeContext';
 import { UsersDirectoryPanel } from '../components/UsersDirectoryPanel';
 import { ActivityTimelinePanel } from '../components/ActivityTimelinePanel';
+import { AiRoutingPanel } from '../components/AiRoutingPanel';
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
@@ -835,7 +836,7 @@ function TabBar({ activeTab, onTabChange }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function CeoDashboard() {
-  const { health, stats, activeUsers, logs, renderAnalytics, cinematicInsights, activityTimeline, globalErrorCode } = useAdminPolling();
+  const { health, stats, activeUsers, logs, renderAnalytics, cinematicInsights, activityTimeline, aiStatus, globalErrorCode } = useAdminPolling();
   const [activeTab, setActiveTab] = useState('overview');
 
   // Handle global auth errors
@@ -912,6 +913,16 @@ export default function CeoDashboard() {
                 />
               </div>
 
+              {/* AI Routing — full width */}
+              <div className="mt-4">
+                <AiRoutingPanel
+                  data={aiStatus.data}
+                  loading={aiStatus.loading}
+                  error={aiStatus.error}
+                  lastOk={aiStatus.lastOk}
+                />
+              </div>
+
               {/* Render Analytics — full width */}
               <div className="mt-4">
                 <RenderAnalyticsPanel
@@ -943,7 +954,7 @@ export default function CeoDashboard() {
               </div>
 
               <p className="text-center text-[10px] text-muted-foreground/40 mt-6 pb-4">
-                Live data — health 8s · stats 10s · users 12s · logs 15s · render analytics 20s · cinematic insights 25s · timeline 30s
+                Live data — health 8s · stats 10s · users 12s · logs 15s · render analytics 20s · cinematic insights 25s · ai routing 30s · timeline 30s
               </p>
             </motion.div>
           ) : (
