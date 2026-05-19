@@ -34,6 +34,22 @@ import { logger } from "../lib/logger";
 
 const router = Router();
 
+// ── GET /auth/health ──────────────────────────────────────────────────────────
+//
+// Lightweight readiness probe — no DB, no Gemini, never fails.
+// Called by the frontend before every login/signup attempt to confirm
+// the backend is fully up before sending credentials.
+// Must ALWAYS return 200 with valid JSON even during cold starts.
+
+router.get("/auth/health", (_req, res) => {
+  try {
+    res.json({ status: "ok", ready: true, timestamp: Date.now() });
+  } catch {
+    // Belt-and-suspenders: even if res.json somehow throws, send raw string
+    res.status(200).end('{"status":"ok","ready":true,"timestamp":0}');
+  }
+});
+
 // ── Validation schemas ────────────────────────────────────────────────────────
 
 const RegisterSchema = z.object({

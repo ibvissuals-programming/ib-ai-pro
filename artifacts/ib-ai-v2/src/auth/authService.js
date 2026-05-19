@@ -5,21 +5,35 @@
  * JWT token stored in localStorage under IB_TOKEN_KEY.
  *
  * Public API (unchanged interface for useAuth.js compatibility):
- *   signup(username, password) → { success, error? }
- *   login(username, password)  → { success, error?, recoveryLogin? }
- *   recoveryLogin(username, key) → { success, error?, recoveryLogin? }
+ *   signup(username, password) → { success, error?, isStartupError? }
+ *   login(username, password)  → { success, error?, recoveryLogin?, isStartupError? }
+ *   recoveryLogin(username, key) → { success, error?, recoveryLogin?, isStartupError? }
  *   changePassword(newPassword) → { success, error? }
  *   logout()
  *   getCurrentUser()           → { id, username, role, credits } | null
  *   isAuthenticated()          → boolean
  *   getToken()                 → string | null
  *   getAuthHeaders()           → { Authorization: 'Bearer ...' } | {}
+ *
+ * Startup safety:
+ *   All mutating auth functions (login/signup/recoveryLogin) run a health
+ *   pre-check before sending credentials. If the server isn't ready, or if
+ *   a startup-class error occurs (empty body, network, timeout, 5xx), the
+ *   call is retried up to MAX_AUTH_RETRIES times with RETRY_DELAY_MS between
+ *   attempts. Hard auth failures (401/400/409) are never retried.
+ *
+ *   isStartupError: true is set on the result so the UI can show
+ *   "Connecting to server..." instead of a generic auth error.
  */
 
 import { fetchWithTimeout, AUTH_TIMEOUT_MS } from '../utils/apiClient';
+import { checkServerHealth } from '../utils/serverReadiness';
 
 const IB_TOKEN_KEY = 'ib_token';
 const IB_USER_KEY = 'ib_cached_user';
+
+const MAX_AUTH_RETRIES = 3;
+const RETRY_DELAY_MS   = 1_000;
 
 const BASE = (() => {
   try {
@@ -149,80 +163,180 @@ function fetchErrorMessage(err) {
   return err.message || 'Network error — please try again';
 }
 
+/** Pause between retry attempts */
+function retryDelay() {
+  return new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
+/**
+ * signup() — create a new account.
+ *
+ * Startup safety:
+ *   - Health pre-check before sending credentials
+ *   - Up to MAX_AUTH_RETRIES on startup-class failures (network, 5xx, empty body)
+ *   - Immediate return (no retry) on 400 / 409 (validation / duplicate)
+ *   - isStartupError: true on all startup-class failures so the UI can show
+ *     "Connecting to server..." instead of a generic auth error
+ */
 export async function signup(username, password) {
-  try {
-    const res = await post('/auth/register', { username, password });
-    const data = await safeParseJson(res);
+  const health = await checkServerHealth();
+  if (!health.ready) {
+    return { success: false, error: 'Server is starting up — please try again', isStartupError: true };
+  }
+
+  for (let attempt = 1; attempt <= MAX_AUTH_RETRIES; attempt++) {
+    let res, data;
+    try {
+      res  = await post('/auth/register', { username, password });
+      data = await safeParseJson(res);
+    } catch (err) {
+      if (attempt === MAX_AUTH_RETRIES) {
+        return { success: false, error: fetchErrorMessage(err), isStartupError: true };
+      }
+      await retryDelay();
+      continue;
+    }
+
     if (!res.ok) {
-      return { success: false, error: data.error || 'Registration failed' };
+      // Hard validation / conflict — never retry
+      if (res.status === 400 || res.status === 409) {
+        return { success: false, error: data.error || 'Registration failed' };
+      }
+      // Server error (5xx, etc.) — startup class
+      if (attempt < MAX_AUTH_RETRIES) { await retryDelay(); continue; }
+      return { success: false, error: data.error || 'Server is starting up — please try again', isStartupError: true };
     }
-    // Guard: 200 OK but missing token/user (empty body, proxy error, backend crash)
+
+    // 200/201 but fields missing — startup class (empty body race)
     if (!data.token || !data.user) {
-      return { success: false, error: data.error || 'Server returned an empty response — please try again' };
+      if (attempt < MAX_AUTH_RETRIES) { await retryDelay(); continue; }
+      return { success: false, error: data.error || 'Server is starting up — please try again', isStartupError: true };
     }
+
     saveToken(data.token);
     saveUser(data.user);
     return { success: true, user: data.user };
-  } catch (err) {
-    return { success: false, error: fetchErrorMessage(err) };
   }
+
+  return { success: false, error: 'Server is starting up — please try again', isStartupError: true };
 }
 
+/**
+ * login() — authenticate with username + password.
+ *
+ * Startup safety:
+ *   - Health pre-check before sending credentials
+ *   - Up to MAX_AUTH_RETRIES on startup-class failures (network, 5xx, empty body)
+ *   - Immediate return (no retry) on 401 / 400 (wrong credentials / bad request)
+ *   - isStartupError: true on all startup-class failures
+ */
 export async function login(username, password) {
-  try {
-    const res = await post('/auth/login', { username, password });
-    const data = await safeParseJson(res);
+  const health = await checkServerHealth();
+  if (!health.ready) {
+    return { success: false, error: 'Server is starting up — please try again', isStartupError: true };
+  }
+
+  for (let attempt = 1; attempt <= MAX_AUTH_RETRIES; attempt++) {
+    let res, data;
+    try {
+      res  = await post('/auth/login', { username, password });
+      data = await safeParseJson(res);
+    } catch (err) {
+      if (attempt === MAX_AUTH_RETRIES) {
+        return { success: false, error: fetchErrorMessage(err), isStartupError: true };
+      }
+      await retryDelay();
+      continue;
+    }
+
     if (!res.ok) {
-      return { success: false, error: data.error || 'Invalid username or password' };
+      // Hard auth failure — never retry
+      if (res.status === 401 || res.status === 400) {
+        return { success: false, error: data.error || 'Invalid username or password' };
+      }
+      // Server error (5xx, etc.) — startup class
+      if (attempt < MAX_AUTH_RETRIES) { await retryDelay(); continue; }
+      return { success: false, error: data.error || 'Server is starting up — please try again', isStartupError: true };
     }
-    // Guard: 200 OK but missing token/user (empty body, proxy error, backend crash)
+
+    // 200 OK but fields missing — startup class (empty body race)
     if (!data.token || !data.user) {
-      return { success: false, error: data.error || 'Server returned an empty response — please try again' };
+      if (attempt < MAX_AUTH_RETRIES) { await retryDelay(); continue; }
+      return { success: false, error: data.error || 'Server is starting up — please try again', isStartupError: true };
     }
+
     saveToken(data.token);
     saveUser(data.user);
     return { success: true, user: data.user, recoveryLogin: data.recoveryLogin ?? false };
-  } catch (err) {
-    return { success: false, error: fetchErrorMessage(err) };
   }
+
+  return { success: false, error: 'Server is starting up — please try again', isStartupError: true };
 }
 
 /**
  * recoveryLogin() — CEO recovery path.
  * Sends x-ceo-recovery-key header + username body.
  * Password not required.
- * Returns { success, user?, recoveryLogin?, error? }
+ * Returns { success, user?, recoveryLogin?, error?, isStartupError? }
+ *
+ * Startup safety:
+ *   - Health pre-check before sending credentials
+ *   - Up to MAX_AUTH_RETRIES on startup-class failures
+ *   - Immediate return (no retry) on 401 / 400 (bad key / bad request)
  */
 export async function recoveryLogin(username, recoveryKey) {
-  try {
-    const res = await fetchWithTimeout(
-      `${BASE}/api/auth/login`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-ceo-recovery-key': recoveryKey,
+  const health = await checkServerHealth();
+  if (!health.ready) {
+    return { success: false, error: 'Server is starting up — please try again', isStartupError: true };
+  }
+
+  for (let attempt = 1; attempt <= MAX_AUTH_RETRIES; attempt++) {
+    let res, data;
+    try {
+      res = await fetchWithTimeout(
+        `${BASE}/api/auth/login`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-ceo-recovery-key': recoveryKey,
+          },
+          body: JSON.stringify({ username }),
         },
-        body: JSON.stringify({ username }),
-      },
-      AUTH_TIMEOUT_MS,
-    );
-    const data = await safeParseJson(res);
+        AUTH_TIMEOUT_MS,
+      );
+      data = await safeParseJson(res);
+    } catch (err) {
+      if (attempt === MAX_AUTH_RETRIES) {
+        return { success: false, error: fetchErrorMessage(err), isStartupError: true };
+      }
+      await retryDelay();
+      continue;
+    }
+
     if (!res.ok) {
-      return { success: false, error: data.error || 'Invalid recovery key' };
+      // Hard auth failure — never retry
+      if (res.status === 401 || res.status === 400) {
+        return { success: false, error: data.error || 'Invalid recovery key' };
+      }
+      // Server error — startup class
+      if (attempt < MAX_AUTH_RETRIES) { await retryDelay(); continue; }
+      return { success: false, error: data.error || 'Server is starting up — please try again', isStartupError: true };
     }
-    // Guard: 200 OK but missing token/user (empty body, proxy error, backend crash)
+
     if (!data.token || !data.user) {
-      return { success: false, error: data.error || 'Server returned an empty response — please try again' };
+      if (attempt < MAX_AUTH_RETRIES) { await retryDelay(); continue; }
+      return { success: false, error: data.error || 'Server is starting up — please try again', isStartupError: true };
     }
+
     saveToken(data.token);
     saveUser(data.user);
     return { success: true, user: data.user, recoveryLogin: true };
-  } catch (err) {
-    return { success: false, error: fetchErrorMessage(err) };
   }
+
+  return { success: false, error: 'Server is starting up — please try again', isStartupError: true };
 }
 
 /**
