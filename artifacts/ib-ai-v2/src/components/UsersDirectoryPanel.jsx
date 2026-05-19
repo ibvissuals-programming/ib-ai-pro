@@ -39,7 +39,7 @@ const BASE = (() => {
 function formatDate(ms) {
   if (!ms) return '—';
   return new Date(ms).toLocaleDateString([], {
-    year: 'numeric', month: 'short', day: 'numeric',
+    year: 'numeric', month: 'short', day: 'numeric', timeZone: 'Africa/Lagos',
   });
 }
 

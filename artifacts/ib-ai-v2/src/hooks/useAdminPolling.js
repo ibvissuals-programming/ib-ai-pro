@@ -1,15 +1,17 @@
 /**
  * useAdminPolling — CEO dashboard data fetcher.
  *
- * Polls all 4 admin endpoints on independent intervals.
+ * Polls admin endpoints on independent intervals.
  * Each poll cancels the previous in-flight request via AbortController
  * so overlapping requests are impossible.
  *
  * Intervals:
- *   health       — 8 s
- *   stats        — 10 s
- *   activeUsers  — 12 s
- *   logs         — 15 s
+ *   health          —  8 s  /admin/health
+ *   stats           — 10 s  /admin/stats
+ *   activeUsers     — 12 s  /admin/active-users
+ *   logs            — 15 s  /admin/logs?limit=50
+ *   activityTimeline — 30 s  /admin/logs?limit=100
+ *   aiStatus        — 30 s  /system/ai-status
  *
  * Error codes surfaced per endpoint:
  *   'unauthorized' — 401 → caller should redirect to /login
@@ -115,22 +117,15 @@ export function useActivityTimeline() {
 }
 
 export function useAdminPolling() {
-  const health             = useEndpointPoll('/admin/health',               8_000);
-  const stats              = useEndpointPoll('/admin/stats',               10_000);
-  const activeUsers        = useEndpointPoll('/admin/active-users',        12_000);
-  const logs               = useEndpointPoll('/admin/logs?limit=50',       15_000);
-  const renderAnalytics    = useEndpointPoll('/admin/render-analytics',    20_000);
-  const cinematicInsights  = useEndpointPoll('/admin/cinematic-insights',  25_000);
-  const activityTimeline   = useEndpointPoll('/admin/logs?limit=100',      30_000);
-  const aiStatus           = useEndpointPoll('/system/ai-status',          30_000);
-
-  // ── Control Center endpoints ──────────────────────────────────────────────
-  const systemHealth  = useEndpointPoll('/admin/system/health',       10_000);
-  const pipelineStats = useEndpointPoll('/admin/pipeline/stats',      30_000);
-  const actionLogs    = useEndpointPoll('/admin/action-logs?limit=50', 15_000);
+  const health           = useEndpointPoll('/admin/health',          8_000);
+  const stats            = useEndpointPoll('/admin/stats',          10_000);
+  const activeUsers      = useEndpointPoll('/admin/active-users',   12_000);
+  const logs             = useEndpointPoll('/admin/logs?limit=50',  15_000);
+  const activityTimeline = useEndpointPoll('/admin/logs?limit=100', 30_000);
+  const aiStatus         = useEndpointPoll('/system/ai-status',     30_000);
 
   // Bubble up the most critical auth error code
-  const allEndpoints = [health, stats, activeUsers, logs, renderAnalytics, cinematicInsights];
+  const allEndpoints = [health, stats, activeUsers, logs];
   const globalErrorCode =
     allEndpoints.some((e) => e.errorCode === 'unauthorized')
       ? 'unauthorized'
@@ -139,9 +134,8 @@ export function useAdminPolling() {
         : null;
 
   return {
-    health, stats, activeUsers, logs, renderAnalytics, cinematicInsights,
+    health, stats, activeUsers, logs,
     activityTimeline, aiStatus,
-    systemHealth, pipelineStats, actionLogs,
     globalErrorCode,
   };
 }

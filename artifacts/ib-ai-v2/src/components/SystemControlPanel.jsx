@@ -141,7 +141,7 @@ function SystemStatusCards({ data, loading, error, lastOk }) {
       icon:    Zap,
       title:   'AI Provider',
       value:   <AiBadge status={ai.gemini} />,
-      sub:     'Gemini Flash',
+      sub:     'Gemini 2.5 Flash',
     },
     {
       icon:    Server,
