@@ -154,7 +154,7 @@ async function persistStore(): Promise<void> {
     }
 
     await fs.rename(tmp, USERS_FILE);
-    logger.info("[userStore] atomic write success");
+    logger.debug("[userStore] atomic write success");
   } catch (err) {
     logger.error({ err }, "[userStore] Failed to persist");
   } finally {

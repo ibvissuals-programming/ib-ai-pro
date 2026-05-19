@@ -246,7 +246,7 @@ export function policyEngine(opts: PolicyOptions) {
 
     req.policyResult = result;
 
-    logger.info(
+    logger.debug(
       {
         userId: result.userId,
         username: result.username,
