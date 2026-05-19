@@ -16,6 +16,7 @@
  */
 import { logger } from "../lib/logger";
 import { saveToHistory } from "./imageHistoryStore";
+import { pushRenderTelemetry } from "../lib/renderTelemetry";
 import {
   createJob,
   advanceJob,
@@ -126,10 +127,20 @@ export function enhancePrompt(raw: string): string {
 const IDENTITY_LOCK_CONTRACT = `You are a cinematic photograph renderer.
 
 TASK: Re-render this image with the visual changes described below.
-OUTPUT GOAL: "Same person, new cinematic photograph."
+OUTPUT STANDARD: "Cinematic wallpaper-grade photography."
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-IDENTITY LOCK — absolute, non-negotiable
+QUALITY BASELINE — every output must have
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Cinematic lighting — directional, with clear shadow separation (not flat)
+• Film-grade color grading — controlled palette, tonal depth, not washed out
+• Controlled dynamic range — shadow detail preserved, highlights not blown
+• Depth and dimension — realistic or artistic, never flat/2D
+• Professional photography composition and framing
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+IDENTITY LOCK — only when a person is present
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Preserve exactly:
@@ -138,29 +149,38 @@ Preserve exactly:
 • Same age appearance and ethnicity
 • Same hairstyle shape
 • Same body structure and pose (if visible)
-• Same background scene geometry and spatial layout
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FREE TO CHANGE — everything else
+FREE TO CHANGE — everything except identity
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Change freely:
 • Lighting (direction, quality, intensity, color temperature)
 • Color grading (palette, hue balance, saturation, film stock simulation)
 • Exposure (shadows, highlights, contrast, tone curve shape)
 • Mood and atmosphere (dramatic, warm, cold, cinematic, moody)
-• Environment style and cinematic character
+• Background and environment (style, content, atmosphere)
 • Lens behavior (depth of field, grain, lens character)
+• Objects and scene elements
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EDIT TYPE HANDLING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Face-only edit → re-render face with new lighting/style, output full cinematic image
+• Background-only edit → transform background fully, preserve subject exactly
+• Object-only edit → transform the specified object, maintain scene composition
+• Partial body edit (eyes, hair, clothing) → transform specified part, preserve identity
+• Full scene edit → re-render entire image in the requested visual style
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OUTPUT RULES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-• The result must be a real cinematic transformation — not a filter
-• The viewer must see a clearly different visual world (new light, new color, new mood)
-• The person must be immediately recognizable as the same individual
-• Do NOT apply a cosmetic overlay to the original pixels
-• Do NOT produce a near-identical result with minor adjustments
+• This must be a real cinematic re-render — NOT a filter or overlay
+• Do NOT preserve flat lighting — transform it meaningfully
+• Do NOT produce a screenshot-like result with minor tonal shifts
+• The viewer must immediately see a different visual world (new light, new color, new mood)
+• When a person is present: they must be immediately recognizable as the same individual
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EDIT INSTRUCTION:
@@ -172,19 +192,33 @@ EDIT INSTRUCTION:
 // Maps shorthand ("noir", "sunset", etc.) to explicit visual direction.
 
 const PROMPT_NORMALIZATIONS: Array<{ pattern: RegExp; expansion: string }> = [
-  { pattern: /\bnoir\b/i,             expansion: "noir cinematic lighting — deep shadows, high contrast, desaturated tones, dramatic 1940s atmosphere" },
-  { pattern: /\bsunset\b/i,           expansion: "golden hour cinematic lighting — warm orange and amber tones, long shadows, soft directional light" },
-  { pattern: /\bgolden hour\b/i,      expansion: "golden hour cinematic lighting — warm glowing tones, soft directional light, long shadows" },
-  { pattern: /\bbluehour\b|\bblue hour\b/i, expansion: "blue hour twilight lighting — cool blues and purples, soft diffused light, cinematic dusk atmosphere" },
-  { pattern: /\bmoody\b/i,            expansion: "moody cinematic atmosphere — rich shadows, muted tones, emotional depth, dramatic tension" },
-  { pattern: /\bdramatic\b/i,         expansion: "dramatic cinematic lighting — strong directional light, deep shadow contrast, theatrical atmosphere" },
-  { pattern: /\bcyberpunk\b/i,        expansion: "cyberpunk aesthetic — neon-lit scene, electric blues and magentas, futuristic glow, urban night atmosphere" },
-  { pattern: /\bvintage\b|\bretro\b/i, expansion: "vintage film look — warm grain, faded highlights, nostalgic 35mm color rendering" },
-  { pattern: /\bwarm\b/i,             expansion: "warm cinematic tones — golden light, amber shadows, cozy inviting atmosphere" },
-  { pattern: /\bcool\b/i,             expansion: "cool cinematic tones — desaturated blues, cold shadows, clean crisp atmosphere" },
-  { pattern: /\bcinematic\b/i,        expansion: "cinematic transformation — professional 3-point lighting, teal-orange color grade, deep shadow contrast, film grain" },
-  { pattern: /\bwatercolor\b/i,       expansion: "watercolor artistic rendering — soft painted washes, painterly texture — preserve subject identity and facial structure" },
-  { pattern: /\bsketch\b/i,           expansion: "pencil sketch artistic rendering — fine line art, hand-drawn quality — preserve subject identity" },
+  // Lighting moods
+  { pattern: /\bnoir\b/i,                      expansion: "noir cinematic lighting — deep shadows, high contrast, desaturated tones, dramatic 1940s atmosphere" },
+  { pattern: /\bsunset\b/i,                    expansion: "golden hour cinematic lighting — warm orange and amber tones, long shadows, soft directional light, atmospheric haze" },
+  { pattern: /\bgolden hour\b/i,               expansion: "golden hour cinematic lighting — warm glowing tones, soft directional light, long shadows" },
+  { pattern: /\bbluehour\b|\bblue hour\b/i,    expansion: "blue hour twilight lighting — cool blues and purples, soft diffused light, cinematic dusk atmosphere" },
+  { pattern: /\bmoody\b/i,                     expansion: "moody cinematic atmosphere — rich shadows, muted tones, emotional depth, dramatic tension" },
+  { pattern: /\bdramatic\b/i,                  expansion: "dramatic cinematic lighting — strong directional light, deep shadow contrast, theatrical atmosphere" },
+  { pattern: /\bstudio\b/i,                    expansion: "professional studio lighting — clean three-point lighting setup, controlled shadows, editorial photography quality" },
+  { pattern: /\bovercast\b|\bcloudy\b/i,        expansion: "overcast natural lighting — soft diffused daylight, even shadows, muted cinematic tones" },
+  { pattern: /\bneon\b/i,                      expansion: "neon-lit scene — vivid electric colors, urban night atmosphere, reflective surfaces, cinematic glow" },
+  // Color styles
+  { pattern: /\bcyberpunk\b/i,                 expansion: "cyberpunk aesthetic — neon-lit scene, electric blues and magentas, futuristic glow, urban night atmosphere" },
+  { pattern: /\bvintage\b|\bretro\b/i,         expansion: "vintage film look — warm grain, faded highlights, nostalgic 35mm color rendering" },
+  { pattern: /\bwarm\b/i,                      expansion: "warm cinematic tones — golden light, amber shadows, cozy inviting atmosphere" },
+  { pattern: /\bcool\b|\bcold\b/i,             expansion: "cool cinematic tones — desaturated blues, cold crisp shadows, clean clinical atmosphere" },
+  { pattern: /\bcinematic\b/i,                 expansion: "cinematic transformation — professional 3-point lighting, teal-orange color grade, deep shadow contrast, film grain" },
+  { pattern: /\bblack.?and.?white\b|\bmonochrome\b|\bbw\b/i, expansion: "cinematic black and white — rich tonal contrast, deep blacks, luminous highlights, classic silver gelatin film look" },
+  { pattern: /\bfuturist\w*/i,                 expansion: "futuristic cinematic aesthetic — cool blue-silver tones, metallic sheen, high-tech environment lighting" },
+  // Artistic styles
+  { pattern: /\bwatercolor\b/i,                expansion: "watercolor artistic rendering — soft painted washes, painterly texture, preserved subject identity and facial structure" },
+  { pattern: /\bsketch\b|\bdrawing\b/i,        expansion: "pencil sketch artistic rendering — fine line art, hand-drawn quality, preserved subject identity" },
+  { pattern: /\boil paint\w*/i,                expansion: "oil painting style — rich impasto texture, painterly brushwork, cinematic compositional lighting" },
+  // Partial / targeted edits
+  { pattern: /\bbackground\b/i,                expansion: "background transformation — transform the background environment fully with cinematic depth, preserve subject exactly" },
+  { pattern: /\bhair\b/i,                      expansion: "hair style transformation — transform hair appearance with cinematic lighting, preserve face and identity exactly" },
+  { pattern: /\beyes\b/i,                      expansion: "eye enhancement — transform eye appearance and expression lighting, preserve full facial identity exactly" },
+  { pattern: /\bclothing\b|\boutfit\b|\bwear\b/i, expansion: "clothing transformation — transform outfit with cinematic styling, preserve body and identity exactly" },
 ];
 
 export function normalizeCinematicPrompt(userPrompt: string): string {
@@ -413,6 +447,19 @@ export async function editImage(
   const succeedEdit = (b64Image: string, retryCount: number): EditResult => {
     const latencyMs = Date.now() - pipelineStartMs;
     completeJob(job, "gemini-img2img");
+    pushRenderTelemetry({
+      userId,
+      renderProfile:        mode,
+      intensity,
+      retryCount,
+      qualityVerified:      false,
+      qualityIssues:        [],
+      verifierOutcome:      "SKIPPED",
+      processingDurationMs: latencyMs,
+      contractVersion:      CONTRACT_VERSION,
+      promptUsed:           renderPrompt,
+      cinematicAnalysisUsed: false,
+    });
     if (userId) {
       saveToHistory({
         userId, type: "edit", prompt, mode, intensity, b64Image,
@@ -450,7 +497,7 @@ export async function editImage(
       logger.info("[imageEdit] Attempt 1 produced no output — retrying with increased strength");
 
       const retryPrompt = renderPrompt +
-        " Push the cinematic transformation harder — stronger lighting contrast, bolder color grade, more dramatic mood shift. Make the visual change clearly visible.";
+        " Increase cinematic depth, lighting separation, and film-grade color grading. The transformation must be clearly visible — not a filter, not a subtle adjustment. Maintain identity and composition.";
 
       let retryResult: string | null = null;
       try {

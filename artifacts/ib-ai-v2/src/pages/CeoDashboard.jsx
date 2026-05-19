@@ -19,7 +19,7 @@ import {
   AlertCircle, Clock,
   ChevronRight, ChevronDown, Cpu, Shield,
   LayoutDashboard, UsersRound,
-  Film, Zap, CheckCircle, XCircle, SkipForward,
+  Film, Zap, CheckCircle, XCircle, SkipForward, Sparkles,
 } from 'lucide-react';
 import { logout } from '../auth/authService';
 import { useAdminPolling } from '../hooks/useAdminPolling';
@@ -606,6 +606,131 @@ function RenderAnalyticsPanel({ data, loading, error, lastOk }) {
   );
 }
 
+// ── Panel 6: Cinematic Insights ───────────────────────────────────────────────
+
+function CinematicInsightsPanel({ data, loading, error, lastOk }) {
+  const [showEdits, setShowEdits] = useState(false);
+
+  return (
+    <Panel icon={Sparkles} title="Cinematic Insights" lastOk={lastOk} loading={loading} error={error}>
+      <div className="px-4 py-4 space-y-4">
+
+        {/* ── Summary stats ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {[
+            { label: 'Total Edits',    value: data?.totalEdits ?? '—',           sub: 'since start' },
+            { label: 'Avg Duration',   value: data?.totalEdits ? `${(data.averageProcessingMs / 1000).toFixed(1)}s` : '—', sub: 'per edit' },
+            { label: 'Success Rate',   value: data?.totalEdits ? `${data.successRate}%` : '—',  sub: 'pass rate' },
+            { label: 'AI Director',    value: data?.totalEdits ? `${data.cinematicAnalysisEdits}` : '—', sub: 'director used' },
+          ].map(({ label, value, sub }) => (
+            <div key={label} className="glass-subtle rounded-lg px-3 py-3 border border-border/20">
+              <div className="text-xl font-bold text-foreground tabular-nums">{value}</div>
+              <div className="text-[10px] text-muted-foreground mt-0.5">{label}</div>
+              <div className="text-[10px] text-muted-foreground/40 mt-0.5">{sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Most used styles ── */}
+        {data?.mostUsedStyles?.length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-1">
+              <Sparkles size={9} /> Most Used Styles
+            </p>
+            <div className="space-y-1.5">
+              {data.mostUsedStyles.slice(0, 6).map(({ style, count }) => {
+                const total = data.mostUsedStyles.reduce((s, e) => s + e.count, 0);
+                const pct = Math.round((count / Math.max(total, 1)) * 100);
+                return (
+                  <div key={style} className="flex items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground w-40 truncate shrink-0">{style}</span>
+                    <div className="flex-1 h-1.5 bg-muted/30 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary/60 rounded-full transition-all duration-700"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-muted-foreground/60 tabular-nums w-8 text-right shrink-0">{count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Recent edits toggle ── */}
+        {data?.last20Edits?.length > 0 && (
+          <div>
+            <button
+              onClick={() => setShowEdits((x) => !x)}
+              className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showEdits ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+              Recent edits ({data.last20Edits.length})
+            </button>
+
+            <AnimatePresence>
+              {showEdits && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.18 }}
+                  className="overflow-hidden"
+                >
+                  <div className="mt-2 overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-border/20">
+                          <th className="text-left px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">Time</th>
+                          <th className="text-left px-2 py-2 text-muted-foreground font-medium">Profile</th>
+                          <th className="text-left px-2 py-2 text-muted-foreground font-medium hidden sm:table-cell">Duration</th>
+                          <th className="text-left px-2 py-2 text-muted-foreground font-medium hidden md:table-cell">Director</th>
+                          <th className="text-left px-2 py-2 text-muted-foreground font-medium hidden lg:table-cell">Prompt</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.last20Edits.map((e) => (
+                          <tr key={e.id} className="border-b border-border/10 last:border-0 hover:bg-white/[0.02] transition-colors">
+                            <td className="px-2 py-2 text-muted-foreground/70 whitespace-nowrap tabular-nums">
+                              {formatTime(e.timestamp)}
+                            </td>
+                            <td className="px-2 py-2 text-foreground max-w-[120px] truncate">
+                              {e.renderProfile}
+                            </td>
+                            <td className="px-2 py-2 text-muted-foreground/70 tabular-nums hidden sm:table-cell">
+                              {(e.processingDurationMs / 1000).toFixed(1)}s
+                            </td>
+                            <td className="px-2 py-2 hidden md:table-cell">
+                              {e.cinematicAnalysisUsed
+                                ? <span className="flex items-center gap-1 text-violet-400"><Sparkles size={9} /> on</span>
+                                : <span className="text-muted-foreground/30">off</span>
+                              }
+                            </td>
+                            <td className="px-2 py-2 text-muted-foreground/50 text-[10px] max-w-[200px] truncate hidden lg:table-cell">
+                              {e.promptUsed ?? '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
+        {!loading && !error && !data?.totalEdits && (
+          <p className="text-xs text-muted-foreground/50 text-center py-4">
+            No cinematic edits yet — data appears after the first image edit.
+          </p>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
 // ── Dashboard header ──────────────────────────────────────────────────────────
 
 function DashboardHeader({ user }) {
@@ -709,7 +834,7 @@ function TabBar({ activeTab, onTabChange }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function CeoDashboard() {
-  const { health, stats, activeUsers, logs, renderAnalytics, globalErrorCode } = useAdminPolling();
+  const { health, stats, activeUsers, logs, renderAnalytics, cinematicInsights, globalErrorCode } = useAdminPolling();
   const [activeTab, setActiveTab] = useState('overview');
 
   // Handle global auth errors
@@ -796,8 +921,18 @@ export default function CeoDashboard() {
                 />
               </div>
 
+              {/* Cinematic Insights — full width */}
+              <div className="mt-4">
+                <CinematicInsightsPanel
+                  data={cinematicInsights.data}
+                  loading={cinematicInsights.loading}
+                  error={cinematicInsights.error}
+                  lastOk={cinematicInsights.lastOk}
+                />
+              </div>
+
               <p className="text-center text-[10px] text-muted-foreground/40 mt-6 pb-4">
-                Live data — health every 8s · stats every 10s · users every 12s · logs every 15s · render analytics every 20s
+                Live data — health 8s · stats 10s · users 12s · logs 15s · render analytics 20s · cinematic insights 25s
               </p>
             </motion.div>
           ) : (
