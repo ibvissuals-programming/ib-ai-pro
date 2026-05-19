@@ -4,11 +4,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Cpu, ArrowLeft, Wand2, Upload, ImageIcon,
   Download, X, Loader2, AlertCircle, Sparkles, Copy, Check,
-  History, Trash2, RefreshCw, Clock, Film, Zap,
+  History, Trash2, RefreshCw, Clock, Film, Zap, ChevronDown, ChevronUp,
+  Lightbulb, Eye, Sun, Moon, Palette, Aperture,
 } from 'lucide-react';
-import { generateImage, editImage, fetchImageHistory, deleteHistoryEntry } from '../services/imageToolsApi';
+import { generateImage, editImage, fetchImageHistory, deleteHistoryEntry, generateCinematicPrompt } from '../services/imageToolsApi';
 import { useTheme } from '../contexts/ThemeContext';
-import { Sun, Moon } from 'lucide-react';
 
 // ── Rate limit guard (client-side) ────────────────────────────────────────────
 const RATE_LIMIT_MS = 11_000;
@@ -248,17 +248,189 @@ const INTENSITY_LEVELS = [
   { value: 'EXTREME', label: 'Extreme' },
 ];
 
+// ── AI Director panel (Cinematic Prompt Generator) ────────────────────────────
+function AiDirectorPanel({ sourceImage, onApplyPrompt }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [insight, setInsight] = useState(null);
+  const [error, setError] = useState(null);
+
+  const handleGenerate = async () => {
+    if (loading || !sourceImage) return;
+    setLoading(true);
+    setError(null);
+    setInsight(null);
+    try {
+      const result = await generateCinematicPrompt(sourceImage);
+      setInsight(result);
+      setOpen(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!sourceImage) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-xl border border-border/50 bg-secondary/20 overflow-hidden"
+    >
+      {/* Header row */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-3.5 py-2.5 hover:bg-secondary/40 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-5 rounded-md bg-violet-500/15 flex items-center justify-center">
+            <Film size={11} className="text-violet-400" />
+          </div>
+          <span className="text-[11px] font-semibold text-foreground/80 uppercase tracking-widest">AI Director</span>
+          {insight && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400 border border-violet-400/20 font-medium">
+              {insight.moodTarget}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {!insight && !loading && (
+            <span className="text-[10px] text-muted-foreground">Analyze image for cinematic direction</span>
+          )}
+          {open ? <ChevronUp size={13} className="text-muted-foreground" /> : <ChevronDown size={13} className="text-muted-foreground" />}
+        </div>
+      </button>
+
+      {/* Expanded body */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="px-3.5 pb-3.5 space-y-3">
+              {/* Generate button */}
+              <button
+                onClick={handleGenerate}
+                disabled={loading}
+                className="flex items-center gap-2 px-3.5 py-2 bg-violet-600/90 text-white rounded-lg text-xs font-medium hover:bg-violet-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-violet-500/20"
+              >
+                {loading
+                  ? <><Loader2 size={12} className="animate-spin" />Analyzing scene…</>
+                  : <><Sparkles size={12} />Generate Edit Direction</>}
+              </button>
+
+              {/* Error */}
+              {error && (
+                <div className="flex items-start gap-2 text-[11px] text-destructive bg-destructive/10 rounded-lg px-3 py-2 border border-destructive/20">
+                  <AlertCircle size={11} className="shrink-0 mt-0.5" />
+                  {error}
+                </div>
+              )}
+
+              {/* Insight result card */}
+              {insight && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="space-y-2.5"
+                >
+                  {/* Scene + Mood row */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-lg bg-background/60 border border-border/40 px-3 py-2 space-y-1">
+                      <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        <Eye size={9} />
+                        Scene
+                      </div>
+                      <p className="text-[11px] text-foreground/80 leading-relaxed">{insight.sceneDescription}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/60 border border-border/40 px-3 py-2 space-y-1">
+                      <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        <Lightbulb size={9} />
+                        Current Mood
+                      </div>
+                      <p className="text-[11px] text-foreground/80 leading-relaxed">{insight.mood}</p>
+                      <div className="flex items-center gap-1 mt-1">
+                        <span className="text-[9px] text-muted-foreground">→</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400 border border-violet-400/20 font-medium capitalize">{insight.moodTarget}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Lighting direction */}
+                  <div className="rounded-lg bg-background/60 border border-border/40 px-3 py-2 space-y-1">
+                    <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      <Sun size={9} />
+                      Lighting Redesign
+                    </div>
+                    <p className="text-[11px] text-foreground/80 leading-relaxed">{insight.lightingDirection}</p>
+                  </div>
+
+                  {/* Color grade + Exposure row */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-lg bg-background/60 border border-border/40 px-3 py-2 space-y-1">
+                      <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        <Palette size={9} />
+                        Color Grade
+                      </div>
+                      <p className="text-[11px] text-foreground/80 leading-relaxed">{insight.colorGrade}</p>
+                    </div>
+                    <div className="rounded-lg bg-background/60 border border-border/40 px-3 py-2 space-y-1">
+                      <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        <Aperture size={9} />
+                        Exposure
+                      </div>
+                      <p className="text-[11px] text-foreground/80 leading-relaxed">{insight.exposureGuidance}</p>
+                    </div>
+                  </div>
+
+                  {/* Director brief */}
+                  <div className="rounded-lg bg-violet-500/8 border border-violet-400/20 px-3 py-2 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1 text-[10px] font-semibold text-violet-400 uppercase tracking-wider">
+                        <Film size={9} />
+                        Director Brief
+                      </div>
+                      <CopyButton text={insight.cinematicEditPrompt} label="Copy" />
+                    </div>
+                    <p className="text-[11px] text-foreground/80 leading-relaxed">{insight.cinematicEditPrompt}</p>
+                  </div>
+
+                  {/* Apply button */}
+                  <button
+                    onClick={() => onApplyPrompt(insight.cinematicEditPrompt)}
+                    className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-violet-600/90 text-white hover:bg-violet-600 transition-all font-medium"
+                  >
+                    <Wand2 size={11} />
+                    Apply to Edit Instruction
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
 // ── Edit tab ──────────────────────────────────────────────────────────────────
 function EditTab() {
   const [sourceImage, setSourceImage] = useState(null);
   const [prompt, setPrompt] = useState('');
   const [output, setOutput] = useState(null);
-  const [outputMeta, setOutputMeta] = useState(null); // { mode, intensity }
+  const [outputMeta, setOutputMeta] = useState(null); // { mode, intensity, cinematicAnalysisUsed }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [dragOver, setDragOver] = useState(false);
   const [cinematicProfile, setCinematicProfile] = useState('');
   const [intensityLevel, setIntensityLevel] = useState('');
+  const [useDirectorAnalysis, setUseDirectorAnalysis] = useState(false);
   const fileInputRef = useRef(null);
   const checkRate = useRateLimit();
 
@@ -293,11 +465,16 @@ function EditTab() {
       const res = await editImage(
         sourceImage,
         prompt.trim(),
-        cinematicProfile || undefined,
-        intensityLevel   || undefined,
+        cinematicProfile     || undefined,
+        intensityLevel       || undefined,
+        useDirectorAnalysis  || undefined,
       );
       setOutput(res.b64Image);
-      setOutputMeta({ mode: res.mode ?? null, intensity: res.intensity ?? null });
+      setOutputMeta({
+        mode:                  res.mode     ?? null,
+        intensity:             res.intensity ?? null,
+        cinematicAnalysisUsed: res.cinematicAnalysisUsed ?? false,
+      });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -334,6 +511,12 @@ function EditTab() {
           </div>
         )}
       </div>
+
+      {/* AI Director panel — appears once an image is uploaded */}
+      <AiDirectorPanel
+        sourceImage={sourceImage}
+        onApplyPrompt={(p) => setPrompt(p)}
+      />
 
       {/* Edit prompt */}
       <div className="space-y-2">
@@ -391,13 +574,36 @@ function EditTab() {
         </div>
       </div>
 
-      <button
-        onClick={handleEdit}
-        disabled={loading || !sourceImage || !prompt.trim()}
-        className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/20"
-      >
-        {loading ? <><Loader2 size={14} className="animate-spin" />Editing…</> : <><Wand2 size={14} />Edit Image</>}
-      </button>
+      {/* AI Director auto-enhance toggle + Edit button */}
+      <div className="flex flex-col gap-2.5">
+        {sourceImage && (
+          <label className="flex items-center gap-2.5 cursor-pointer select-none group w-fit">
+            <div className="relative">
+              <input
+                type="checkbox"
+                checked={useDirectorAnalysis}
+                onChange={(e) => setUseDirectorAnalysis(e.target.checked)}
+                className="sr-only"
+              />
+              <div className={`w-8 h-4 rounded-full transition-colors ${useDirectorAnalysis ? 'bg-violet-500' : 'bg-secondary border border-border'}`} />
+              <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${useDirectorAnalysis ? 'translate-x-4' : 'translate-x-0.5'}`} />
+            </div>
+            <span className="text-[11px] text-muted-foreground group-hover:text-foreground transition-colors">
+              Auto-enhance with AI Director
+              {useDirectorAnalysis && <span className="ml-1.5 text-violet-400 font-medium">(+15–20s)</span>}
+            </span>
+          </label>
+        )}
+        <button
+          onClick={handleEdit}
+          disabled={loading || !sourceImage || !prompt.trim()}
+          className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/20 w-fit"
+        >
+          {loading
+            ? <><Loader2 size={14} className="animate-spin" />{useDirectorAnalysis ? 'Analyzing + Editing…' : 'Editing…'}</>
+            : <><Wand2 size={14} />Edit Image</>}
+        </button>
+      </div>
 
       <AnimatePresence>{error && <ErrorBox message={error} />}</AnimatePresence>
       <AnimatePresence>{loading && <ImageSkeleton label="Applying your edit…" />}</AnimatePresence>
@@ -407,14 +613,16 @@ function EditTab() {
         {output && !loading && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
             {/* Mode badge row */}
-            {outputMeta?.mode && (
+            {(outputMeta?.mode || outputMeta?.cinematicAnalysisUsed) && (
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">Applied</span>
-                <span className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 font-medium">
-                  <Film size={10} />
-                  {outputMeta.mode}
-                </span>
-                {outputMeta.intensity && outputMeta.intensity !== 'MEDIUM' && (
+                {outputMeta?.mode && (
+                  <span className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 font-medium">
+                    <Film size={10} />
+                    {outputMeta.mode}
+                  </span>
+                )}
+                {outputMeta?.intensity && outputMeta.intensity !== 'MEDIUM' && (
                   <span className={`flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full border font-medium ${
                     outputMeta.intensity === 'EXTREME'
                       ? 'bg-red-500/10 text-red-400 border-red-400/20'
@@ -424,6 +632,12 @@ function EditTab() {
                   }`}>
                     <Zap size={10} />
                     {outputMeta.intensity}
+                  </span>
+                )}
+                {outputMeta?.cinematicAnalysisUsed && (
+                  <span className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full bg-violet-500/10 text-violet-400 border border-violet-400/20 font-medium">
+                    <Sparkles size={10} />
+                    AI Director
                   </span>
                 )}
               </div>

@@ -17,6 +17,7 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { generateImage, editImage, getContractConfig, type EditResult } from "../services/imageGenService";
+import { generateCinematicInsight, buildDirectorEnhancedPrompt } from "../services/cinematicInsightEngine";
 import { logger } from "../lib/logger";
 import { policyEngine, deductRequestCredits, appendCreditHeaders } from "../middleware/policyEngine";
 import { CREDIT_COSTS } from "../lib/userStore";
@@ -61,6 +62,14 @@ const EditSchema = z.object({
     .max(2000, "Prompt too long"),
   cinematicProfile: z.enum(VALID_CINEMATIC_PROFILES).optional(),
   intensity: z.enum(VALID_INTENSITIES).optional(),
+  useCinematicAnalysis: z.boolean().optional(),
+});
+
+const CINEMATIC_PROMPT_ALLOWED_MIMES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
+
+const CinematicPromptSchema = z.object({
+  imageBase64: z.string().min(100).max(14_000_000),
+  mimeType: z.enum(CINEMATIC_PROMPT_ALLOWED_MIMES),
 });
 
 // ── User-safe error sanitizer for route layer ─────────────────────────────────
@@ -185,10 +194,36 @@ router.post(
       "[imageEdit] edit request received",
     );
 
+    const { useCinematicAnalysis } = parsed.data;
+    let effectivePrompt = parsed.data.prompt;
+
+    // ── AI Director pre-analysis ──────────────────────────────────────────────
+    // When useCinematicAnalysis=true, call the Cinematic Insight Engine before
+    // editImage() to generate director-grade prompt enrichment. Non-fatal: if
+    // analysis fails we fall through to the user's original prompt unchanged.
+    let cinematicAnalysisApplied = false;
+    if (useCinematicAnalysis) {
+      const dataUrlMatch = /^data:([^;]+);base64,(.+)$/.exec(parsed.data.image);
+      if (dataUrlMatch) {
+        const [, mimeType, base64] = dataUrlMatch;
+        try {
+          const insight = await generateCinematicInsight(base64, mimeType);
+          effectivePrompt = buildDirectorEnhancedPrompt(parsed.data.prompt, insight);
+          cinematicAnalysisApplied = true;
+          logger.info(
+            { moodTarget: insight.moodTarget, promptLen: effectivePrompt.length },
+            "[imageEdit] cinematic analysis injected",
+          );
+        } catch (err) {
+          logger.warn({ err }, "[imageEdit] cinematic analysis failed — using original prompt");
+        }
+      }
+    }
+
     try {
       const result: EditResult = await editImage(
         parsed.data.image,
-        parsed.data.prompt,
+        effectivePrompt,
         req.user?.userId,
         parsed.data.cinematicProfile,
         parsed.data.intensity,
@@ -201,14 +236,15 @@ router.post(
         ip: req.ip ?? undefined,
       });
       res.json({
-        b64Image:             result.b64Image,
-        status:               "success",
-        job:                  result.job,
-        mode:                 result.mode,
-        intensity:            result.intensity,
-        qualityVerified:      result.qualityVerified,
-        qualityIssues:        result.qualityIssues,
-        contractVersionUsed:  result.contractVersionUsed,
+        b64Image:               result.b64Image,
+        status:                 "success",
+        job:                    result.job,
+        mode:                   result.mode,
+        intensity:              result.intensity,
+        qualityVerified:        result.qualityVerified,
+        qualityIssues:          result.qualityIssues,
+        contractVersionUsed:    result.contractVersionUsed,
+        cinematicAnalysisUsed:  cinematicAnalysisApplied,
       });
     } catch (err: unknown) {
       incImageEditFailed();
@@ -223,6 +259,43 @@ router.post(
           ? 413
           : 503;
       res.status(status).json({ error: message });
+    }
+  },
+);
+
+// ── POST /api/image/cinematic-prompt ─────────────────────────────────────────
+// Standalone Cinematic Insight Engine endpoint.
+// Accepts a raw base64 image + mimeType, returns structured cinematic
+// edit direction: scene description, lighting direction, color grade,
+// exposure guidance, mood target, and a ready-to-use cinematicEditPrompt.
+
+router.post(
+  "/image/cinematic-prompt",
+  policyEngine({ cost: CREDIT_COSTS.image_analysis, rateKey: "cinematic_prompt", rateMax: 10, rateWindowMs: 60_000, allowRecovery: true }),
+  async (req: Request, res: Response) => {
+    const parsed = CinematicPromptSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+      return;
+    }
+
+    logger.info(
+      { userId: req.user?.userId, mimeType: parsed.data.mimeType },
+      "[cinematicPrompt] analysis request",
+    );
+
+    try {
+      const insight = await generateCinematicInsight(parsed.data.imageBase64, parsed.data.mimeType);
+      deductRequestCredits(req);
+      appendCreditHeaders(req, res);
+      res.json(insight);
+    } catch (err: unknown) {
+      logger.error({ err }, "[cinematicPrompt] analysis failed");
+      const message = err instanceof Error ? err.message : "Unknown error";
+      const isTimeout = message.includes("timed out");
+      res.status(isTimeout ? 504 : 500).json({
+        error: isTimeout ? "Cinematic analysis timed out — please try again" : "Cinematic analysis failed",
+      });
     }
   },
 );

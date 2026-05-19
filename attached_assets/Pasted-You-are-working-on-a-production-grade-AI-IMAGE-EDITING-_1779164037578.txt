@@ -1,0 +1,81 @@
+You are working on a production-grade AI IMAGE EDITING + ANALYTICS SYSTEM.
+
+GOAL:
+Build a cinematic image enhancement pipeline inside IB AI that improves image quality, consistency, and realism using Gemini vision + structured prompt engineering.
+
+This system must focus on:
+- cinematic lighting improvements
+- professional color grading
+- exposure and contrast correction
+- mood and atmosphere enhancement
+- lens/style simulation (film, DSLR, cinematic grading styles)
+- edit consistency (same subject, same identity preserved)
+
+DO NOT:
+- remove identity of the subject
+- replace faces or change who the person is
+- reconstruct the image as a different scene
+- treat the input as something to discard
+
+CORE FEATURE TO BUILD NOW:
+
+1. CINEMATIC PROMPT ENGINE (Gemini Vision)
+Create a module that:
+- analyzes uploaded image using Gemini vision
+- extracts:
+  - scene description
+  - lighting conditions
+  - color tone
+  - composition type
+  - mood
+- generates a professional-grade editing prompt for image enhancement
+
+Output format:
+- structured cinematic edit prompt
+- lighting direction suggestions
+- color grade suggestion (film style)
+- exposure and contrast guidance
+- mood description
+
+2. RENDER PIPELINE INTEGRATION
+Hook this prompt generator into the existing edit pipeline:
+- before editImage() is called
+- inject generated cinematic prompt as "director guidance"
+- user input still overrides but is enhanced, not replaced
+
+3. TELEMETRY SYSTEM (LIGHTWEIGHT)
+Track for each edit:
+- prompt used
+- enhancement style selected
+- intensity level
+- processing time
+- success/failure status
+
+Store in memory (no database required yet).
+
+4. SIMPLE ANALYTICS ENDPOINT
+Create:
+GET /api/admin/cinematic-insights
+
+Return:
+- total edits
+- most used styles
+- average processing time
+- success rate
+- last 20 edits
+
+5. FRONTEND FEATURE (OPTIONAL IF EASY)
+Add a small panel:
+"Cinematic Prompt Generator"
+- upload image
+- click "Generate Edit Direction"
+- display structured prompt output
+
+IMPORTANT CONSTRAINTS:
+- keep same face / same subject
+- no identity transformation
+- no scene replacement
+- only enhancement, grading, lighting, cinematic improvement
+- system must behave like a professional photo color grading assistant
+
+BUILD THIS CLEANLY WITHOUT BREAKING EXISTING IMAGE EDIT FLOW.

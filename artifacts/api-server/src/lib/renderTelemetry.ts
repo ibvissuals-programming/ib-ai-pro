@@ -23,6 +23,8 @@ export interface RenderTelemetryEntry {
   verifierOutcome: VerifierOutcome;
   processingDurationMs: number;
   contractVersion: string;
+  promptUsed?: string;
+  cinematicAnalysisUsed?: boolean;
 }
 
 const MAX_ENTRIES = 200;

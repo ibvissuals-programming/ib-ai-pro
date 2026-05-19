@@ -2,9 +2,10 @@ import { getAuthHeaders } from '../auth/authService';
 import { safeJson, fetchWithTimeout, IMAGE_GEN_MS } from '../utils/apiClient';
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
-const GENERATE_URL = `${BASE}/api/image/generate`;
-const EDIT_URL     = `${BASE}/api/image/edit`;
-const HISTORY_URL  = `${BASE}/api/image/history`;
+const GENERATE_URL         = `${BASE}/api/image/generate`;
+const EDIT_URL             = `${BASE}/api/image/edit`;
+const HISTORY_URL          = `${BASE}/api/image/history`;
+const CINEMATIC_PROMPT_URL = `${BASE}/api/image/cinematic-prompt`;
 
 function handleErrorResponse(res, data, context) {
   if (res.status === 401) throw new Error('Authentication required. Please log in again.');
@@ -50,13 +51,15 @@ export async function generateImage(prompt) {
  * @param {string} prompt — edit instruction
  * @param {string} [cinematicProfile] — optional EditMode override (e.g. "CINEMATIC_EDIT")
  * @param {string} [intensity] — optional intensity override ("LOW"|"MEDIUM"|"HIGH"|"EXTREME")
- * @returns {Promise<{ b64Image: string, status: string, mode?: string, intensity?: string }>}
+ * @param {boolean} [useCinematicAnalysis] — if true, backend runs Gemini vision pre-analysis
+ * @returns {Promise<{ b64Image: string, status: string, mode?: string, intensity?: string, cinematicAnalysisUsed?: boolean }>}
  */
-export async function editImage(imageBase64, prompt, cinematicProfile, intensity) {
+export async function editImage(imageBase64, prompt, cinematicProfile, intensity, useCinematicAnalysis) {
   let res;
   const body = { image: imageBase64, prompt };
-  if (cinematicProfile) body.cinematicProfile = cinematicProfile;
-  if (intensity)        body.intensity        = intensity;
+  if (cinematicProfile)      body.cinematicProfile      = cinematicProfile;
+  if (intensity)             body.intensity             = intensity;
+  if (useCinematicAnalysis)  body.useCinematicAnalysis  = true;
 
   try {
     res = await fetchWithTimeout(
@@ -104,6 +107,51 @@ export async function fetchImageHistory(limit = 30) {
     throw new Error(data.error ?? 'Failed to load history.');
   }
 
+  return data;
+}
+
+/**
+ * Call the Cinematic Insight Engine — analyze an image and return structured
+ * professional editing direction: scene description, lighting direction,
+ * color grade, exposure guidance, mood target, and a cinematicEditPrompt.
+ *
+ * @param {string} imageDataUrl — data URL (data:image/...;base64,...)
+ * @returns {Promise<{
+ *   sceneDescription: string,
+ *   lightingConditions: string,
+ *   colorTone: string,
+ *   compositionType: string,
+ *   mood: string,
+ *   cinematicEditPrompt: string,
+ *   lightingDirection: string,
+ *   colorGrade: string,
+ *   exposureGuidance: string,
+ *   moodTarget: string,
+ * }>}
+ */
+export async function generateCinematicPrompt(imageDataUrl) {
+  const match = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) throw new Error('Invalid image format — expected a data URL.');
+  const [, mimeType, imageBase64] = match;
+
+  let res;
+  try {
+    res = await fetchWithTimeout(
+      CINEMATIC_PROMPT_URL,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ imageBase64, mimeType }),
+      },
+      IMAGE_GEN_MS,
+    );
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('Cinematic analysis timed out — please try again.');
+    throw new Error('Network error — could not reach the cinematic analysis service.');
+  }
+
+  const data = await safeJson(res);
+  if (!res.ok) handleErrorResponse(res, data, 'cinematic-prompt');
   return data;
 }
 

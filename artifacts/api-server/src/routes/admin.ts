@@ -26,7 +26,7 @@ import {
 } from "../lib/activityTracker";
 import { getAllUsers } from "../lib/userStore";
 import { getBootState } from "../lib/bootState";
-import { getRenderTelemetry, getRenderTelemetryStats } from "../lib/renderTelemetry";
+import { getRenderTelemetry, getRenderTelemetryStats, type RenderTelemetryEntry } from "../lib/renderTelemetry";
 
 const router = Router();
 
@@ -180,6 +180,47 @@ router.get("/admin/render-analytics", requireCeo, (req: Request, res: Response) 
     timestamp: Date.now(),
     stats:     getRenderTelemetryStats(),
     entries:   getRenderTelemetry(limit),
+  });
+});
+
+// ── GET /api/admin/cinematic-insights ─────────────────────────────────────────
+// Cinematic Prompt Engine analytics: total edits, most used styles,
+// average processing time, success rate, last 20 edits.
+// Shapes telemetry data into the spec-required format.
+
+router.get("/admin/cinematic-insights", requireCeo, (_req: Request, res: Response) => {
+  const stats   = getRenderTelemetryStats();
+  const entries = getRenderTelemetry(200);
+
+  // Most used styles — sort profile distribution descending
+  const mostUsedStyles = Object.entries(stats.profileDistribution ?? {})
+    .sort(([, a], [, b]) => (b as number) - (a as number))
+    .map(([style, count]) => ({ style, count }));
+
+  // Last 20 edits — shape into concise per-edit records
+  const last20 = entries.slice(0, 20).map((e: RenderTelemetryEntry) => ({
+    id:                   e.id,
+    timestamp:            e.timestamp,
+    renderProfile:        e.renderProfile,
+    intensity:            e.intensity,
+    processingDurationMs: e.processingDurationMs,
+    verifierOutcome:      e.verifierOutcome,
+    retryCount:           e.retryCount,
+    cinematicAnalysisUsed: e.cinematicAnalysisUsed ?? false,
+    promptUsed:           e.promptUsed
+      ? e.promptUsed.slice(0, 120) + (e.promptUsed.length > 120 ? "…" : "")
+      : undefined,
+  }));
+
+  res.json({
+    timestamp:           Date.now(),
+    totalEdits:          stats.total,
+    averageProcessingMs: stats.avgDurationMs,
+    successRate:         stats.passRate,
+    retryRate:           stats.retryRate,
+    mostUsedStyles,
+    cinematicAnalysisEdits: entries.filter((e: RenderTelemetryEntry) => e.cinematicAnalysisUsed).length,
+    last20Edits:         last20,
   });
 });
 
