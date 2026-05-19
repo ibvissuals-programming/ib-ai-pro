@@ -68,6 +68,15 @@ export interface PipelineDebug {
   recommendation: string;
 }
 
+export interface ExplanationResult {
+  mode:               string;
+  intensity:          string;
+  stageSummary:       string[];
+  temperatureSummary: string;
+  decisionFlow:       string;
+  notes?:             string[];
+}
+
 export interface EditResult {
   b64Image:            string;
   job:                 ReturnType<typeof jobSummary>;
@@ -77,6 +86,7 @@ export interface EditResult {
   qualityIssues:       string[];
   contractVersionUsed: string;
   pipelineDebug?:      PipelineDebug;
+  explanation?:        ExplanationResult;
 }
 
 // ── Contract config (diagnostic endpoint) ────────────────────────────────────
@@ -803,6 +813,86 @@ function computeStage3Temperature(mode: EditMode, intensity: IntensityLevel): nu
   return Math.min(1.3, Math.max(0.3, raw));
 }
 
+// ── Explainability layer ──────────────────────────────────────────────────────
+
+const MODE_EXPLANATION: Record<EditMode, string> = {
+  portrait_safe:  "Prioritized identity preservation and minimal stylistic deviation",
+  cinematic:      "Enabled full cinematic grading in Stage 3",
+  style_transfer: "Skipped enhancement stage to prioritize artistic transformation",
+  creative:       "Allowed maximum stylistic freedom across Stage 2 and Stage 3",
+};
+
+const INTENSITY_EXPLANATION: Record<IntensityLevel, string> = {
+  LOW:     "Minimized stylistic changes and increased realism",
+  MEDIUM:  "Balanced transformation strength",
+  HIGH:    "Increased cinematic and stylistic impact in Stage 3",
+  EXTREME: "Strong artistic transformation with reduced constraints in Stage 3",
+};
+
+const STAGE_EFFECT_LABELS: Partial<Record<StageDebugRecord["effect"], string>> = {
+  cleanup:        "Cleaned artifacts and preserved identity",
+  enhancement:    "Enhanced lighting, contrast, and clarity",
+  color_grading:  "Applied cinematic color grading and mood adjustment",
+  style_transfer: "Applied artistic style transformation",
+  creative_pass:  "Applied creative stylistic transformation",
+};
+
+function buildExplanation(params: {
+  requestedMode: EditMode;
+  usedMode:      EditMode;
+  intensity:     IntensityLevel;
+  pipelineDebug: PipelineDebug | undefined;
+  retryCount:    number;
+}): ExplanationResult {
+  const { requestedMode, usedMode, intensity, pipelineDebug, retryCount } = params;
+
+  // Stage summary — only include stages that ran successfully
+  const stageSummary: string[] = [];
+  if (pipelineDebug) {
+    const { stage_1_cleanup, stage_2_enhancement, stage_3_cinematic } = pipelineDebug.stages;
+    if (stage_1_cleanup.status === "success") {
+      stageSummary.push(`Stage 1: ${STAGE_EFFECT_LABELS[stage_1_cleanup.effect] ?? "Processed"}`);
+    }
+    if (stage_2_enhancement.status === "success") {
+      stageSummary.push(`Stage 2: ${STAGE_EFFECT_LABELS[stage_2_enhancement.effect] ?? "Processed"}`);
+    }
+    if (stage_3_cinematic.status === "success") {
+      stageSummary.push(`Stage 3: ${STAGE_EFFECT_LABELS[stage_3_cinematic.effect] ?? "Processed"}`);
+    }
+  }
+
+  // Temperature summary
+  let temperatureSummary: string;
+  if (usedMode === "portrait_safe") {
+    temperatureSummary = "No Stage 3 executed — portrait_safe mode preserves identity with cleanup and enhancement only";
+  } else {
+    const s3Temp = computeStage3Temperature(usedMode, intensity);
+    temperatureSummary = `Final Stage 3 temperature set to ${s3Temp.toFixed(2)} (${usedMode} base + ${intensity} intensity modifier)`;
+  }
+
+  // Notes — only when something non-nominal occurred
+  const notes: string[] = [];
+  if (retryCount >= 1) {
+    notes.push("Stage 3 retry triggered due to no output from initial attempt");
+  }
+  if (retryCount >= 2 && usedMode === requestedMode) {
+    const downgraded = downgradedIntensity(intensity);
+    notes.push(`Intensity downgraded from ${intensity} to ${downgraded} after Stage 3 retry failure`);
+  }
+  if (usedMode !== requestedMode) {
+    notes.push(`Mode fallback applied: ${requestedMode} → ${usedMode}`);
+  }
+
+  return {
+    mode:               MODE_EXPLANATION[usedMode],
+    intensity:          INTENSITY_EXPLANATION[intensity],
+    stageSummary,
+    temperatureSummary,
+    decisionFlow:       "editMode → intensity → stage pipeline → temperature computation → final render",
+    ...(notes.length > 0 ? { notes } : {}),
+  };
+}
+
 // Instruction addenda injected into Stage 1 based on intensity
 const S1_INTENSITY_ADDENDUM: Record<IntensityLevel, string> = {
   LOW:     " Apply very strict reconstruction — preserve maximum source fidelity, zero tolerance for deviation.",
@@ -952,6 +1042,13 @@ export async function editImage(
         model: GEMINI_IMG2IMG_MODEL, status: "success", retryCount, latencyMs,
       }).catch((err) => logger.warn({ err }, "[imageHistory] Failed to save edit result"));
     }
+    const explanation = buildExplanation({
+      requestedMode: resolvedMode,
+      usedMode,
+      intensity:     resolvedIntensity,
+      pipelineDebug,
+      retryCount,
+    });
     return {
       b64Image,
       job:                 jobSummary(job),
@@ -961,6 +1058,7 @@ export async function editImage(
       qualityIssues:       [],
       contractVersionUsed: CONTRACT_VERSION,
       pipelineDebug,
+      explanation,
     };
   };
 

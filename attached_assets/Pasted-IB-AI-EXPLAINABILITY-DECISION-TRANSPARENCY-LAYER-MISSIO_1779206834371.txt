@@ -1,0 +1,126 @@
+IB AI — EXPLAINABILITY & DECISION TRANSPARENCY LAYER
+
+MISSION:
+Add a lightweight explanation layer that describes WHY a specific image output was generated in human-readable form.
+
+DO NOT:
+- modify pipeline logic
+- change model behavior
+- alter image outputs
+- add new stages or controls
+
+ONLY:
+- attach explanations AFTER generation
+- summarize decision flow
+- expose internal reasoning in simplified form
+
+────────────────────────────
+CORE OBJECTIVE
+────────────────────────────
+
+Every EditResult MUST include an optional field:
+
+explanation: {
+  mode: string,
+  intensity: string,
+  stageSummary: string[],
+  temperatureSummary: string,
+  decisionFlow: string,
+  notes?: string[]
+}
+
+This does NOT affect generation — only reporting.
+
+────────────────────────────
+EXPLANATION GENERATION RULE
+────────────────────────────
+
+After pipeline execution completes:
+
+Generate explanation using ONLY already-known runtime values:
+- editMode
+- intensity
+- stage results
+- final temperature values per stage
+
+DO NOT infer or hallucinate new system behavior.
+
+────────────────────────────
+STRUCTURE FORMAT
+────────────────────────────
+
+1. MODE SUMMARY
+Explain what the mode did structurally:
+
+Examples:
+- portrait_safe → "Prioritized identity preservation and minimal stylistic deviation"
+- cinematic → "Enabled full cinematic grading in Stage 3"
+- style_transfer → "Skipped enhancement stage to prioritize artistic transformation"
+- creative → "Allowed maximum stylistic freedom across Stage 2 and Stage 3"
+
+────────────────────────────
+2. INTENSITY SUMMARY
+Explain intensity effect:
+
+- LOW → "Minimized stylistic changes and increased realism"
+- MEDIUM → "Balanced transformation strength"
+- HIGH → "Increased cinematic and stylistic impact in Stage 3"
+- EXTREME → "Strong artistic transformation with reduced constraints in Stage 3"
+
+────────────────────────────
+3. STAGE SUMMARY
+Provide short per-stage breakdown:
+
+Example:
+[
+  "Stage 1: Cleaned artifacts and preserved identity",
+  "Stage 2: Enhanced lighting, contrast, and clarity",
+  "Stage 3: Applied cinematic color grading and mood adjustment"
+]
+
+Skip stages that were not executed.
+
+────────────────────────────
+4. TEMPERATURE SUMMARY
+Explain final Stage 3 temperature in plain language:
+
+Example:
+"Final Stage 3 temperature set to 1.10 due to cinematic mode + HIGH intensity modifier"
+
+────────────────────────────
+5. DECISION FLOW (IMPORTANT)
+One-line trace of system decision path:
+
+Format:
+"editMode → intensity → stage pipeline → temperature computation → final render"
+
+────────────────────────────
+6. NOTES (OPTIONAL)
+Only include if:
+- fallback was triggered
+- stage retry occurred
+- intensity downgrade occurred
+- mode downgrade occurred
+
+Examples:
+- "Stage 3 retry triggered due to timeout"
+- "Intensity downgraded from EXTREME to HIGH after failure"
+- "Mode fallback applied: creative → cinematic"
+
+────────────────────────────
+OUTPUT RULES
+────────────────────────────
+
+- Must be concise (no long paragraphs)
+- Must not affect generation quality or timing
+- Must always reflect actual runtime values
+- Must never guess missing data
+
+────────────────────────────
+FINAL GOAL
+────────────────────────────
+
+Make IB AI outputs explainable so that every image result has:
+- a visible reasoning trace
+- understandable control flow
+- predictable system behavior for users and developers
