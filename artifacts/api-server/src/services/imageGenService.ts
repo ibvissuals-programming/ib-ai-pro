@@ -376,16 +376,6 @@ async function runImg2Img(
   const dataUrl    = `data:${outputMime};base64,${outputData}`;
   validateImageResponse(dataUrl);
 
-  // Detect near-identical output (exact match or nearly same size + prefix)
-  const sizeRatio  = Math.abs(outputData.length - parsed.base64.length) / Math.max(parsed.base64.length, 1);
-  const prefixLen  = Math.min(120, parsed.base64.length, outputData.length);
-  const samePrefix = prefixLen >= 120 && parsed.base64.slice(0, 120) === outputData.slice(0, 120);
-
-  if (outputData === parsed.base64 || (sizeRatio < 0.08 && samePrefix)) {
-    logger.warn({ sizeRatio }, "[imageEdit] near-identical output detected — treating as no-op");
-    return null;
-  }
-
   logger.info({ outputMime, outputBytes: outputData.length }, "[imageEdit] img2img success");
   return dataUrl;
 }
