@@ -400,6 +400,21 @@ export function classifyEditMode(
   return "SUBTLE_ENHANCEMENT";
 }
 
+// ── VARIANCE ENFORCEMENT SUFFIX ──────────────────────────────────────────────
+// Appended to all visual-transformation instructions (HIGH / EXTREME intensity).
+// Forces the model to self-verify ≥3 of 5 transformation axes before outputting.
+// Do NOT append to structural-only modes (SCREENSHOT_CLEANUP, TEXT_REMOVAL).
+const VARIANCE_ENFORCEMENT_SUFFIX =
+  ` VARIANCE ENFORCEMENT CHECK (PRO_EDIT_MODE): Before outputting, confirm your result` +
+  ` satisfies AT LEAST 3 of these 5 transformation axes:` +
+  ` (1) LIGHTING SHIFT — direction, source, or intensity is clearly different;` +
+  ` (2) COLOR PALETTE SHIFT — temperature, hue, or cinematic grade is clearly different;` +
+  ` (3) CONTRAST CURVE SHIFT — shadow depth, highlights, or tonal range is clearly different;` +
+  ` (4) EXPOSURE REDISTRIBUTION — overall exposure balance is clearly different;` +
+  ` (5) MOOD/ATMOSPHERE CHANGE — emotional or cinematic feel is clearly different.` +
+  ` If fewer than 3 axes are satisfied → increase transformation strength and apply a stronger edit.` +
+  ` Near-identical output = VARIANCE FAILURE. Minimum 3 axes required.`;
+
 // ── LAYER 4: Strong cinematic instruction builder ─────────────────────────────
 
 export function buildStrongInstruction(
@@ -445,7 +460,8 @@ export function buildStrongInstruction(
         `Reconstruct any screenshot artifacts, UI overlays, or digital noise with photorealistic texture. ` +
         `Add subtle lens bloom on the brightest highlights and fine film grain. ` +
         `Final output must look like a frame from a high-budget film production, not a phone photo or screenshot. ` +
-        `Subject identity, face, clothing, logos, and pose must remain completely unchanged.`
+        `Subject identity, face, clothing, logos, and pose must remain completely unchanged.` +
+        VARIANCE_ENFORCEMENT_SUFFIX
       );
     }
 
@@ -472,7 +488,8 @@ export function buildStrongInstruction(
         `Color grade with premium film palette: deep cool shadows, warm neutral skin tones, controlled highlights. ` +
         `Add subtle anamorphic lens bloom on the brightest highlights and light organic film grain. ` +
         `This must look physically relit by a Hollywood cinematographer — NOT a social media filter or Instagram edit. ` +
-        `Subject identity, face, clothing, logos, and pose must remain completely unchanged.`
+        `Subject identity, face, clothing, logos, and pose must remain completely unchanged.` +
+        VARIANCE_ENFORCEMENT_SUFFIX
       );
     }
 
@@ -484,7 +501,8 @@ export function buildStrongInstruction(
         `Add subtle environmental lighting — make the scene feel physically lit and atmospheric. ` +
         `Sharpen key subjects, add gentle HDR enhancement to the environment. ` +
         `Final result should feel like a premium editorial wallpaper with cinematic production value. ` +
-        `Preserve all subjects, faces, and logos.`
+        `Preserve all subjects, faces, and logos.` +
+        VARIANCE_ENFORCEMENT_SUFFIX
       );
 
     case "STYLE_TRANSFER":
@@ -492,7 +510,8 @@ export function buildStrongInstruction(
         `Transform this image into the following style: ${p}. ` +
         `Fully commit to the style — make it unmistakably that aesthetic, not a subtle filter. ` +
         `Preserve the subject's identity, facial features, body proportions, and clothing. ` +
-        `Apply only the style transformation — do not alter who the person is.`
+        `Apply only the style transformation — do not alter who the person is.` +
+        VARIANCE_ENFORCEMENT_SUFFIX
       );
 
     case "OBJECT_MANIPULATION":
@@ -515,7 +534,8 @@ export function buildStrongInstruction(
         `Apply the following color and mood transformation: ${p}. ` +
         `Adjust tones, lighting mood, and color grading to match the requested atmosphere. ` +
         `Make the color change visible and intentional — not a subtle shift. ` +
-        `Preserve the subject's identity, expression, and composition entirely.`
+        `Preserve the subject's identity, expression, and composition entirely.` +
+        VARIANCE_ENFORCEMENT_SUFFIX
       );
 
     case "SUBTLE_ENHANCEMENT":
@@ -543,7 +563,8 @@ export function buildStrongInstruction(
           `but clearly different and better: stronger lighting, richer color, deeper contrast, more cinematic mood. ` +
           `REQUIRED: The output must look visibly different from the input — stronger, moodier, more professional. ` +
           `PRESERVE ONLY: face identity, pose, body position, background objects and layout, and composition framing.` +
-          antiAiRule
+          antiAiRule +
+          VARIANCE_ENFORCEMENT_SUFFIX
         );
       }
       return (

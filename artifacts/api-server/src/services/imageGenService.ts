@@ -708,6 +708,48 @@ If model cannot comply with the structural locks:
 → DO NOT recreate image
 
 ------------------------------------------------------------
+VARIANCE ENFORCEMENT SYSTEM (PRO_EDIT_MODE v6)
+------------------------------------------------------------
+
+Before producing your output, verify it satisfies the MINIMUM VISUAL CHANGE THRESHOLD.
+
+You must satisfy AT LEAST 3 of the following 5 transformation axes:
+
+AXIS 1 — LIGHTING SHIFT
+→ Lighting direction, source quality, or intensity is clearly different from the input
+→ A minor brightness nudge does NOT satisfy this axis
+→ Acceptable: new key light direction, cinematic rim light, dramatic shadow reshaping
+
+AXIS 2 — COLOR PALETTE SHIFT
+→ Color temperature, hue balance, or overall palette is clearly different from the input
+→ A near-neutral tweak does NOT satisfy this axis
+→ Acceptable: warm-to-cool, neutral-to-cinematic, teal-orange grade, film emulation
+
+AXIS 3 — CONTRAST CURVE SHIFT
+→ Shadow depth, highlight brightness, or tonal range separation is clearly different
+→ A minor exposure nudge does NOT satisfy this axis
+→ Acceptable: deep black point crush, bright luminous highlights, cinematic S-curve
+
+AXIS 4 — EXPOSURE REDISTRIBUTION
+→ The overall exposure balance is clearly different — shadows lifted, highlights recovered,
+   or intentional exposure shift applied that changes the tonal weight of the image
+
+AXIS 5 — MOOD / ATMOSPHERE CHANGE
+→ The overall cinematic or emotional feel of the image is clearly different from the input
+→ Acceptable: flat-to-dramatic, bright-to-moody, clinical-to-warm, neutral-to-cinematic
+
+THRESHOLD CHECK:
+If your output satisfies fewer than 3 axes → it is a VARIANCE FAILURE
+→ Increase transformation strength immediately
+→ Do NOT output a near-identical result
+→ Do NOT reduce to a "safe" minimal edit
+
+PRO_EDIT_MODE enforcement:
+→ Conservative fallback = DISABLED
+→ Safe-similarity output = REJECTED (it is not a valid result)
+→ HIGH/EXTREME strength MUST satisfy at least 3 axes visibly
+
+------------------------------------------------------------
 FINAL OUTPUT GOAL
 ------------------------------------------------------------
 
@@ -1423,12 +1465,21 @@ export async function editImage(
   const primaryInstruction: string = buildStrongInstruction(mode, intensity, prompt);
 
   // Escalated instruction — same model, EXTREME strength, used for no-op recovery.
-  // MINIMUM VISUAL CHANGE THRESHOLD: if Attempt 1 was near-identical, Attempt 2
-  // escalates to EXTREME to force a visible transformation — never downgrades.
+  // VARIANCE ENFORCEMENT: Attempt 1 was a near-identical output (FAILURE STATE).
+  // Attempt 2 escalates to EXTREME with explicit variance enforcement — all 5 axes.
   const escalatedInstruction: string = buildStrongInstruction(
     mode,
     "EXTREME",
-    prompt + " — IMPORTANT: this edit MUST be visually transformative. Make a strong, clearly visible change.",
+    prompt +
+    " — VARIANCE ENFORCEMENT ACTIVE: The previous attempt produced near-identical output, which is a FAILURE." +
+    " This attempt MUST produce a visually transformed result." +
+    " Push ALL 5 transformation axes aggressively:" +
+    " (1) Strongly relight the scene — change direction or quality of light;" +
+    " (2) Shift the color palette — change temperature, hue balance, or apply a cinematic grade;" +
+    " (3) Reshape the contrast curve — deep blacks, bright highlights, punchy S-curve;" +
+    " (4) Redistribute exposure — lift shadows or recover highlights dramatically;" +
+    " (5) Change the mood — the emotional and atmospheric feel must be clearly different." +
+    " All 5 axes must be visibly satisfied. Do NOT reproduce the input image with minor tweaks.",
   );
 
   const hasPreservationLock = detectPreservationLock(prompt);
