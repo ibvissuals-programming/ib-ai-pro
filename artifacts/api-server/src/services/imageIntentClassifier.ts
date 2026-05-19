@@ -532,15 +532,17 @@ export function buildStrongInstruction(
       if (intensity === "HIGH" || intensity === "EXTREME") {
         return (
           `Apply strong professional photo enhancement to this exact image: ${p}. ` +
-          `Perform these operations only — in order of priority: ` +
-          `(1) Correct exposure: lift shadows, recover highlights, balance midtones. ` +
-          `(2) Normalize contrast: deep controlled blacks, clean whites, rich midtone separation. ` +
-          `(3) White balance: remove color cast, achieve neutral accurate skin tones. ` +
-          `(4) Sharpening: apply professional local sharpening to edges and textures. ` +
-          `(5) Local color grading: subtle non-destructive tonal refinement for professional quality. ` +
-          `(6) Noise reduction: clean sensor noise while preserving fine texture detail. ` +
-          `Output must be a professionally corrected photograph — the same scene, same subject, same composition, same background. ` +
-          `Face, identity, pose, body, background, and framing must be completely unchanged.` +
+          `Perform these operations at FULL VISIBLE STRENGTH — in order of priority: ` +
+          `(1) Exposure: aggressive shadow lift, strong highlight recovery, intentional midtone shaping. ` +
+          `(2) Contrast: deep rich blacks, punchy highlights, cinematic S-curve tonal range — make it clearly visible. ` +
+          `(3) White balance and color temperature: strong warm-to-cool or cool-to-warm shift as appropriate — visible change required. ` +
+          `(4) Sharpening and clarity: strong local contrast enhancement, crisp texture detail, micro-contrast lift. ` +
+          `(5) Color grading: STRONG visible tonal transformation — apply a cinematic film palette, moody grade, or professional Lightroom preset. The color mood must clearly change. ` +
+          `(6) Noise reduction: clean grain while preserving natural film texture. ` +
+          `Output must look like a professionally graded photograph — same structural composition and subject identity, ` +
+          `but clearly different and better: stronger lighting, richer color, deeper contrast, more cinematic mood. ` +
+          `REQUIRED: The output must look visibly different from the input — stronger, moodier, more professional. ` +
+          `PRESERVE ONLY: face identity, pose, body position, background objects and layout, and composition framing.` +
           antiAiRule
         );
       }
