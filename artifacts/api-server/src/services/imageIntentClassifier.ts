@@ -400,6 +400,166 @@ export function classifyEditMode(
   return "SUBTLE_ENHANCEMENT";
 }
 
+// ── CINEMATIC DIRECTOR LAYER ──────────────────────────────────────────────────
+// Converts vague or generic user prompts into explicit cinematic visual transformation
+// briefs before they reach the instruction builder.
+//
+// Applied only to visual-transformation modes. Structural modes (SCREENSHOT_CLEANUP,
+// TEXT_REMOVAL, OBJECT_MANIPULATION, BACKGROUND_TRANSFORMATION) pass through unchanged
+// because their operation is geometric, not aesthetic.
+//
+// Flow: user prompt → buildCinematicDirectorBrief → buildStrongInstruction → model
+
+const DIRECTOR_SKIP_MODES: EditMode[] = [
+  "SCREENSHOT_CLEANUP",
+  "TEXT_REMOVAL",
+  "OBJECT_MANIPULATION",
+  "BACKGROUND_TRANSFORMATION",
+];
+
+// Prompt already has explicit visual direction — enhance without overriding user intent.
+const EXPLICIT_VISUAL_SIGNALS = [
+  "teal", "orange", "warm", "cool", "golden", "moody", "cinematic",
+  "film", "grunge", "vintage", "kodak", "fuji", "fujifilm", "bleach",
+  "bypass", "dramatic", "dark", "bright", "vibrant", "muted", "desaturated",
+  "soft light", "hard light", "rim light", "backlight", "studio",
+  "natural light", "golden hour", "blue hour", "overcast", "high contrast",
+  "low contrast", "editorial", "fashion", "noir", "moody blue", "split tone",
+  "color grade", "colour grade", "lut", "preset", "palette",
+];
+
+// Prompt is intentionally vague — full director brief injection required.
+const VAGUE_SIGNALS = [
+  "enhance", "improve", "make it better", "make better", "make it good",
+  "make it look good", "make it look nice", "make it nice", "make it look great",
+  "fix", "touch up", "edit this", "edit it", "clean it up", "upgrade",
+  "beautify", "refresh", "polish", "boost", "make it pop", "make it professional",
+  "make it look professional", "make it look real",
+];
+
+interface DirectorStyle {
+  name:       string;
+  lighting:   string;
+  colorGrade: string;
+  exposure:   string;
+  mood:       string;
+  brief:      string;
+}
+
+const DIRECTOR_STYLES: Record<string, DirectorStyle> = {
+  PORTRAIT_CINEMATIC: {
+    name:       "PORTRAIT CINEMATIC",
+    lighting:   "soft window key light from the side with gentle fill, subtle practical rim light separating subject from background",
+    colorGrade: "warm film tones — Kodak Portra-style skin rendering, creamy luminous highlights, controlled cool blue-shadow grade",
+    exposure:   "lifted shadows revealing natural detail, recovered highlights with filmic rolloff, rich midtone depth",
+    mood:       "intimate, premium editorial portrait — warm, polished, professional DSLR feel",
+    brief:      "cinematic portrait enhancement — soft side key light, warm Kodak film grade, lifted shadow detail, intimate editorial mood",
+  },
+  EDITORIAL_HIGH_CONTRAST: {
+    name:       "EDITORIAL HIGH-CONTRAST",
+    lighting:   "hard directional key light from above or side, deep crisp shadow definition, strong light-to-dark ratio",
+    colorGrade: "high-contrast editorial palette — clean bright whites, deep crushed blacks, desaturated neutral color tone, sharp tonal separation",
+    exposure:   "precise deep shadow crush, bright controlled highlights with no blowout, strong tonal weight separation",
+    mood:       "fashion magazine, commercial editorial, bold confident presence — high-impact visual authority",
+    brief:      "editorial high-contrast — hard directional light, deep shadow crush, clean desaturated magazine tone, fashion-quality finish",
+  },
+  FILM_STILL: {
+    name:       "FILM STILL (MOVIE LOOK)",
+    lighting:   "dramatic 3-point cinematic lighting — powerful directional key light, controlled fill to shape shadow depth, strong rim backlight separating subject from background",
+    colorGrade: "teal & orange cinematic grade — deep teal shadows, warm neutral-to-golden skin highlights, desaturated neutral midtones",
+    exposure:   "filmic exposure — intentional shadow depth, luminous controlled highlights, rich cinematic midtones with HDR tonal range",
+    mood:       "cinematic film still — $100M production quality, emotionally evocative, dramatically relit and graded",
+    brief:      "film still — dramatic 3-point cinematic lighting, teal-orange grade, deep shadows with rim separation, movie-quality mood",
+  },
+  NATURAL_DSLR_PLUS: {
+    name:       "NATURAL DSLR REALISM+",
+    lighting:   "enhanced natural light quality — soft golden-hour directional warmth or clean diffused daylight with gentle shadow definition",
+    colorGrade: "natural color lift — accurate warm skin tones, subtle film warmth, clean white balance correction, gentle clarity and micro-contrast boost",
+    exposure:   "balanced natural exposure — lifted shadow detail, soft highlight rolloff, open airy midtones, lifestyle-quality tonal balance",
+    mood:       "professional lifestyle DSLR — real, clean, naturally beautiful, Lightroom-quality enhancement with cinematic polish",
+    brief:      "natural DSLR realism plus — enhanced natural light, clean warm color lift, open airy exposure, professional lifestyle editorial feel",
+  },
+  LOW_LIGHT_DRAMA: {
+    name:       "LOW-LIGHT DRAMA",
+    lighting:   "low-key dramatic lighting — powerful rim/edge light defining subject against dark background, deep shadow fill with minimal ambient fill",
+    colorGrade: "moody cinematic palette — deep desaturated blue-black shadows, cool atmospheric midtones, subtle warm accent highlight on skin or key subject",
+    exposure:   "dramatic dark exposure — intentional deep shadow crush, selective tight highlights, high dynamic range contrast with dark tonal weight",
+    mood:       "dark cinematic tension — moody, atmospheric, intense — thriller, noir, or dramatic portrait aesthetic",
+    brief:      "low-light drama — rim-lit subject against deep dark background, moody cool shadow palette, tense cinematic atmosphere",
+  },
+};
+
+function selectDirectorStyle(prompt: string, mode: EditMode): DirectorStyle {
+  const lower = prompt.toLowerCase();
+
+  // Mode-level overrides — some modes have a natural best-fit style
+  if (mode === "AGGRESSIVE_RECONSTRUCTION") return DIRECTOR_STYLES["FILM_STILL"]!;
+  if (mode === "WALLPAPER_UPGRADE")          return DIRECTOR_STYLES["FILM_STILL"]!;
+
+  // Dark / moody / shadow signals
+  if (/dark|moody|shadow|night|noir|gritty|low.?light|thriller|intense/.test(lower)) {
+    return DIRECTOR_STYLES["LOW_LIGHT_DRAMA"]!;
+  }
+  // Editorial / fashion / commercial signals
+  if (/fashion|editorial|magazine|commercial|bold|high.?contrast|catalog/.test(lower)) {
+    return DIRECTOR_STYLES["EDITORIAL_HIGH_CONTRAST"]!;
+  }
+  // Cinematic / film / movie signals
+  if (/cinematic|film|movie|scene|hollywood|director|grade|blockbuster/.test(lower)) {
+    return DIRECTOR_STYLES["FILM_STILL"]!;
+  }
+  // Natural / outdoor / lifestyle signals
+  if (/natural|outdoor|sunlight|daylight|golden hour|lifestyle|real|candid/.test(lower)) {
+    return DIRECTOR_STYLES["NATURAL_DSLR_PLUS"]!;
+  }
+  // Portrait / face / person signals → portrait cinematic as default for people
+  if (/portrait|headshot|face|selfie|profile|person|human|model|subject/.test(lower)) {
+    return DIRECTOR_STYLES["PORTRAIT_CINEMATIC"]!;
+  }
+
+  // Generic vague prompts default to FILM_STILL — most visually impactful
+  return DIRECTOR_STYLES["FILM_STILL"]!;
+}
+
+export function buildCinematicDirectorBrief(
+  prompt: string,
+  mode: EditMode,
+): string {
+  // Pass-through for structural modes — director aesthetics are irrelevant
+  if (DIRECTOR_SKIP_MODES.includes(mode)) return prompt;
+
+  const lower = prompt.toLowerCase().trim();
+
+  const isExplicit = EXPLICIT_VISUAL_SIGNALS.some((s) => lower.includes(s));
+  const isVague    = VAGUE_SIGNALS.some((s) => lower.includes(s)) || lower.length < 20;
+
+  const style = selectDirectorStyle(prompt, mode);
+
+  if (isExplicit && !isVague) {
+    // User already has clear visual direction — augment without overriding
+    return (
+      `${prompt}. ` +
+      `Apply with ${style.lighting}. ` +
+      `Color grade: ${style.colorGrade}. ` +
+      `Exposure strategy: ${style.exposure}. ` +
+      `Mood: ${style.mood}.`
+    );
+  }
+
+  // Vague or short prompt — inject full director brief
+  return (
+    `CINEMATIC DIRECTOR BRIEF [${style.name}] — ` +
+    `Original user intent: "${prompt}". ` +
+    `Director transformation: ${style.brief}. ` +
+    `LIGHTING: ${style.lighting}. ` +
+    `COLOR GRADE: ${style.colorGrade}. ` +
+    `EXPOSURE: ${style.exposure}. ` +
+    `MOOD TARGET: ${style.mood}. ` +
+    `Apply this as a full cinematic visual transformation — not a generic enhancement. ` +
+    `Every axis must be intentionally pushed: lighting, color, contrast, exposure, and mood must ALL visibly change.`
+  );
+}
+
 // ── VARIANCE ENFORCEMENT SUFFIX ──────────────────────────────────────────────
 // Appended to all visual-transformation instructions (HIGH / EXTREME intensity).
 // Forces the model to self-verify ≥3 of 5 transformation axes before outputting.

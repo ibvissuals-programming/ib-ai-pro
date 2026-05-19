@@ -39,6 +39,7 @@ import {
   classifyEditMode,
   detectEditIntensity,
   buildStrongInstruction,
+  buildCinematicDirectorBrief,
   getEditModeLabel,
   classifyImageIntent,
   type ImageIntent,
@@ -1458,11 +1459,25 @@ export async function editImage(
     "[imageEdit] pipeline entered — IMG2IMG ONLY + LAYER 8 quality enforcement",
   );
 
-  // ── LAYER 4: Build instructions (PRO_EDIT_MODE v5) ───────────────────────
-  // All modes run at full detected intensity — no fast-mode downgrade path.
-  // Primary instruction = mode-specific strong instruction at detected intensity.
-  // Escalated instruction = same mode at EXTREME, used for no-op recovery.
-  const primaryInstruction: string = buildStrongInstruction(mode, intensity, prompt);
+  // ── LAYER 4: Build instructions (PRO_EDIT_MODE v6) ───────────────────────
+  // Cinematic Director Layer runs first — converts vague/short prompts into
+  // explicit visual transformation briefs (lighting direction, color grade style,
+  // exposure strategy, mood target). Structural modes are passed through unchanged.
+  // Director brief feeds into buildStrongInstruction for full mode-specific build.
+  const directorBrief: string = buildCinematicDirectorBrief(prompt, mode);
+
+  logger.info(
+    {
+      stage: "DIRECTOR LAYER",
+      mode,
+      originalPrompt: prompt.slice(0, 80),
+      directorBrief: directorBrief.slice(0, 120),
+      enriched: directorBrief !== prompt,
+    },
+    "[imageEdit] Cinematic Director Layer applied",
+  );
+
+  const primaryInstruction: string = buildStrongInstruction(mode, intensity, directorBrief);
 
   // Escalated instruction — same model, EXTREME strength, used for no-op recovery.
   // VARIANCE ENFORCEMENT: Attempt 1 was a near-identical output (FAILURE STATE).
@@ -1470,7 +1485,7 @@ export async function editImage(
   const escalatedInstruction: string = buildStrongInstruction(
     mode,
     "EXTREME",
-    prompt +
+    directorBrief +
     " — VARIANCE ENFORCEMENT ACTIVE: The previous attempt produced near-identical output, which is a FAILURE." +
     " This attempt MUST produce a visually transformed result." +
     " Push ALL 5 transformation axes aggressively:" +
