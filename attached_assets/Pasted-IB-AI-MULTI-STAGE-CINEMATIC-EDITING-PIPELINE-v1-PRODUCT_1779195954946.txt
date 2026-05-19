@@ -1,0 +1,117 @@
+IB AI — MULTI-STAGE CINEMATIC EDITING PIPELINE v1 (PRODUCTION UPGRADE)
+
+You are working inside IB AI, an existing production image editing system.
+
+MISSION:
+Convert all image editing requests into a structured multi-stage pipeline to achieve professional cinematic results using limited model capability.
+
+CRITICAL RULE:
+DO NOT break existing system architecture.
+DO NOT remove edit modes.
+DO NOT introduce new models.
+ONLY restructure how edits are executed.
+
+────────────────────────────
+CORE CONCEPT
+────────────────────────────
+
+Every image edit MUST be processed in 3 internal stages:
+
+STAGE 1 — STRUCTURE CLEANUP
+Goal: prepare a clean base image
+
+Actions:
+- remove unwanted objects (emojis, text, artifacts)
+- fix distractions
+- stabilize composition
+- preserve identity strictly
+- no stylistic changes
+
+Output: CLEAN BASE IMAGE
+
+────────────────────────────
+
+STAGE 2 — LIGHTING + ENHANCEMENT PASS
+Goal: improve realism and quality
+
+Actions:
+- adjust lighting naturally
+- improve contrast and dynamic range
+- enhance facial clarity
+- refine skin texture (natural, not plastic)
+- improve sharpness and detail
+- enhance depth perception
+
+Rules:
+- identity preserved
+- no artistic stylization yet
+
+Output: ENHANCED REALISTIC IMAGE
+
+────────────────────────────
+
+STAGE 3 — CINEMATIC GRADING PASS
+Goal: apply professional aesthetic transformation
+
+Actions:
+- cinematic color grading
+- mood adjustment (warm, cool, moody, etc.)
+- DSLR / film-style tone mapping
+- soft depth and atmospheric enhancement
+- subtle vignette if appropriate
+- professional portrait aesthetic finish
+
+Rules:
+- identity preserved (based on mode rules)
+- do not alter facial structure
+- do not distort realism
+
+Output: FINAL CINEMATIC IMAGE
+
+────────────────────────────
+MODE INTEGRATION RULE
+────────────────────────────
+
+Each editMode determines how many stages are executed:
+
+1. portrait_safe:
+- execute STAGE 1 + STAGE 2 only
+
+2. cinematic:
+- execute STAGE 1 + STAGE 2 + STAGE 3
+
+3. style_transfer:
+- execute STAGE 1 + STAGE 3 (light STAGE 2 only if needed)
+
+4. creative:
+- execute all stages with relaxed constraints
+
+────────────────────────────
+FAILSAFE RULE
+────────────────────────────
+
+If output is weak or unchanged:
+- DO NOT repeat full pipeline
+- ONLY rerun STAGE 3 (cinematic pass) once
+- If still weak → downgrade mode automatically
+
+────────────────────────────
+CREDIT OPTIMIZATION RULES
+────────────────────────────
+
+- NEVER regenerate full pipeline twice unnecessarily
+- Prefer staged improvement over retry loops
+- Each stage is a single controlled pass
+- No duplicate processing across stages
+
+────────────────────────────
+FINAL OBJECTIVE
+────────────────────────────
+
+Transform IB AI into a professional-grade image editing system that mimics real-world editing workflows:
+
+- Photo cleanup (Stage 1)
+- Retouching (Stage 2)
+- Cinematic grading (Stage 3)
+
+WITHOUT requiring additional paid APIs or new models.

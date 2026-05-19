@@ -35,8 +35,9 @@ const POLLINATIONS_BASE      = "https://image.pollinations.ai/prompt";
 const MAX_IMAGE_BYTES        = 10 * 1024 * 1024;
 const ACCEPTED_MIMES         = ["image/png", "image/jpeg", "image/webp"] as const;
 const RESPONSE_PATTERN       = /^data:image\/(png|jpeg|jpg|webp);base64,/;
-const PIPELINE_TIMEOUT_MS    = 45_000;
-const ATTEMPT_TIMEOUT_MS     = 20_000;
+const PIPELINE_TIMEOUT_MS    = 90_000;   // 3 stages × ~25 s + buffer
+const STAGE_TIMEOUT_MS       = 25_000;   // per-stage hard cap
+const ATTEMPT_TIMEOUT_MS     = 25_000;   // kept for non-pipeline callers
 export const REQUEST_TIMEOUT_MS = 28_000;
 export const MAX_POLLINATIONS_RETRIES = 1;
 
@@ -593,6 +594,167 @@ async function runImg2Img(
   return dataUrl;
 }
 
+// ── Multi-stage pipeline contracts ────────────────────────────────────────────
+//
+// Three specialized contracts applied in sequence.
+// Each stage's output data URL becomes the next stage's input image.
+
+const STAGE_1_CLEANUP_CONTRACT = `You are a professional photo compositor and image preparation specialist.
+
+TASK: Clean and prepare this image as a base for subsequent professional editing stages.
+OUTPUT STANDARD: "Clean, distraction-free base image — ready for enhancement."
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ACTIONS TO PERFORM — cleanup only
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Remove overlaid text, emoji, stickers, watermarks, UI elements, or any visual artifact
+• Fix distracting background elements that compete with the subject
+• Stabilize composition — correct obvious tilt or misalignment where needed
+• Neutralize heavily over-processed looks (flatten crushed blacks, blown highlights)
+• Remove noise or compression artifacts that are clearly visible
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STRICT RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• DO NOT apply stylistic changes, color grading, or artistic effects
+• DO NOT alter lighting quality, color tone, or mood
+• DO NOT change facial structure, age, ethnicity, or subject identity
+• If the image is already clean, output it nearly unchanged — do not invent changes
+• Output must look like a clean, neutral base version of the original
+
+FINAL EDIT GOAL (context only — do NOT apply yet):
+`;
+
+const STAGE_2_ENHANCEMENT_CONTRACT = `You are a professional photo retoucher and image quality specialist.
+
+TASK: Enhance the realism, quality, and visual clarity of this image.
+OUTPUT STANDARD: "High-quality, realistic photograph — professional retouching grade."
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ACTIONS TO PERFORM — quality only
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Adjust lighting naturally — reduce harsh shadows, add gentle fill where needed
+• Improve contrast and dynamic range — preserve shadow detail, recover highlights
+• Enhance facial clarity — sharpen eye detail, improve micro-contrast
+• Refine skin texture — smooth without plasticizing, keep pores and natural character
+• Improve overall sharpness and micro-detail throughout the image
+• Enhance depth perception — subtle subject-background separation if applicable
+• Correct color balance and exposure neutrally (not artistically)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STRICT RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• DO NOT apply cinematic or artistic color grading
+• DO NOT alter facial structure, age, or subject identity
+• DO NOT introduce stylistic effects or filter looks
+• Output must look like a professionally retouched, realistic photograph
+
+ENHANCEMENT PASS — instruction:
+`;
+
+const STAGE_3_CINEMATIC_CONTRACT = `You are a professional cinematic colorist and image finishing specialist.
+
+TASK: Apply the final cinematic aesthetic transformation described below.
+OUTPUT STANDARD: "Cinema-grade finished image — professional aesthetic."
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ACTIONS TO PERFORM — cinematic finishing
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Apply professional cinematic color grading — controlled palette, tonal depth, no crushing
+• Set the mood: warm, cool, moody, dramatic, neutral, or as specified by the instruction
+• Apply DSLR / film-style tone mapping — rich midtones, not flat, not over-saturated
+• Add atmospheric depth — soft environmental enhancement, haze, or clarity as fits the mood
+• Apply subtle vignette if it improves the composition (never heavy)
+• Deliver the professional portrait or scene aesthetic as a finished product
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+IDENTITY RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Preserve subject identity — same person, same facial geometry
+• Do NOT alter facial structure or body proportions
+• Do NOT distort photorealism unless the instruction explicitly calls for it
+
+CINEMATIC FINISHING INSTRUCTION:
+`;
+
+// ── Stage runner — executes one stage using a data URL as input ───────────────
+
+async function runStage(
+  inputDataUrl: string,
+  instruction:  string,
+  contract:     string,
+  stageNum:     number,
+): Promise<string | null> {
+  const parsed = parseAndValidateImage(inputDataUrl);
+  logger.info(
+    { stageNum, instructionLen: instruction.length, inputBytes: parsed.base64.length },
+    `[imageEdit] running stage ${stageNum}`,
+  );
+  return runImg2Img(parsed, instruction, STAGE_TIMEOUT_MS, contract);
+}
+
+// ── Mode stage plan ───────────────────────────────────────────────────────────
+//
+// Returns an ordered list of stage descriptors for the given edit mode.
+// Each descriptor carries the contract and an instruction builder.
+
+type StageDescriptor = {
+  stageNum:    number;
+  label:       string;
+  contract:    string;
+  instruction: (userPrompt: string) => string;
+};
+
+function buildStagePlan(mode: EditMode): StageDescriptor[] {
+  const s1: StageDescriptor = {
+    stageNum:    1,
+    label:       "Structure Cleanup",
+    contract:    STAGE_1_CLEANUP_CONTRACT,
+    instruction: (p) => `Final edit goal (context only — do not apply yet): ${p}`,
+  };
+
+  const s2: StageDescriptor = {
+    stageNum:    2,
+    label:       "Lighting + Enhancement",
+    contract:    STAGE_2_ENHANCEMENT_CONTRACT,
+    instruction: (_) => "Enhance this image: improve lighting, contrast, dynamic range, sharpness, and skin texture naturally. Do not apply artistic styling.",
+  };
+
+  const s3Cinematic: StageDescriptor = {
+    stageNum:    3,
+    label:       "Cinematic Grading",
+    contract:    STAGE_3_CINEMATIC_CONTRACT,
+    instruction: (p) => p,
+  };
+
+  const s3StyleTransfer: StageDescriptor = {
+    stageNum:    3,
+    label:       "Style Transfer",
+    contract:    CONTRACT_STYLE_TRANSFER,
+    instruction: (p) => p,
+  };
+
+  const s3Creative: StageDescriptor = {
+    stageNum:    3,
+    label:       "Creative Pass",
+    contract:    CONTRACT_CREATIVE,
+    instruction: (p) => p,
+  };
+
+  switch (mode) {
+    case "portrait_safe":  return [s1, s2];
+    case "cinematic":      return [s1, s2, s3Cinematic];
+    case "style_transfer": return [s1, s3StyleTransfer];
+    case "creative":       return [s1, s2, s3Creative];
+  }
+}
+
 // ── IMAGE-TO-IMAGE PIPELINE ───────────────────────────────────────────────────
 
 export async function editImage(
@@ -674,45 +836,94 @@ export async function editImage(
 
   const runPipeline = async (): Promise<EditResult> => {
     try {
-      // ── Step 3: Attempt 1 — use resolved mode contract ───────────────────
-      advanceJob(job, "streaming", `Attempt 1 — ${modeLabel} mode`);
-      const contract1 = contractForMode(resolvedMode);
+      const stages    = buildStagePlan(resolvedMode);
+      const lastStage = stages[stages.length - 1]!;
 
-      let result: string | null = null;
-      try {
-        result = await runImg2Img(parsed, renderPrompt, ATTEMPT_TIMEOUT_MS, contract1);
-      } catch (err) {
-        logger.error({ err }, "[imageEdit] Attempt 1 failed with API error");
+      // ── Multi-stage execution ─────────────────────────────────────────────
+      // Each stage receives the previous stage's output as its input image.
+      // If a stage returns null (model refused / no image), we fall through
+      // using the last successful output so the pipeline always completes.
+
+      let currentDataUrl: string = imageDataUrl;   // start with original
+      let stagesCompleted        = 0;
+
+      for (const stage of stages) {
+        advanceJob(
+          job,
+          stage.stageNum < stages.length ? "processing" : "streaming",
+          `Stage ${stage.stageNum}/${stages.length} — ${stage.label}`,
+        );
+
+        const instruction = stage.instruction(renderPrompt);
+
+        let stageOut: string | null = null;
+        try {
+          stageOut = await runStage(currentDataUrl, instruction, stage.contract, stage.stageNum);
+        } catch (err) {
+          logger.error({ err, stageNum: stage.stageNum }, "[imageEdit] stage threw — continuing with prior output");
+        }
+
+        if (stageOut) {
+          currentDataUrl = stageOut;
+          stagesCompleted++;
+          logger.info({ stageNum: stage.stageNum, stagesCompleted }, "[imageEdit] stage completed");
+        } else {
+          logger.warn({ stageNum: stage.stageNum }, "[imageEdit] stage returned no image — using prior output");
+        }
       }
 
-      if (result) return succeedEdit(result, 0, resolvedMode);
+      // ── Check if we got a usable final output ─────────────────────────────
+      // If at least one stage produced output, treat as success.
+      if (stagesCompleted > 0) {
+        return succeedEdit(currentDataUrl, 0, resolvedMode);
+      }
 
-      // ── Step 4: Failsafe retry — downgrade mode, simplify prompt ─────────
-      const fallbackMode   = downgradedMode(resolvedMode);
-      const fallbackLabel  = MODE_LABELS[fallbackMode];
-      advanceJob(job, "retrying", `Attempt 2 — downgrading to ${fallbackLabel} mode`);
-      logger.info(
-        { from: resolvedMode, to: fallbackMode },
-        "[imageEdit] Attempt 1 produced no output — downgrading mode and retrying",
-      );
+      // ── Failsafe: all stages returned null — retry Stage 3 once ──────────
+      // Spec: if output is weak → rerun Stage 3 once → if still weak → downgrade
+      if (lastStage.stageNum === 3) {
+        advanceJob(job, "retrying", `Failsafe — retrying Stage 3 (${lastStage.label})`);
+        logger.info("[imageEdit] All stages returned null — retrying Stage 3");
 
-      const contract2   = contractForMode(fallbackMode);
-      const retryPrompt = renderPrompt + " Apply this transformation clearly and visibly.";
+        let retryOut: string | null = null;
+        try {
+          retryOut = await runStage(
+            imageDataUrl,
+            lastStage.instruction(renderPrompt) + " Apply this transformation clearly and visibly.",
+            lastStage.contract,
+            3,
+          );
+        } catch (err) {
+          logger.error({ err }, "[imageEdit] Stage 3 retry threw");
+        }
 
-      let retryResult: string | null = null;
+        if (retryOut) return succeedEdit(retryOut, 1, resolvedMode);
+      }
+
+      // ── Final fallback: downgrade mode, single-shot attempt ───────────────
+      const fallbackMode  = downgradedMode(resolvedMode);
+      const fallbackLabel = MODE_LABELS[fallbackMode];
+      advanceJob(job, "retrying", `Downgrading to ${fallbackLabel} mode`);
+      logger.info({ from: resolvedMode, to: fallbackMode }, "[imageEdit] downgrading mode for final attempt");
+
+      const fallbackContract = contractForMode(fallbackMode);
+      let fallbackOut: string | null = null;
       try {
-        retryResult = await runImg2Img(parsed, retryPrompt, ATTEMPT_TIMEOUT_MS, contract2);
+        fallbackOut = await runImg2Img(
+          parsed,
+          renderPrompt + " Apply this transformation clearly and visibly.",
+          STAGE_TIMEOUT_MS,
+          fallbackContract,
+        );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         failJob(job, msg);
         throw new Error("Image editing failed. Please try again.");
       }
 
-      if (retryResult) return succeedEdit(retryResult, 1, fallbackMode);
+      if (fallbackOut) return succeedEdit(fallbackOut, 2, fallbackMode);
 
-      // Both attempts produced no output
-      failJob(job, "Both attempts returned no image output");
-      throw new Error("Image editing failed — model returned no output after 2 attempts. Please try a clearer instruction.");
+      failJob(job, "All pipeline stages and fallback returned no image output");
+      throw new Error("Image editing failed — model returned no output after the full pipeline. Please try a different instruction.");
 
     } catch (err) {
       if (job.status !== "failed") {
