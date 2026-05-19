@@ -595,14 +595,15 @@ export function buildStrongInstruction(
   switch (mode) {
     case "SCREENSHOT_CLEANUP":
       return (
-        `This image contains screenshot artifacts, UI overlays, text elements, or digital interface remnants. ` +
-        `REMOVE ALL of the following: status bars, notification icons, navigation chrome, app overlays, ` +
+        `DLRP — DUAL-LAYER RENDERING PROTOCOL: This image has screenshot artifacts, UI overlays, or digital interface remnants. ` +
+        `RENDER LAYER DIRECTIVE: These artifacts MUST NOT EXIST in the output — they are not "removed," they were never part of the real scene. ` +
+        `Re-synthesize the entire scene as if it was captured by a real camera with no digital interface present. ` +
+        `STRUCTURE LAYER (preserve): main subject identity, pose, face geometry, background spatial layout, scene composition. ` +
+        `RENDER LAYER (re-generate): all lighting, color, texture, and atmosphere — fully re-synthesized without artifacts. ` +
+        `ALL of the following must not exist in the render: status bars, notification icons, navigation chrome, app overlays, ` +
         `text annotations, watermarks, stickers, emoji overlays, compression artifacts, and interface elements. ` +
-        `Reconstruct ALL removed areas naturally using intelligent contextual fill — the repaired regions ` +
-        `must seamlessly blend with the surrounding environment, matching lighting, texture, and depth. ` +
         `Additional instruction: ${p}. ` +
-        `Final result must look like an original professional camera photograph with zero digital artifact or interface remnant. ` +
-        `Preserve the main subject identity completely.`
+        `Final output must look like a native professional camera photograph — zero digital artifact, zero interface remnant, zero screenshot signature.`
       );
 
     case "TEXT_REMOVAL":

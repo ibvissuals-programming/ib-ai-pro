@@ -527,80 +527,74 @@ Lighting and color are EXPECTED to change strongly.
 Near-identical output = FAILURE state.
 
 ------------------------------------------------------------
-CORE NON-NEGOTIABLE RULE
+DUAL-LAYER RENDERING PROTOCOL (DLRP) — CORE RULE
 ------------------------------------------------------------
 
-The input image is the ONLY source of truth.
+The input image provides TWO SEPARATE things with SEPARATE rules:
 
-You MUST preserve (STRUCTURAL ELEMENTS ONLY):
+LAYER 1 — STRUCTURE (LOCKED spatial blueprint — do not alter):
+→ Face identity geometry (bone structure, facial landmark topology)
+→ Pose and body orientation
+→ Object placement and spatial positions
+→ Scene composition layout (what is where, not how it looks)
 
-- Same identity (exact same person)
-- Same face structure (bone structure unchanged)
-- Same pose and body position
-- Same camera angle
-- Same composition
-- Same background GEOMETRY — objects, their positions, and scene layout
+LAYER 2 — RENDER (FULLY RE-GENERATED — must not copy from input):
+→ Lighting system — fully new simulation from scratch
+→ Color palette — new film response, new tonal grade
+→ Exposure model — new tonal mapping, new tonal weight distribution
+→ Contrast curve — new S-curve or film curve, new shadow/highlight structure
+→ Atmospheric conditions — new mood environment, new depth
+→ Texture synthesis — fully regenerated pixel rendering
+→ Camera/lens style — new photographic rendering model
 
-YOU MUST CHANGE (these are the GOAL of the edit, not optional):
-- Lighting direction, intensity, and quality — transform per instruction
-- Color palette, tonal mood, and grading — transform per instruction
-- Exposure level and contrast shape — transform per instruction
-- Cinematic atmosphere and visual mood — transform per instruction
+CRITICAL SEMANTIC RULE:
+The input image is the STRUCTURAL BLUEPRINT, NOT the pixel reference.
+You are NOT copying the input and adjusting it.
+You are RE-RENDERING the scene from the structural blueprint with entirely new visual parameters.
 
-ANY structural deviation = AUTOMATIC FAILURE
-ANY near-identical output (no visible change) = FAILURE — do not produce safe-mode results
-
-------------------------------------------------------------
-IMAGE IMMUTABILITY CONTRACT
-------------------------------------------------------------
-
-You MUST NOT modify:
-
-- Identity
-- Face structure
-- Body proportions
-- Pose
-- Scene layout
-- Background objects
-- Camera framing
+LAYER 1 violation = AUTOMATIC FAILURE (structure was changed)
+LAYER 2 failure = FILTER OUTPUT (render was not truly re-synthesized)
+Both violations are invalid outputs.
 
 ------------------------------------------------------------
-BACKGROUND LOCK (CRITICAL)
+RENDER ISOLATION RULE
 ------------------------------------------------------------
 
-Background STRUCTURE must remain:
+The RENDER LAYER must ignore the following entirely — do NOT carry them forward:
 
-- Same objects in same positions
-- Same spatial layout
-- Same scene geometry
+✖ Original lighting conditions (direction, color, intensity, shadow structure)
+✖ Original color palette (hue, saturation, tonal character)
+✖ Original exposure curve (brightness distribution, shadow depth)
+✖ Original contrast structure (tonal separation, black/white point)
+✖ Original photographic style or grading
+✖ Original pixel-level artifacts — screenshots, UI marks, overlays, compression noise
+   (These MUST NOT EXIST in the render — they cannot be carried through re-synthesis)
 
-STRONGLY EXPECTED changes to background (these ARE the edit goal):
-✔ Lighting — direction, intensity, warmth, cinematic quality: ALL allowed and expected
-✔ Color grading — mood, palette, tone across entire scene: ALL allowed and expected
-✔ Exposure adjustments — lift shadows, recover highlights across frame: ALL allowed
-✔ Atmospheric tone — cinematic, moody, dramatic: ALL allowed
-✔ Any tonal, colorimetric, or photographic quality change: ALL allowed
-
-FORBIDDEN (structural changes only):
-✖ Background replacement with different environment
-✖ Scene reconstruction that changes what objects are present
-✖ Object removal or addition
+ONLY the structural geometry (Layer 1) is carried forward.
+Everything else is re-generated from scratch.
 
 ------------------------------------------------------------
-IDENTITY LOCK (CRITICAL)
+STRUCTURE LAYER — WHAT MUST NOT CHANGE
 ------------------------------------------------------------
 
-Face must remain identical:
+The following spatial/identity elements must be preserved:
 
-- Bone structure
-- Eyes, nose, lips
-- Jawline
-- Expression
+✔ Same identity — same person, same face structure, same bone geometry
+✔ Same pose — same body position, same limb angles
+✔ Same composition — same camera angle, same framing
+✔ Same scene topology — same objects in same spatial positions
 
-FORBIDDEN:
-✖ Face reshaping
-✖ Beautification that alters identity
-✖ AI reconstruction of facial features
+RENDER LAYER — WHAT MUST FULLY CHANGE:
+
+✔ Lighting — completely re-designed direction, intensity, quality, setup
+✔ Color palette — completely re-graded with new film response
+✔ Exposure — completely re-rendered tonal weight and distribution
+✔ Contrast — completely re-shaped S-curve, new shadow/highlight balance
+✔ Atmosphere — completely re-created cinematic mood and depth
+✔ Texture — fully re-synthesized pixel rendering (not pixel copy)
+
+Structure violation = AUTOMATIC FAILURE
+Filter-only render (pixel-preserving output) = FAILURE — re-render required
 
 ------------------------------------------------------------
 RENDER ENGINE MODE — REQUIRED RE-SYNTHESIS OPERATIONS
@@ -639,18 +633,22 @@ MAKE THE EDIT STRONG AND FULLY RE-SYNTHESIZED — a filter-only result is a fail
 FORBIDDEN OPERATIONS
 ------------------------------------------------------------
 
-DO NOT:
+STRUCTURE LAYER violations — strictly forbidden:
 
-✖ Regenerate or recreate image
-✖ Reconstruct scene
-✖ Change background
-✖ Alter identity or face
-✖ Change pose or composition
-✖ Add/remove objects
+✖ Alter face identity, bone structure, or facial geometry
+✖ Change pose or body orientation
+✖ Replace background with a different scene or environment
+✖ Add or remove objects from the scene
+✖ Change camera composition or framing
 ✖ Convert to AI art, CGI, illustration, or stylized render
-✖ Apply fake cinematic HDR glow
-✖ Over-smooth skin or remove texture
-✖ Reinterpret the image creatively
+
+RENDER LAYER failures — strictly forbidden:
+
+✖ Apply fake cinematic HDR glow (unphysical glow halos)
+✖ Over-smooth skin or erase facial texture (plastic/porcelain output)
+✖ Apply a social media filter or Lightroom preset over original pixels
+✖ Return output that looks like the input with minor color/contrast changes
+✖ Produce a near-identical output — that is a filter failure, not a render
 
 ------------------------------------------------------------
 ANTI–AI LOOK SYSTEM
