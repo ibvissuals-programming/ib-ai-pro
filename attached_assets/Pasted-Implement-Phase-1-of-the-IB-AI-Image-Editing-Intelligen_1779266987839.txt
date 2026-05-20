@@ -1,0 +1,121 @@
+Implement Phase 1 of the IB AI Image Editing Intelligence Layer.
+
+GOAL:
+Improve image editing quality, instruction adherence, and edit consistency WITHOUT changing the current stable architecture.
+
+DO NOT:
+- rewrite the image pipeline
+- replace providers
+- modify auth
+- modify SSE
+- touch memory system
+- touch event tracker
+- touch admin dashboard
+- rebuild frontend architecture
+
+ONLY improve the intelligence/orchestration layer around image editing.
+
+--------------------------------------------------
+PHASE 1 OBJECTIVES
+--------------------------------------------------
+
+1. Create a centralized edit prompt builder:
+- normalize user edit requests
+- clean vague wording
+- preserve identity and composition
+- reduce over-editing
+- reduce face mutation
+- improve edit consistency
+
+2. Add editing modes:
+- subtle
+- balanced
+- cinematic
+- aggressive
+
+Each mode should influence:
+- edit strength
+- preservation priority
+- detail enhancement
+- realism weighting
+
+3. Add identity preservation enforcement:
+Examples:
+- preserve original facial identity
+- maintain face structure
+- do not alter subject ethnicity
+- preserve pose and framing
+- preserve original camera angle
+
+4. Add automatic edit classification:
+Detect if request is:
+- face enhancement
+- cleanup
+- relighting
+- cinematic grading
+- background edit
+- object removal
+- beauty retouch
+- fashion enhancement
+- realism enhancement
+
+5. Add prompt safety cleanup:
+Prevent prompts that commonly cause:
+- face replacement
+- body distortion
+- over-sharpening
+- AI-looking skin
+- anatomy corruption
+- gender drift
+
+6. Add reusable editing instruction templates:
+Examples:
+- portrait polish
+- cinematic realism
+- luxury social media look
+- natural skin cleanup
+- professional lighting enhancement
+
+7. Add debug logging:
+Log:
+- original user prompt
+- normalized prompt
+- detected edit category
+- selected mode
+- preservation rules applied
+
+DO NOT expose logs to frontend users.
+
+--------------------------------------------------
+IMPORTANT
+--------------------------------------------------
+
+Keep all changes modular.
+
+The image route should simply call:
+buildEditInstruction(...)
+
+No giant rewrites.
+
+No breaking changes.
+
+No new databases.
+
+No new providers.
+
+No frontend redesign.
+
+No changes to streaming/chat architecture.
+
+--------------------------------------------------
+OUTPUT REQUIRED
+--------------------------------------------------
+
+1. New modular edit-intelligence layer
+2. Prompt builder utilities
+3. Classification utilities
+4. Preservation rule system
+5. Safe integration into existing image edit route
+6. Production-safe implementation
+7. Minimal token usage
+8. Maintain current working stability
