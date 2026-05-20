@@ -313,5 +313,23 @@
     "credits": 4,
     "lastReset": 1779250354666,
     "createdAt": 1779250354666
+  },
+  {
+    "id": "f7155885-9775-4170-b2d2-fe18fc927d71",
+    "username": "auditbot_21894",
+    "passwordHash": "7a64d88a6840a222a3367eacdcf4aefe:22839d5c85659b8480bce9a5a1e247ee42e9f24d70da24ef53585e203499f6a515576a80d9e21fffb4e75d5204542a319cf726b83b42e8501e688774db792abc",
+    "role": "free",
+    "credits": 7,
+    "lastReset": 1779255340078,
+    "createdAt": 1779255340078
+  },
+  {
+    "id": "17dbe26b-2574-4188-9d96-16b6d24bc5c4",
+    "username": "auditbot_10240",
+    "passwordHash": "69a42dc98060380c89b2906b8c1e976b:d2bf37e708b905adfff34c0da7f0287a381e3f3643e113271bd7c301817a8e60a8d29b5a32a80572ebc0322652242954c9c50d053cace8251071b85425d30113",
+    "role": "free",
+    "credits": 0,
+    "lastReset": 1779255360725,
+    "createdAt": 1779255360725
   }
 ]
