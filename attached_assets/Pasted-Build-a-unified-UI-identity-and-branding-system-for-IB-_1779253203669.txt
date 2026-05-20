@@ -1,0 +1,119 @@
+Build a unified UI identity and branding system for “IB AI Studio Lab” across the entire application (login, dashboard, CEO admin panel, navigation, and system UI components).
+
+This is NOT a backend change. This is a full frontend product identity layer.
+
+GOAL:
+Transform the system from a functional AI tool into a cohesive, premium SaaS product with strong visual identity, trust, and recognition.
+
+────────────────────────────
+1. BRAND CORE IDENTITY
+────────────────────────────
+Define IB AI as:
+- A high-performance AI control system for creators, founders, and operators
+- Tone: intelligent, calm, precise, high-trust, minimal noise
+- Emotional positioning: “control, clarity, and power through intelligence”
+
+The UI should feel like:
+- Stripe-level clarity
+- Notion-level simplicity
+- Palantir-level control systems
+
+Avoid playful, noisy, or overly colorful SaaS aesthetics.
+
+────────────────────────────
+2. LOGO SYSTEM (CRITICAL)
+────────────────────────────
+Design a logo system, not just a single logo.
+
+Requirements:
+- Primary logo (full wordmark: “IB AI” or “IB AI Studio Lab”)
+- Secondary icon (compact symbol for sidebar / favicon)
+- Favicon version (simplified mark for browser tab)
+
+Style direction:
+- Minimal geometric intelligence symbol
+- Should communicate: “AI control system / neural grid / structured intelligence”
+- No cartoonish elements
+- No generic AI brain icons
+
+Placement rules:
+- Login page: centered top logo
+- Dashboard: top-left navbar logo
+- Sidebar: compact icon-only version
+- Loading screens: animated or static simplified mark
+- Favicon: ultra-minimal version of icon
+
+────────────────────────────
+3. COLOR SYSTEM
+────────────────────────────
+Define a consistent palette:
+- Primary: deep neutral (dark graphite / near-black)
+- Accent: controlled tech highlight (electric blue or cyan, used sparingly)
+- Secondary: muted grays for structure
+- Success / warning / error: minimal saturation, system-grade tones
+
+Rule:
+- No excessive gradients
+- No rainbow UI
+- Accent color only for actions, events, highlights
+
+────────────────────────────
+4. TYPOGRAPHY SYSTEM
+────────────────────────────
+- Use a modern sans-serif system font (Inter or equivalent)
+- Hierarchy must be strict:
+  - H1: dashboard titles
+  - H2: panels
+  - body: dense readable system text
+- Avoid decorative fonts entirely
+- Everything must feel “engineering-grade clarity”
+
+────────────────────────────
+5. LAYOUT & UI STRUCTURE
+────────────────────────────
+- Grid-based layout (clean admin system design)
+- Card-based modules with consistent padding
+- Strict spacing rules (8px system or equivalent)
+- Clear separation between:
+  - Data panels
+  - Live systems
+  - Controls
+  - Analytics
+
+No clutter. No visual noise.
+
+────────────────────────────
+6. DASHBOARD VISUAL LANGUAGE
+────────────────────────────
+Each system component must have a visual identity:
+
+- Memory system → calm informational tone
+- Live events → real-time pulse indicators
+- System health → diagnostic / status indicators
+- Users panel → structured enterprise table view
+- Chat system → minimal conversational trace view
+
+────────────────────────────
+7. MOTION & INTERACTION
+────────────────────────────
+- Subtle transitions only (150–250ms)
+- No flashy animations
+- Use motion only to indicate:
+  - state changes
+  - loading
+  - live updates
+
+────────────────────────────
+8. GLOBAL RULES
+────────────────────────────
+- Do NOT introduce new backend logic
+- Do NOT change APIs
+- Only modify frontend UI, styling, and layout
+- Maintain consistency across all existing pages
+- Ensure the system feels like a single unified product
+
+OUTPUT:
+- Full UI identity specification
+- Logo system design description
+- Where and how to implement each UI element in the current React codebase
+- Component-level mapping for integration

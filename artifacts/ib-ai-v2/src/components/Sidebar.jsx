@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react';
 import { Link, useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Trash2, Cpu, MessageSquare, Check, X, PenLine, Search, ImageIcon } from 'lucide-react';
+import { Plus, Trash2, MessageSquare, Check, X, PenLine, Search, ImageIcon } from 'lucide-react';
+import { IbLogo } from './IbLogo';
 import { CreditMeter } from './CreditMeter';
 
 function HighlightedText({ text, query }) {
@@ -162,13 +163,8 @@ export function Sidebar({ chats, activeChatId, onSwitch, onNew, onDelete, onRena
   return (
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border/60 w-64 shrink-0 glass-subtle">
       {/* Brand */}
-      <div className="flex items-center gap-2 px-4 py-4 border-b border-sidebar-border/60">
-        <div className="w-7 h-7 rounded-xl bg-primary flex items-center justify-center shrink-0 shadow-md shadow-primary/25">
-          <Cpu size={12} className="text-primary-foreground" />
-        </div>
-        <span className="font-semibold text-sm tracking-tight text-sidebar-foreground font-heading">
-          IB AI <span className="text-primary">Assistant</span>
-        </span>
+      <div className="flex items-center px-4 py-4 border-b border-sidebar-border/60">
+        <IbLogo variant="nav" />
       </div>
 
       {/* New Chat Button */}

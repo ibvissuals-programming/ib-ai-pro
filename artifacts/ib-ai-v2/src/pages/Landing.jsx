@@ -2,9 +2,10 @@ import { useRef } from 'react';
 import { Link } from 'wouter';
 import { motion, useInView } from 'framer-motion';
 import {
-  Camera, Film, Zap, Layers, Upload, Cpu, Sparkles,
+  Camera, Film, Zap, Layers, Upload, Sparkles,
   ArrowRight, Check, ChevronRight, Play,
 } from 'lucide-react';
+import { IbLogo } from '../components/IbLogo';
 
 // ── Animation helpers ─────────────────────────────────────────────────────────
 
@@ -29,14 +30,7 @@ function FadeIn({ children, delay = 0, className = '' }) {
 function Navbar() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 glass-panel border-b border-border/40" style={{ borderRadius: 0 }}>
-      <div className="flex items-center gap-2">
-        <div className="w-7 h-7 rounded-xl bg-primary flex items-center justify-center shadow-md shadow-primary/25">
-          <Cpu size={13} className="text-primary-foreground" />
-        </div>
-        <span className="font-semibold text-sm tracking-tight text-foreground font-heading">
-          IB AI <span className="text-primary">Assistant</span>
-        </span>
-      </div>
+      <IbLogo variant="nav" />
 
       <div className="hidden sm:flex items-center gap-6">
         <a href="#features" className="text-xs text-muted-foreground hover:text-foreground transition-colors">Features</a>
@@ -156,7 +150,7 @@ function DemoFlow() {
       bg: 'bg-blue-500/10 border-blue-500/20',
     },
     {
-      icon: Cpu,
+      icon: Zap,
       title: 'AI Analyzes Instantly',
       desc: 'Gemini reads mood, composition, lighting, and creative potential — in seconds.',
       color: 'text-primary',
@@ -399,15 +393,10 @@ function Footer() {
     <footer className="border-t border-border px-6 py-8">
       <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-md bg-primary flex items-center justify-center">
-            <Cpu size={10} className="text-primary-foreground" />
-          </div>
-          <span className="text-xs font-semibold text-foreground">
-            IB AI <span className="text-primary">Assistant</span>
-          </span>
+          <IbLogo variant="compact" />
         </div>
         <p className="text-xs text-muted-foreground/60">
-          © {new Date().getFullYear()} IB AI Assistant. All rights reserved.
+          © {new Date().getFullYear()} IB AI Studio Lab. All rights reserved.
         </p>
         <div className="flex items-center gap-4">
           <Link to="/login" className="text-xs text-muted-foreground hover:text-foreground transition-colors">

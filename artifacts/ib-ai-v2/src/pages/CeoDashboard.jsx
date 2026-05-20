@@ -30,6 +30,7 @@ import { AiRoutingPanel } from '../components/AiRoutingPanel';
 import { EventFeedPanel } from '../components/EventFeedPanel';
 import { SystemHealthPanel } from '../components/SystemHealthPanel';
 import { ControlOverviewPanel } from '../components/ControlOverviewPanel';
+import { IbLogo } from '../components/IbLogo';
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
@@ -637,9 +638,11 @@ function DashboardHeader({ user }) {
           </Link>
           <div className="h-4 w-px bg-border/40 shrink-0" />
           <div className="flex items-center gap-2 min-w-0">
-            <Shield size={14} className="text-primary shrink-0" />
-            <span className="text-sm font-semibold text-foreground truncate">CEO Dashboard</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-purple-500/30 bg-purple-500/10 text-purple-300 font-medium hidden sm:inline">
+            <IbLogo variant="compact" />
+            <div className="h-4 w-px bg-border/40 shrink-0 hidden sm:block" />
+            <Shield size={13} className="text-purple-400 shrink-0 hidden sm:block" />
+            <span className="text-sm font-semibold text-foreground truncate hidden sm:block">Control</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-purple-500/30 bg-purple-500/10 text-purple-300 font-medium">
               CEO
             </span>
           </div>

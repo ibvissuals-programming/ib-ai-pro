@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
@@ -76,45 +76,45 @@
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
 
-  /* Ambient glow blob colors */
-  --blob-primary: rgba(59, 130, 246, 0.055);
-  --blob-secondary: rgba(99, 102, 241, 0.042);
+  /* Ambient glow — single electric blue family */
+  --blob-primary: rgba(59, 130, 246, 0.042);
+  --blob-secondary: rgba(37, 99, 235, 0.020);
 
-  --background: 222 47% 8%;
-  --foreground: 213 31% 91%;
-  --border: 217 33% 20%;
-  --card: 222 47% 14%;
-  --card-foreground: 213 31% 91%;
-  --card-border: 217 33% 20%;
-  --sidebar: 222 47% 7%;
-  --sidebar-foreground: 213 31% 91%;
-  --sidebar-border: 217 33% 20%;
+  --background: 222 18% 7%;
+  --foreground: 215 16% 90%;
+  --border: 217 14% 18%;
+  --card: 222 16% 11%;
+  --card-foreground: 215 16% 90%;
+  --card-border: 217 14% 18%;
+  --sidebar: 222 18% 6%;
+  --sidebar-foreground: 215 16% 90%;
+  --sidebar-border: 217 14% 16%;
   --sidebar-primary: 217 91% 60%;
-  --sidebar-primary-foreground: 222 47% 11%;
-  --sidebar-accent: 222 47% 17%;
-  --sidebar-accent-foreground: 213 31% 91%;
+  --sidebar-primary-foreground: 222 18% 7%;
+  --sidebar-accent: 222 16% 15%;
+  --sidebar-accent-foreground: 215 16% 90%;
   --sidebar-ring: 217 91% 60%;
-  --popover: 222 47% 14%;
-  --popover-foreground: 213 31% 91%;
-  --popover-border: 217 33% 20%;
+  --popover: 222 16% 11%;
+  --popover-foreground: 215 16% 90%;
+  --popover-border: 217 14% 18%;
   --primary: 217 91% 60%;
-  --primary-foreground: 222 47% 11%;
-  --secondary: 222 47% 17%;
-  --secondary-foreground: 213 31% 91%;
-  --muted: 222 47% 16%;
-  --muted-foreground: 215 20% 65%;
+  --primary-foreground: 222 18% 7%;
+  --secondary: 222 16% 15%;
+  --secondary-foreground: 215 16% 90%;
+  --muted: 222 16% 13%;
+  --muted-foreground: 215 14% 58%;
   --accent: 217 91% 60%;
-  --accent-foreground: 222 47% 11%;
-  --destructive: 0 84% 60%;
+  --accent-foreground: 222 18% 7%;
+  --destructive: 0 78% 56%;
   --destructive-foreground: 0 0% 100%;
-  --input: 217 33% 25%;
+  --input: 217 14% 22%;
   --ring: 217 91% 60%;
 
   --chart-1: 217 91% 60%;
-  --chart-2: 222 47% 17%;
-  --chart-3: 215 20% 65%;
-  --chart-4: 217 33% 25%;
-  --chart-5: 0 84% 60%;
+  --chart-2: 222 16% 15%;
+  --chart-3: 215 14% 58%;
+  --chart-4: 217 14% 22%;
+  --chart-5: 0 78% 56%;
 
   --app-font-sans: 'Inter', sans-serif;
   --app-font-serif: Georgia, serif;
@@ -225,8 +225,9 @@
   }
 
   h1, h2, h3, h4 {
-    font-family: 'Space Grotesk', sans-serif;
-    letter-spacing: -0.022em;
+    font-family: 'Inter', sans-serif;
+    letter-spacing: -0.03em;
+    font-weight: 700;
   }
 }
 
@@ -242,36 +243,36 @@
    */
 
   .glass-panel {
-    background: rgba(12, 16, 28, 0.72);
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+    background: rgba(5, 7, 13, 0.82);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.07);
     border-radius: 18px;
   }
 
   .glass-card {
-    background: rgba(10, 14, 26, 0.62);
-    backdrop-filter: blur(18px) saturate(170%);
-    -webkit-backdrop-filter: blur(18px) saturate(170%);
-    border: 1px solid rgba(255, 255, 255, 0.11);
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    background: rgba(4, 6, 11, 0.74);
+    backdrop-filter: blur(18px) saturate(155%);
+    -webkit-backdrop-filter: blur(18px) saturate(155%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.46), inset 0 1px 0 rgba(255, 255, 255, 0.05);
     border-radius: 14px;
   }
 
   .glass-subtle {
-    background: rgba(8, 11, 22, 0.48);
-    backdrop-filter: blur(12px) saturate(150%);
-    -webkit-backdrop-filter: blur(12px) saturate(150%);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(3, 4, 9, 0.54);
+    backdrop-filter: blur(12px) saturate(148%);
+    -webkit-backdrop-filter: blur(12px) saturate(148%);
+    border: 1px solid rgba(255, 255, 255, 0.07);
   }
 
   .glass-input {
-    background: rgba(10, 14, 26, 0.68);
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.13);
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    background: rgba(5, 7, 13, 0.78);
+    backdrop-filter: blur(24px) saturate(162%);
+    -webkit-backdrop-filter: blur(24px) saturate(162%);
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.46), inset 0 1px 0 rgba(255, 255, 255, 0.06);
     border-radius: 20px;
   }
 
@@ -312,8 +313,9 @@
 
   /* Font utilities */
   .font-heading {
-    font-family: 'Space Grotesk', sans-serif;
-    letter-spacing: -0.025em;
+    font-family: 'Inter', sans-serif;
+    letter-spacing: -0.03em;
+    font-weight: 700;
   }
 
   /* Hover lift motion */

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { motion } from 'framer-motion';
-import { Cpu, AlertCircle, CheckCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle } from 'lucide-react';
+import { IbLogo } from '../components/IbLogo';
 import { signup } from '../auth/authService';
 import { useAuth } from '../hooks/useAuth';
 
@@ -68,13 +69,11 @@ export default function Signup() {
         className="w-full max-w-sm"
       >
         <div className="flex flex-col items-center mb-8">
-          <div className="w-11 h-11 rounded-2xl bg-primary flex items-center justify-center mb-4 shadow-lg shadow-primary/20">
-            <Cpu size={19} className="text-primary-foreground" />
-          </div>
-          <h1 className="text-xl font-semibold text-foreground tracking-tight font-heading">
-            IB AI <span className="text-primary">Assistant</span>
+          <IbLogo variant="mark" size={44} className="mb-5" />
+          <h1 className="text-xl font-bold text-foreground tracking-tight font-heading">
+            IB AI <span className="text-primary">Studio Lab</span>
           </h1>
-          <p className="text-sm text-muted-foreground mt-1 font-light">Create your account</p>
+          <p className="text-sm text-muted-foreground mt-1.5">Create your account</p>
         </div>
 
         <div className="glass-card p-6">
