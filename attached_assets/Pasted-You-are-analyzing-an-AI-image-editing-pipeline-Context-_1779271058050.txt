@@ -1,0 +1,81 @@
+You are analyzing an AI image editing pipeline.
+
+Context:
+The system has 4 layers:
+1. detectEditMode (raw prompt classification)
+2. editIntelligence (category + safety + base enrichment)
+3. APRE (prompt expansion + realism + strength logic)
+4. FRAE (region-level facial/subject targeting)
+5. normalizeCinematicPrompt (lexical expansion step inside imageGenService)
+
+IMPORTANT:
+Mode isolation fix is already applied.
+detectEditMode now runs ONLY on raw prompt at route level.
+It does NOT depend on enriched text anymore.
+
+TASK:
+
+You are to perform a STRICT dependency and sensitivity audit.
+
+For the following 3 inputs:
+
+A. "cinematic teal orange portrait lighting dramatic"
+B. "make her face look better naturally"
+C. "ultra realistic fashion editorial studio shoot"
+
+For EACH input:
+
+1. Show full execution order:
+   - detectEditMode result
+   - category
+   - APRE effect summary
+   - FRAE effect summary
+   - final contract chosen
+
+2. Now perform a SENSITIVITY TEST:
+
+Re-run ONLY conceptually (no code changes) with:
+   a) APRE removed
+   b) FRAE removed
+   c) normalizeCinematicPrompt removed
+
+For each removal, answer:
+- Does final image intent break? (YES / NO)
+- Does quality degrade significantly? (YES / NO)
+- Does mode or contract selection change? (YES / NO)
+
+3. Then rank each layer by necessity:
+
+Rate each:
+- CRITICAL (system breaks without it)
+- IMPORTANT (quality loss but system still works)
+- OPTIONAL (mostly cosmetic / redundant)
+- HARMFUL (causes contradiction or instability)
+
+Layers:
+- detectEditMode
+- editIntelligence
+- APRE
+- FRAE
+- normalizeCinematicPrompt
+
+4. Final output:
+
+Give a single verdict:
+
+"MINIMAL VIABLE PIPELINE = X layers"
+
+where X is the smallest safe configuration that preserves:
+- correct mode selection
+- correct contract selection
+- acceptable visual quality
+
+Rules:
+- Be strict, not optimistic
+- Assume production load (not dev testing)
+- Do NOT suggest new features
+- Do NOT refactor yet
+- Only evaluate necessity and sensitivity
+
+End with:
+"PIPELINE MINIMIZATION COMPLETE"
