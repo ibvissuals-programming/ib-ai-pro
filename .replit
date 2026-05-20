@@ -51,7 +51,7 @@ waitForPort = 8099
 [agent]
 stack = "BEST_EFFORT_FALLBACK"
 expertMode = true
-integrations = ["javascript_gemini_ai_integrations:2.0.0", "javascript_database:1.0.0"]
+integrations = ["javascript_gemini_ai_integrations:2.0.0", "javascript_database:1.0.0", "javascript_object_storage:2.0.0"]
 
 [postMerge]
 path = "scripts/post-merge.sh"
@@ -65,6 +65,7 @@ CEO_USERNAME = "ibaiceo"
 CEO_RECOVERY_KEY = "df9181a1faa38a8013ec319aba9d1086c26dc4927abc8dc8fb80f64c304695ad498abb88"
 PORT = "8080"
 CEO_PASSWORD = "IbaiCeo2026!"
+USE_POSTGRES_STORAGE = "true"
 
 [nix]
 channel = "stable-25_05"

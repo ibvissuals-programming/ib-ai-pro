@@ -4,7 +4,8 @@ import { loadUserStore, repairCeoAccount } from "./lib/userStore";
 import { logProviderHealth } from "./lib/env";
 import { initImageStore } from "./services/imageHistoryStore";
 import { setBootDegraded } from "./lib/bootState";
-import { loadSystemConfig } from "./lib/systemConfig";
+import { loadSystemConfig, isPostgresEnabled, getLastMigrationRun } from "./lib/systemConfig";
+import { runMigration } from "./lib/migrationRunner";
 
 // ── Global error handlers ─────────────────────────────────────────────────────
 
@@ -58,7 +59,27 @@ async function bootstrap() {
     logger.error({ err }, "[system] CEO repair failed (non-fatal)");
   }
 
-  // 4. Image system
+  // 4. Auto-migrate JSON → PostgreSQL on first boot with PG enabled
+  if (isPostgresEnabled() && getLastMigrationRun() === null) {
+    logger.info("[system] PostgreSQL enabled — running initial JSON→PG migration");
+    try {
+      const result = await runMigration("system:auto");
+      if (result) {
+        logger.info(
+          {
+            users: result.users,
+            history: result.history,
+            durationMs: result.durationMs,
+          },
+          "[system] Initial migration complete"
+        );
+      }
+    } catch (err) {
+      logger.warn({ err }, "[system] Auto-migration failed (non-fatal) — PG still active");
+    }
+  }
+
+  // 5. Image system
   try {
     await initImageStore();
     logger.info("[system] Image system ready");

@@ -4,17 +4,28 @@
  * GET  /api/image/history        — fetch authenticated user's image history
  * DELETE /api/image/history/:id  — delete a history entry (own only)
  * GET  /api/image/serve/:id      — serve image file (UUID-secured, no auth required)
+ *
+ * Image serving strategy:
+ *   - Object Storage entries (imageFile contains "/"): streamed from GCS bucket
+ *   - Legacy disk entries (imageFile has no "/"): read from local disk
  */
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { promises as fs } from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import {
   getUserHistory,
   deleteHistoryEntry,
-  getImageFilePath,
+  getImageEntry,
+  isObjectStorageKey,
 } from "../services/imageHistoryStore";
+import { downloadImageBuffer } from "../services/objectStore";
 import { policyEngine } from "../middleware/policyEngine";
 import { logger } from "../lib/logger";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const IMAGES_DIR = path.join(__dirname, "../../data/images");
 
 const router = Router();
 
@@ -111,6 +122,7 @@ router.delete(
 
 // ── GET /api/image/serve/:id ──────────────────────────────────────────────
 // Serves image files directly. No auth required — UUIDs are unguessable.
+// Supports both Object Storage keys and legacy disk files.
 
 const ServeParamsSchema = z.object({
   id: z
@@ -128,35 +140,48 @@ router.get("/image/serve/:id", async (req: Request, res: Response) => {
   }
 
   try {
-    const filePath = await getImageFilePath(parsed.data.id);
-    if (!filePath) {
+    const entry = await getImageEntry(parsed.data.id);
+    if (!entry) {
       res.status(404).json({ error: "Image not found" });
       return;
     }
 
-    // Check file exists
-    try {
-      await fs.access(filePath);
-    } catch {
-      res.status(404).json({ error: "Image file not found" });
-      return;
-    }
-
-    // Determine content type from extension
-    const ext = filePath.split(".").pop()?.toLowerCase() ?? "jpg";
-    const mimeMap: Record<string, string> = {
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-      png: "image/png",
-      webp: "image/webp",
-    };
-    const contentType = mimeMap[ext] ?? "image/jpeg";
-
-    res.setHeader("Content-Type", contentType);
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
 
-    const data = await fs.readFile(filePath);
-    res.send(data);
+    if (isObjectStorageKey(entry.imageFile)) {
+      // ── Object Storage path ────────────────────────────────────────────────
+      try {
+        const { buffer, mimeType } = await downloadImageBuffer(entry.imageFile);
+        res.setHeader("Content-Type", mimeType);
+        res.setHeader("Content-Length", buffer.length);
+        res.send(buffer);
+      } catch (err) {
+        logger.error({ err, id: entry.id, imageFile: entry.imageFile }, "[imageHistory] Object Storage download failed");
+        res.status(404).json({ error: "Image not available" });
+      }
+    } else {
+      // ── Legacy disk path ───────────────────────────────────────────────────
+      const filePath = path.join(IMAGES_DIR, entry.imageFile);
+      try {
+        await fs.access(filePath);
+      } catch {
+        res.status(404).json({ error: "Image file not found" });
+        return;
+      }
+
+      const ext = filePath.split(".").pop()?.toLowerCase() ?? "jpg";
+      const mimeMap: Record<string, string> = {
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        png: "image/png",
+        webp: "image/webp",
+      };
+      const contentType = mimeMap[ext] ?? "image/jpeg";
+
+      res.setHeader("Content-Type", contentType);
+      const data = await fs.readFile(filePath);
+      res.send(data);
+    }
   } catch (err) {
     logger.error({ err }, "[imageHistory] Failed to serve image");
     res.status(500).json({ error: "Failed to serve image" });

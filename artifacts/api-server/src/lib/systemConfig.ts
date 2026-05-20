@@ -50,28 +50,37 @@ async function saveConfig(): Promise<void> {
  * first run. Call once at server startup before loadUserStore().
  */
 export async function loadSystemConfig(): Promise<void> {
+  // Env var always takes precedence — lets ops change mode without editing the file.
+  const envMode = process.env["USE_POSTGRES_STORAGE"];
+  const envOverride: StorageMode | null =
+    envMode === "true" || envMode === "postgres" ? "postgres"
+    : envMode === "hybrid" ? "hybrid"
+    : null;
+
   try {
     const raw    = await fs.readFile(CONFIG_FILE, "utf8");
     const parsed = JSON.parse(raw) as Partial<SystemConfigData>;
     _config = {
-      storageMode:      parsed.storageMode      ?? "json",
+      storageMode:      envOverride ?? parsed.storageMode ?? "json",
       lastMigrationRun: parsed.lastMigrationRun ?? null,
       updatedAt:        parsed.updatedAt        ?? Date.now(),
     };
-    logger.info({ storageMode: _config.storageMode }, "[systemConfig] Loaded from file");
-  } catch (err: unknown) {
-    // First run — bootstrap from env var, then persist
-    const envMode = process.env["USE_POSTGRES_STORAGE"];
-    if (envMode === "true" || envMode === "postgres") {
-      _config.storageMode = "postgres";
-    } else if (envMode === "hybrid") {
-      _config.storageMode = "hybrid";
+    if (envOverride && envOverride !== parsed.storageMode) {
+      // Env var changed the mode — persist the new value so it's visible on next read
+      _config.updatedAt = Date.now();
+      await saveConfig();
+      logger.info({ storageMode: _config.storageMode, source: "env-override" }, "[systemConfig] Env var overrode file storageMode");
+    } else {
+      logger.info({ storageMode: _config.storageMode }, "[systemConfig] Loaded from file");
     }
+  } catch (err: unknown) {
+    // First run or unreadable file — bootstrap from env var, then persist
+    if (envOverride) _config.storageMode = envOverride;
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
       logger.warn({ err }, "[systemConfig] Could not read config — defaulting");
     }
     logger.info({ storageMode: _config.storageMode }, "[systemConfig] Fresh start (env bootstrap)");
-    await saveConfig(); // Write initial config
+    await saveConfig();
   }
 }
 

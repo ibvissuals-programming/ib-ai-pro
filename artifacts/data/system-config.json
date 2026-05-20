@@ -1,5 +1,5 @@
 {
-  "storageMode": "json",
-  "lastMigrationRun": null,
-  "updatedAt": 1779209662430
+  "storageMode": "postgres",
+  "lastMigrationRun": 1779275607724,
+  "updatedAt": 1779275607724
 }

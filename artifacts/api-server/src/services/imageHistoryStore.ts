@@ -4,8 +4,9 @@
  * LAYER 7 — Persistent image history across refresh and login.
  *
  * Architecture:
- *   - Image files stored to disk: data/images/{entryId}.jpg (or .png/.webp)
- *   - Metadata stored atomically in: data/image-history.json
+ *   - Image files stored to Object Storage: images/{entryId}.ext
+ *     (falls back to local disk for legacy entries that pre-date Object Storage)
+ *   - Metadata stored in PostgreSQL (primary) or data/image-history.json (fallback)
  *   - Max 50 entries per user (oldest trimmed on write)
  *   - Max 500 entries total across all users
  *   - UUID-based IDs (unguessable) — safe to serve without strict auth on file endpoint
@@ -19,6 +20,12 @@ import { fileURLToPath } from "url";
 import { logger } from "../lib/logger";
 import { isPostgresEnabled } from "../lib/systemConfig";
 import { pgLoadAllHistory, pgSaveEntry, pgDeleteEntry } from "./pgImageHistoryStore";
+import {
+  uploadImageBuffer,
+  downloadImageBuffer,
+  deleteObjectByName,
+  isObjectStorageEnabled,
+} from "./objectStore";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "../../data");
@@ -38,7 +45,12 @@ export interface HistoryEntry {
   mode: string;
   intensity: string;
   timestamp: number;
-  imageFile: string; // filename only, e.g. "{id}.jpg"
+  /**
+   * Storage path for the image.
+   * - Object Storage key: "images/{id}.ext"  (contains "/")
+   * - Legacy disk filename: "{id}.ext"        (no "/" — pre-Object-Storage entries)
+   */
+  imageFile: string;
   mimeType: string;
   // Pipeline metadata (added v4) — optional so old persisted entries stay valid
   complexity?: string;
@@ -71,6 +83,15 @@ function mimeToExt(mime: string): string {
 
 function entryToPublic(entry: HistoryEntry): HistoryEntryPublic {
   return { ...entry, imageUrl: `/api/image/serve/${entry.id}` };
+}
+
+/**
+ * Returns true if the imageFile field refers to an Object Storage key.
+ * Object Storage keys contain "/" (e.g. "images/{id}.jpg").
+ * Legacy disk filenames do not (e.g. "{id}.jpg").
+ */
+export function isObjectStorageKey(imageFile: string): boolean {
+  return imageFile.includes("/");
 }
 
 // ── Load history from disk ────────────────────────────────────────────────────
@@ -142,6 +163,16 @@ async function persistHistory(entries: HistoryEntry[]): Promise<void> {
   }
 }
 
+// ── Image file cleanup ────────────────────────────────────────────────────────
+
+function evictImageFile(entry: HistoryEntry): void {
+  if (isObjectStorageKey(entry.imageFile)) {
+    deleteObjectByName(entry.imageFile).catch(() => {});
+  } else {
+    fs.unlink(path.join(IMAGES_DIR, entry.imageFile)).catch(() => {});
+  }
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
@@ -157,14 +188,18 @@ export async function initImageStore(): Promise<void> {
     await fs.writeFile(HISTORY_FILE, "[]", "utf8");
   }
   logger.info(
-    { dataDir: DATA_DIR, imagesDir: IMAGES_DIR },
+    {
+      dataDir: DATA_DIR,
+      imagesDir: IMAGES_DIR,
+      objectStorage: isObjectStorageEnabled(),
+    },
     "[imageHistory] Store initialized",
   );
 }
 
 /**
  * Save a generated or edited image to persistent history.
- * Writes the image file to disk and appends metadata.
+ * Uploads the image to Object Storage (or disk as fallback) and appends metadata.
  */
 export async function saveToHistory(params: {
   userId: string;
@@ -194,16 +229,35 @@ export async function saveToHistory(params: {
 
   const id = randomUUID();
   const ext = mimeToExt(mimeType);
-  const imageFile = `${id}${ext}`;
-  const filePath = path.join(IMAGES_DIR, imageFile);
+  const imageBuffer = Buffer.from(base64, "base64");
 
-  // Write image file
-  try {
-    await fs.mkdir(IMAGES_DIR, { recursive: true });
-    await fs.writeFile(filePath, Buffer.from(base64, "base64"));
-  } catch (err) {
-    logger.error({ err, userId }, "[imageHistory] Failed to write image file");
-    throw new Error("Failed to save image");
+  let imageFile: string;
+
+  if (isObjectStorageEnabled()) {
+    // Object Storage path — survives container restarts
+    imageFile = `images/${id}${ext}`;
+    try {
+      await uploadImageBuffer(imageFile, imageBuffer, mimeType);
+      logger.info({ userId, imageFile }, "[imageHistory] Image uploaded to Object Storage");
+    } catch (err) {
+      logger.error({ err, userId }, "[imageHistory] Object Storage upload failed — disk fallback");
+      // Fall back to local disk
+      imageFile = `${id}${ext}`;
+      const filePath = path.join(IMAGES_DIR, imageFile);
+      await fs.mkdir(IMAGES_DIR, { recursive: true });
+      await fs.writeFile(filePath, imageBuffer);
+    }
+  } else {
+    // Local disk fallback (ephemeral — for dev without Object Storage)
+    imageFile = `${id}${ext}`;
+    const filePath = path.join(IMAGES_DIR, imageFile);
+    try {
+      await fs.mkdir(IMAGES_DIR, { recursive: true });
+      await fs.writeFile(filePath, imageBuffer);
+    } catch (err) {
+      logger.error({ err, userId }, "[imageHistory] Failed to write image file");
+      throw new Error("Failed to save image");
+    }
   }
 
   const entry: HistoryEntry = {
@@ -229,8 +283,7 @@ export async function saveToHistory(params: {
   entries.push(entry);
 
   // Trim: keep max MAX_PER_USER per user (remove oldest)
-  // Track evicted IDs so PG rows can be deleted too.
-  const evictedIds: string[] = [];
+  const evictedEntries: HistoryEntry[] = [];
   const userEntries = entries.filter((e) => e.userId === userId);
   if (userEntries.length > MAX_PER_USER) {
     const toRemove = userEntries
@@ -239,9 +292,7 @@ export async function saveToHistory(params: {
     for (const old of toRemove) {
       const idx = entries.findIndex((e) => e.id === old.id);
       if (idx !== -1) entries.splice(idx, 1);
-      evictedIds.push(old.id);
-      // Delete image file (fire and forget)
-      fs.unlink(path.join(IMAGES_DIR, old.imageFile)).catch(() => {});
+      evictedEntries.push(old);
     }
   }
 
@@ -253,9 +304,13 @@ export async function saveToHistory(params: {
     for (const old of globalOld) {
       const idx = entries.findIndex((e) => e.id === old.id);
       if (idx !== -1) entries.splice(idx, 1);
-      evictedIds.push(old.id);
-      fs.unlink(path.join(IMAGES_DIR, old.imageFile)).catch(() => {});
+      evictedEntries.push(old);
     }
+  }
+
+  // Delete image files for evicted entries (fire and forget)
+  for (const evicted of evictedEntries) {
+    evictImageFile(evicted);
   }
 
   cache = entries;
@@ -263,8 +318,8 @@ export async function saveToHistory(params: {
   if (isPostgresEnabled()) {
     try {
       await pgSaveEntry(entry);
-      for (const evId of evictedIds) {
-        await pgDeleteEntry(evId);
+      for (const evicted of evictedEntries) {
+        await pgDeleteEntry(evicted.id);
       }
     } catch (pgErr) {
       logger.warn({ pgErr }, "[imageHistory] PG save failed — JSON fallback");
@@ -275,7 +330,7 @@ export async function saveToHistory(params: {
   }
 
   logger.info(
-    { userId, type, mode, intensity, id },
+    { userId, type, mode, intensity, id, imageFile },
     "[imageHistory] Saved entry",
   );
 
@@ -325,8 +380,8 @@ export async function deleteHistoryEntry(
     await persistHistory(entries);
   }
 
-  // Delete image file (fire and forget)
-  fs.unlink(path.join(IMAGES_DIR, removed.imageFile)).catch(() => {});
+  // Delete image file (fire and forget — handles both Object Storage and disk)
+  evictImageFile(removed);
 
   logger.info({ userId, entryId }, "[imageHistory] Deleted entry");
   return true;
@@ -396,12 +451,22 @@ export function getHistoryStatsSnapshot(): HistoryStatsSnapshot {
 }
 
 /**
- * Get the absolute file path for an image entry by ID.
+ * Get the raw HistoryEntry for an image by ID.
  * Returns null if not found.
  */
-export async function getImageFilePath(entryId: string): Promise<string | null> {
+export async function getImageEntry(entryId: string): Promise<HistoryEntry | null> {
   const entries = await loadHistory();
-  const entry = entries.find((e) => e.id === entryId);
+  return entries.find((e) => e.id === entryId) ?? null;
+}
+
+/**
+ * Get the absolute file path for an image entry by ID.
+ * Returns null if not found or if the entry uses Object Storage.
+ * @deprecated Use getImageEntry() and check isObjectStorageKey() instead.
+ */
+export async function getImageFilePath(entryId: string): Promise<string | null> {
+  const entry = await getImageEntry(entryId);
   if (!entry) return null;
+  if (isObjectStorageKey(entry.imageFile)) return null; // Object Storage entries have no disk path
   return path.join(IMAGES_DIR, entry.imageFile);
 }

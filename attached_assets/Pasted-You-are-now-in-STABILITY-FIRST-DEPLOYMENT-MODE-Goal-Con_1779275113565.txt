@@ -1,0 +1,94 @@
+You are now in STABILITY-FIRST DEPLOYMENT MODE.
+
+Goal: Convert the current working system into a production-safe, deployable architecture by fixing ONLY P0 infrastructure issues.
+
+DO NOT add new features.
+DO NOT refactor working business logic.
+DO NOT modify AI behavior, prompts, or model logic.
+
+ONLY focus on infrastructure stability.
+
+────────────────────────────────────
+P0 FIXES TO IMPLEMENT
+────────────────────────────────────
+
+1. SECRETS / ENVIRONMENT VARIABLES
+- Move ALL API keys and secrets into proper environment configuration
+- Ensure no hardcoded keys exist anywhere in codebase
+- Validate runtime access to:
+  - Gemini API key + base URL
+  - Any AI provider keys
+  - Database connection strings
+- Add safe fallback error messages if missing
+
+2. DATABASE PERSISTENCE (POSTGRESQL)
+- Ensure PostgreSQL is properly initialized and connected on startup
+- Create/verify schema migration for:
+  - users
+  - sessions
+  - image history
+  - generation logs
+- Ensure all writes are durable (no in-memory-only fallback for production mode)
+- Add connection retry + graceful failure handling
+
+3. IMAGE / FILE PERSISTENCE (REPLIT STORAGE OR OBJECT STORAGE)
+- Ensure generated images are NOT ephemeral
+- Persist all outputs to storage layer (Replit Object Storage or equivalent)
+- Store:
+  - image URL or file reference
+  - prompt used
+  - user ID
+  - timestamp
+- Ensure retrieval endpoint works for history loading
+
+4. SYSTEM RELIABILITY HARDENING
+- Add startup health checks:
+  - DB connection check
+  - AI provider check
+  - storage availability check
+- Add structured logging for failures (no silent failures)
+- Ensure server does not start in "half-broken" state without warnings
+
+5. API SAFETY LAYER
+- Ensure all /api routes validate inputs strictly
+- Prevent undefined/null crashes in:
+  - image generation endpoint
+  - chat endpoint
+  - history endpoints
+
+────────────────────────────────────
+CONSTRAINTS
+────────────────────────────────────
+
+- DO NOT modify detectEditMode, prompt logic, or AI classification system
+- DO NOT change frontend UI unless required for storage display
+- DO NOT introduce new AI features
+- DO NOT optimize performance yet (only stability)
+- DO NOT add experimental refactors
+
+────────────────────────────────────
+SUCCESS CRITERIA
+────────────────────────────────────
+
+System is considered stable when:
+- Server starts with zero missing env warnings
+- Database connects reliably on restart
+- Image generation persists outputs after refresh
+- No in-memory-only critical data remains
+- Health checks pass for all core services
+
+────────────────────────────────────
+EXECUTION MODE
+────────────────────────────────────
+
+Make changes in the smallest safe patches possible.
+Apply fixes incrementally and verify each layer.
+Restart server after completing P0 group.
+Report final system status as:
+
+- ENV STATUS
+- DB STATUS
+- STORAGE STATUS
+- API HEALTH STATUS
+
+Then STOP.
