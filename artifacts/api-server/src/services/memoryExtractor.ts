@@ -20,6 +20,7 @@
 import { ai } from "@workspace/integrations-gemini-ai";
 import { logger } from "../lib/logger";
 import { setMemory, getUserMemoryMap } from "./memoryStore";
+import { pushEvent } from "../lib/eventTracker";
 import type { MemoryType, MemoryConfidence } from "./memoryStore";
 import type { ChatMessage } from "./llm";
 
@@ -207,6 +208,10 @@ export async function extractAndStoreMemory(
       { [L.SKIP_SHORT]: true, userId, lastMsgLen, minRequired: MIN_LAST_MSG_CHARS },
       L.SKIP_SHORT,
     );
+    pushEvent("memory_skipped", {
+      userId,
+      meta: { reason: "short_message", lastMsgLen, minRequired: MIN_LAST_MSG_CHARS },
+    });
     return;
   }
 
@@ -216,6 +221,10 @@ export async function extractAndStoreMemory(
       { [L.SKIP_SIGNAL]: true, userId, totalUserChars, minRequired: MIN_TOTAL_CHARS },
       L.SKIP_SIGNAL,
     );
+    pushEvent("memory_skipped", {
+      userId,
+      meta: { reason: "low_signal", totalUserChars, minRequired: MIN_TOTAL_CHARS },
+    });
     return;
   }
 
@@ -318,10 +327,19 @@ export async function extractAndStoreMemory(
       L.FILTERED,
     );
 
+    const elapsedMs = Date.now() - t0;
     logger.info(
-      { userId, written, elapsedMs: Date.now() - t0 },
+      { userId, written, elapsedMs },
       L.COMPLETE,
     );
+
+    // Phase 2+5: emit memory_extracted event if anything was stored
+    if (written > 0) {
+      pushEvent("memory_extracted", {
+        userId,
+        meta: { written, accepted, rejected },
+      });
+    }
   } catch (err) {
     // Outer safety net — extraction must never affect the chat pipeline
     logger.warn({ userId, err, elapsedMs: Date.now() - t0 }, "[mem] extraction:unhandled_error");

@@ -1,0 +1,143 @@
+IB AI — CEO CONTROL LAYER (DASHBOARD + OBSERVABILITY CORE)
+
+MISSION:
+Build a real “control center” for IB AI so the system can be monitored, understood, and debugged in real time.
+
+This is NOT a UI polish task.
+This is a system visibility upgrade.
+
+==================================================
+PHASE 1 — CREATE CEO DASHBOARD BACKEND LAYER
+==================================================
+
+Create:
+
+/server/routes/adminDashboard.ts
+
+Endpoints:
+
+1. GET /api/admin/overview
+Returns:
+- total users
+- total chats today
+- total messages today
+- active users (24h)
+- memory entries total
+- avg response time
+- error rate
+
+2. GET /api/admin/users
+Returns:
+- user list
+- message count per user
+- last active timestamp
+- memory count per user
+
+3. GET /api/admin/system-health
+Returns:
+- backend status
+- DB status
+- Gemini API status
+- memory pipeline status
+- last error logs (if any)
+
+==================================================
+PHASE 2 — REAL-TIME EVENT TRACKING LAYER
+==================================================
+
+Create:
+
+/server/services/eventTracker.ts
+
+Track events:
+
+- chat_request_started
+- chat_request_completed
+- memory_extracted
+- memory_injected
+- memory_skipped
+- error_occurred
+
+Each event must include:
+- timestamp
+- userId
+- latency (if applicable)
+- route/source
+
+Store in lightweight in-memory ring buffer (no DB yet)
+
+==================================================
+PHASE 3 — SYSTEM LOG STREAM ENDPOINT
+==================================================
+
+Create:
+
+GET /api/admin/event-stream
+
+Use SSE (Server-Sent Events)
+
+Stream:
+- last 100 system events
+- live updates as they happen
+
+Format:
+[mem_event]
+[chat_event]
+[system_event]
+
+==================================================
+PHASE 4 — CHAT LATENCY PROFILING HOOK
+==================================================
+
+Modify chat pipeline:
+
+Add internal timing markers:
+- t_start
+- t_memory_retrieval
+- t_ai_response_start
+- t_ai_response_end
+
+Log:
+[mem] latency breakdown:
+  retrieval: Xms
+  model: Xms
+  total: Xms
+
+==================================================
+PHASE 5 — MEMORY PIPELINE VISIBILITY ENHANCEMENT
+==================================================
+
+Extend memory logs:
+
+[mem] pipeline:start
+[mem] retrieved_count
+[mem] injected_count
+[mem] skipped_count (with reason)
+
+NO raw memory values exposed
+
+==================================================
+PHASE 6 — FAILSAFE RULES
+==================================================
+
+- dashboard endpoints MUST NOT break chat flow
+- event tracker must never block requests
+- SSE failures must degrade silently
+- all logs are optional, never critical path
+
+==================================================
+FINAL GOAL
+==================================================
+
+Turn IB AI into a self-observable system:
+
+You should be able to answer:
+- what is happening right now
+- where latency is coming from
+- whether memory is helping or hurting
+- which users are active
+- whether the system is healthy
+
+WITHOUT guessing.
+
+This is the foundation of production-grade AI infrastructure visibility.

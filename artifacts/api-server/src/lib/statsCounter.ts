@@ -20,6 +20,8 @@ interface DayCounters {
   imageAnalysisFailed: number;
   systemErrors: number;
   authErrors: number;
+  chatRequests: number;
+  chatMessages: number;
 }
 
 function todayKey(): string {
@@ -41,6 +43,8 @@ function freshCounters(): DayCounters {
     imageAnalysisFailed: 0,
     systemErrors: 0,
     authErrors: 0,
+    chatRequests: 0,
+    chatMessages: 0,
   };
 }
 
@@ -68,6 +72,8 @@ export function incImageAnalyzed(): void   { ensureToday().imageAnalyzed++; }
 export function incImageAnalysisFailed(): void { ensureToday().imageAnalysisFailed++; }
 export function incSystemError(): void     { ensureToday().systemErrors++; }
 export function incAuthError(): void       { ensureToday().authErrors++; }
+export function incChatRequest(): void     { ensureToday().chatRequests++; }
+export function incChatMessage(): void     { ensureToday().chatMessages++; }
 
 // ── Read ──────────────────────────────────────────────────────────────────────
 
@@ -77,6 +83,14 @@ export function getTodayStats(): DayCounters {
 
 export function getTotalLoginsToday(): number {
   return ensureToday().loginSuccess;
+}
+
+export function getTotalChatsToday(): number {
+  return ensureToday().chatRequests;
+}
+
+export function getTotalMessagesToday(): number {
+  return ensureToday().chatMessages;
 }
 
 export function getTotalImagesGeneratedToday(): number {

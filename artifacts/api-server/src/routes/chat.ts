@@ -17,6 +17,8 @@ import { getOrCreateSession, saveMessagePair } from "../services/chatStore";
 import { getUserMemory, buildMemoryBlock } from "../services/memoryStore";
 import { retrieveRelevantMemories } from "../services/memoryRetriever";
 import { extractAndStoreMemory } from "../services/memoryExtractor";
+import { pushEvent } from "../lib/eventTracker";
+import { incChatRequest, incChatMessage } from "../lib/statsCounter";
 
 const router = Router();
 
@@ -170,8 +172,14 @@ router.post(
 
     const { messages: rawMessages, sessionId: incomingSessionId } = parsed.data;
 
+    // ── Phase 4: Request timing ────────────────────────────────────────────────
+    const tStart  = Date.now();
+    const userId  = req.user?.userId;
+    incChatRequest();
+    pushEvent("chat_request_started", { userId, route: "/api/chat" });
+
     logger.info(
-      { userId: req.user?.userId, messageCount: rawMessages.length },
+      { userId, messageCount: rawMessages.length },
       "[chat] request received",
     );
 
@@ -181,23 +189,47 @@ router.post(
       [...rawMessages].reverse().find((m) => m.role === "user")?.content ?? "";
     const sessionTitle = lastUserContent.slice(0, 60) || "New Chat";
 
+    // ── Phase 4+5: Memory retrieval with timing ───────────────────────────────
     // Load user memory, score for relevance, and inject into system prompt.
     // retrieval is synchronous + pure (no DB/Gemini); total overhead is one
     // DB read (getUserMemory). Falls back to no injection on any error.
     let memoryBlock: string | null = null;
-    if (req.user?.userId) {
+    let tMemRetrievalMs = 0;
+    if (userId) {
+      const tMemStart = Date.now();
+      logger.info({ userId }, "[mem] pipeline:start");
       try {
-        const allEntries   = await getUserMemory(req.user.userId);
-        const lastUserMsg  = lastUserContent;
-        const relevant     = retrieveRelevantMemories(lastUserMsg, rawMessages, allEntries);
-        memoryBlock        = buildMemoryBlock(relevant);
+        const allEntries  = await getUserMemory(userId);
+        const relevant    = retrieveRelevantMemories(lastUserContent, rawMessages, allEntries);
+        memoryBlock       = buildMemoryBlock(relevant);
+        tMemRetrievalMs   = Date.now() - tMemStart;
+
+        logger.info(
+          {
+            userId,
+            retrieved_count: allEntries.length,
+            injected_count:  relevant.length,
+            skipped_count:   Math.max(0, allEntries.length - relevant.length),
+            retrieval_ms:    tMemRetrievalMs,
+          },
+          "[mem] pipeline:result",
+        );
+
+        // Phase 2 events — memory_injected / memory_skipped
         if (relevant.length > 0) {
-          logger.debug(
-            { userId: req.user.userId, injected: relevant.length, total: allEntries.length },
-            "[chat] memory injected",
-          );
+          pushEvent("memory_injected", {
+            userId,
+            latencyMs: tMemRetrievalMs,
+            meta: { injected: relevant.length, total: allEntries.length },
+          });
+        } else if (allEntries.length > 0) {
+          pushEvent("memory_skipped", {
+            userId,
+            meta: { reason: "no_relevant_entries", total: allEntries.length },
+          });
         }
       } catch (memErr) {
+        tMemRetrievalMs = Date.now() - tMemStart;
         logger.warn({ err: memErr }, "[chat] memory load failed — continuing without it");
       }
     }
@@ -215,8 +247,11 @@ router.post(
     let streamSucceeded = false;
     let accumContent = "";
     let resolvedSessionId: string | undefined;
+    // Phase 4: AI model timing — declared here so finally can read them
+    let tAiStart = 0;
 
     try {
+      tAiStart = Date.now();
       const stream = await createChatStream(messages);
 
       for await (const chunk of stream) {
@@ -242,6 +277,12 @@ router.post(
       res.write("data: [DONE]\n\n");
       streamSucceeded = true;
     } catch (err: unknown) {
+      // Phase 4: emit error event — never throws
+      pushEvent("error_occurred", {
+        userId,
+        route: "/api/chat",
+        meta: { error: err instanceof Error ? err.message : String(err) },
+      });
       const errMsg = err instanceof Error ? err.message : String(err);
       logger.error({ err: errMsg }, "LLM stream error");
 
@@ -253,9 +294,24 @@ router.post(
       );
     } finally {
       if (streamSucceeded) {
-        deductRequestCredits(req);
+        // ── Phase 4: Latency breakdown ───────────────────────────────────────
+        const tAiMs    = Date.now() - tAiStart;
+        const tTotalMs = Date.now() - tStart;
+        logger.info(
+          { retrieval: tMemRetrievalMs, model: tAiMs, total: tTotalMs },
+          "[chat] latency_breakdown",
+        );
+        pushEvent("chat_request_completed", {
+          userId,
+          latencyMs: tTotalMs,
+          route: "/api/chat",
+          meta: { retrieval: tMemRetrievalMs, model: tAiMs },
+        });
+        // Count user message + assistant message
+        incChatMessage();
+        incChatMessage();
 
-        const userId = req.user?.userId;
+        deductRequestCredits(req);
 
         // Fire-and-forget persistence — never blocks the stream response.
         // Only runs when session was successfully resolved and there is content.
