@@ -16,7 +16,7 @@
  */
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import { generateImage, editImage, detectEditMode, getContractConfig, type EditResult } from "../services/imageGenService";
+import { generateImage, editImage, detectEditMode, normalizeCinematicPrompt, getContractConfig, type EditResult } from "../services/imageGenService";
 import { generateCinematicInsight, buildDirectorEnhancedPrompt } from "../services/cinematicInsightEngine";
 import { buildEditInstruction } from "../services/editIntelligence";
 import { buildAdaptiveEditPrompt } from "../services/adaptivePromptReinforcement";
@@ -218,11 +218,20 @@ router.post(
       "[MODE_RESOLVED] mode resolved from raw prompt",
     );
 
+    // ── Prompt normalization (raw prompt only — MUST precede all enrichment) ───
+    // Expands user shorthand ("noir", "dramatic", "studio", etc.) into explicit
+    // visual direction terms before any enrichment layer runs.
+    // INVARIANT: normalizeCinematicPrompt MUST receive parsed.data.prompt only.
+    //            It MUST NOT receive enrichedPrompt, effectivePrompt, APRE
+    //            output, or FRAE output. Enriched-prompt input causes it to fire
+    //            on pipeline-injected vocabulary and contradict FRAE directives.
+    const normalizedRawPrompt = normalizeCinematicPrompt(parsed.data.prompt);
+
     // ── Edit Intelligence Layer ───────────────────────────────────────────────
     // Phase 1: normalize, classify, safety-clean, and inject preservation rules
     // into the user's prompt before it enters the pipeline. Non-throwing —
     // falls back to original prompt on any internal error.
-    const intelligence = buildEditInstruction({ userPrompt: parsed.data.prompt });
+    const intelligence = buildEditInstruction({ userPrompt: normalizedRawPrompt });
 
     logger.info(
       {

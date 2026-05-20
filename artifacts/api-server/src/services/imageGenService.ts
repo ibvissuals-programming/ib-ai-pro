@@ -1001,7 +1001,12 @@ export async function editImage(
   );
 
   // ── Step 2: Build render prompt ───────────────────────────────────────────
-  const renderPrompt = normalizeCinematicPrompt(prompt);
+  // normalizeCinematicPrompt is applied at the route layer (imageGen.ts) on
+  // the raw user prompt before enrichment begins. By this point, prompt is
+  // the fully enriched effectivePrompt (editIntelligence + APRE + FRAE).
+  // Re-expanding here fires on pipeline-injected vocabulary and contradicts
+  // FRAE preservation directives. Pass through unchanged.
+  const renderPrompt = prompt;
 
   const job: ImageJob = createJob({
     jobType,
