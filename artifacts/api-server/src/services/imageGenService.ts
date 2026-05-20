@@ -399,12 +399,51 @@ const STYLE_TRANSFER_PATTERNS = [
   /\b(restyle(?:d|ing)?|reinterpret(?:ed|ing)?)\b/i,
 ];
 
-const CREATIVE_PATTERNS = [
-  /\b(reimagine|completely\s*transform|change\s*everything|total\s*transformation)\b/i,
-  /\b(put\s*(them|him|her|me|it)\s*in|place\s*(them|him|her|me|it)\s*in|transport\s*to|move\s*to)\b/i,
-  /\b(fantasy|surreal|alien|sci\s*fi|futuristic|magical|enchanted|mythical|post.?apocalyptic)\b/i,
-  /\b(concept\s*art|digital\s*art|abstract\s*art|abstract\s*background)\b/i,
-  /\b(change\s*(the\s*)?background\s+to|replace\s*(the\s*)?background|new\s*background)\b/i,
+// ── Creative pattern sets ─────────────────────────────────────────────────────
+//
+// Two-layer system:
+//   STRONG (+2 per match) — a single hit self-qualifies as creative.
+//   SOFT   (+1 per match) — two hits needed to self-qualify.
+//
+// Fast-path: if creative score >= 2, return "creative" immediately.
+// Override:  if portrait_safe score >= 3, identity preservation always wins.
+
+const CREATIVE_STRONG_PATTERNS: RegExp[] = [
+  // Transformation verbs — standalone (no "completely" prefix required)
+  /\btransform(?:s|ed|ing|ation)?\b/i,
+  /\breimagin(?:e|es|ed|ing)\b/i,
+  /\bredesign(?:s|ed|ing)?\b/i,
+  /\bconvert\s+(?:\w+\s+){0,3}into\b/i,
+  /\bturn(?:ed|ing)?\s+(?:\w+\s+){0,2}into\b/i,
+  // Subject placement — any subject (broadened from pronoun-only)
+  /\bplace\s+(?:\w+\s+){0,3}in\b/i,
+  /\bput\s+(?:\w+\s+){0,3}in\b/i,
+  /\b(transport\s*to|move\s*to)\b/i,
+  // World / genre vocabulary
+  /\b(surreal(?:ist(?:ic)?|ly)?|fantasy|alien|sci[\s-]fi|futuristic|magical|enchanted|mythical|mytholog(?:ical(?:ly)?|y)|post[\s-]?apocalyptic)\b/i,
+  // Abstract and dream vocabulary
+  /\babstract\b/i,
+  /\bdream(?:like|world|scape|y)?\b/i,
+  // Background replacement
+  /\b(change\s+(?:the\s+)?background\s+to|replace\s+(?:the\s+)?background|new\s+background)\b/i,
+  // Digital art / concept art / AI art
+  /\b(concept\s*art|digital\s*art|abstract\s*art|abstract\s*background|ai\s+art)\b/i,
+  // Strong restructuring phrases kept from prior version
+  /\b(change\s*everything|total\s*transformation)\b/i,
+];
+
+const CREATIVE_SOFT_PATTERNS: RegExp[] = [
+  // Cinematic only when paired with transformation language
+  /\bcinematic\s+(?:transform(?:ation)?|rework|version|concept|interpretation)\b/i,
+  // Conceptual / narrative framing
+  /\bconceptual(?:ly)?\b/i,
+  /\bvisual\s+narrative\b/i,
+  // Style reinterpretation verbs (also scored in STYLE_TRANSFER P7 — overlap intentional:
+  // two soft signals together self-qualify as creative; one alone stays style_transfer)
+  /\breinterpret(?:ed|ing)?\b/i,
+  /\brestyle(?:d|ing)?\b/i,
+  // Explicit creative/artistic version phrasing
+  /\b(?:artistic|creative)\s+version\b/i,
 ];
 
 export function detectEditMode(prompt: string): EditMode {
@@ -415,24 +454,27 @@ export function detectEditMode(prompt: string): EditMode {
     creative:       0,
   };
 
-  for (const p of PORTRAIT_SAFE_PATTERNS)  if (p.test(prompt)) scores.portrait_safe++;
-  for (const p of CINEMATIC_PATTERNS)       if (p.test(prompt)) scores.cinematic++;
-  for (const p of STYLE_TRANSFER_PATTERNS)  if (p.test(prompt)) scores.style_transfer++;
-  for (const p of CREATIVE_PATTERNS)        if (p.test(prompt)) scores.creative++;
+  for (const p of PORTRAIT_SAFE_PATTERNS)   if (p.test(prompt)) scores.portrait_safe++;
+  for (const p of CINEMATIC_PATTERNS)        if (p.test(prompt)) scores.cinematic++;
+  for (const p of STYLE_TRANSFER_PATTERNS)   if (p.test(prompt)) scores.style_transfer++;
+  for (const p of CREATIVE_STRONG_PATTERNS)  if (p.test(prompt)) scores.creative += 2;
+  for (const p of CREATIVE_SOFT_PATTERNS)    if (p.test(prompt)) scores.creative++;
 
-  const max = Math.max(...Object.values(scores));
+  // CREATIVE fast-path: a single STRONG hit (+2) or two SOFT hits (+1+1) self-
+  // qualify. Bypasses the standard scoring competition entirely.
+  // Exception: portrait_safe >= 3 means identity preservation always wins.
+  if (scores.creative >= 2) {
+    return scores.portrait_safe >= 3 ? "portrait_safe" : "creative";
+  }
 
-  // Default to portrait_safe when no pattern matches — ambiguous prompts are
-  // more likely face-editing requests than cinematic transformations, and
-  // portrait_safe (maximum identity lock) is the safest fallback contract.
-  if (max === 0) return "portrait_safe";
-
-  // Priority order on tie: portrait_safe > style_transfer > cinematic > creative
-  // style_transfer ranks above cinematic on tie: an ambiguous artistic/fashion
-  // request is better served by loose identity lock than medium identity lock.
-  if (scores.portrait_safe  === max) return "portrait_safe";
-  if (scores.style_transfer  === max) return "style_transfer";
-  if (scores.cinematic       === max) return "cinematic";
+  // Standard priority resolution when creative has not self-qualified.
+  // Default to portrait_safe on zero score (safest identity-preserving fallback).
+  // Priority on tie: portrait_safe > style_transfer > cinematic > creative
+  const max = Math.max(scores.portrait_safe, scores.cinematic, scores.style_transfer, scores.creative);
+  if (max === 0)                             return "portrait_safe";
+  if (scores.portrait_safe  === max)         return "portrait_safe";
+  if (scores.style_transfer === max)         return "style_transfer";
+  if (scores.cinematic      === max)         return "cinematic";
   return "creative";
 }
 

@@ -1,0 +1,82 @@
+You are updating ONLY the detectEditMode CREATIVE classification logic.
+
+GOAL:
+Eliminate CREATIVE under-triggering and prevent CINEMATIC fallback leakage.
+
+RULE CHANGE (CRITICAL):
+
+Replace the current CREATIVE_PATTERNS scoring dependency with a 2-layer trigger system:
+
+────────────────────────────────────
+LAYER 1 — STRONG CREATIVE TRIGGERS (immediate +2)
+────────────────────────────────────
+If ANY of these appear, immediately classify as CREATIVE (bypass scoring competition unless PORTRAIT_SAFE >= 3):
+
+- transform (standalone or any suffix/prefix)
+- reimagine
+- redesign
+- convert (X into Y context)
+- turn into / turned into
+- place .* in (any subject placement pattern)
+- put .* in (creative context, NOT portrait-safe enhancement)
+- as .* fantasy
+- surreal
+- mythological
+- abstract (standalone OR modifier)
+- dream / dreamlike / dream world
+
+────────────────────────────────────
+LAYER 2 — SOFT CREATIVE SUPPORT (adds +1 score)
+────────────────────────────────────
+- cinematic + transformation intent (e.g. "cinematic transformation", "cinematic rework")
+- aesthetic restructuring phrases:
+  - "AI art"
+  - "conceptual"
+  - "visual narrative"
+  - "reinterpret"
+  - "restyle"
+  - "artistic version"
+  - "creative version"
+
+────────────────────────────────────
+PRIORITY OVERRIDE RULE (CRITICAL)
+────────────────────────────────────
+
+If CREATIVE score >= 2:
+    return "creative" immediately
+
+BUT:
+
+If PORTRAIT_SAFE score >= 3:
+    override CREATIVE → portrait_safe
+    (identity preservation ALWAYS wins)
+
+────────────────────────────────────
+REMOVE THIS OLD FAILURE CONDITION:
+────────────────────────────────────
+- Any dependency on:
+  "completely transform"
+  "full transformation phrases"
+  "strict verb + modifier combos"
+
+These are too restrictive and must be eliminated.
+
+────────────────────────────────────
+EXPECTED BEHAVIOR CHANGE:
+────────────────────────────────────
+
+"transform subject into mythological cinematic entity"
+→ CREATIVE (not cinematic)
+
+"completely redesign scene as abstract visual narrative"
+→ CREATIVE (not portrait_safe fallback)
+
+"turn her into a surreal dream version"
+→ CREATIVE
+
+"reimagine her as cinematic goddess portrait"
+→ CREATIVE unless portrait_safe >= 3
+
+────────────────────────────────────
+END RULE UPDATE
+Return only updated detectEditMode CREATIVE logic.
