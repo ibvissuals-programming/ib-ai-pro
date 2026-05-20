@@ -1,0 +1,64 @@
+You are now in POST-P0 STABILIZATION MODE.
+
+Do NOT introduce new features.
+
+ONLY do system validation, cleanup, and production readiness checks.
+
+CONTEXT:
+- P0 fixes (storage, DB, secrets, health, config) have been applied
+- system is currently running but may still have hidden instability risks
+- storageMode, DB wiring, secrets migration, and health checks were recently modified
+- priority is now: stability > correctness > deployment readiness
+
+TASKS (EXECUTE IN PARALLEL WHERE POSSIBLE):
+
+1. CONFIGURATION CONSISTENCY CHECK
+- Verify USE_POSTGRES_STORAGE is consistently respected at runtime
+- Confirm loadSystemConfig cannot be overridden by stale config file values
+- Ensure no JSON storage fallback is still active anywhere
+- Confirm environment variables are actually being used (not cached config)
+
+2. DATABASE VALIDATION
+- Confirm Postgres connection is stable
+- Run a lightweight health query (SELECT 1)
+- Verify user storage tables exist and are reachable
+- Confirm no fallback to in-memory or JSON persistence exists
+
+3. STORAGE LAYER VALIDATION
+- Verify image storage is fully using Object Storage (not local filesystem, not JSON)
+- Confirm upload → retrieve → serve cycle works end-to-end
+- Validate no mixed storage modes exist
+
+4. SECRETS VALIDATION
+- Confirm JWT_SECRET, CEO_PASSWORD, CEO_RECOVERY_KEY are NOT in plaintext env usage
+- Ensure all secrets are only accessed via secure runtime secrets system
+- Confirm no logs or debug output expose secrets
+
+5. API HEALTH & ROUTES CHECK
+- Verify /health endpoint returns correct DB + storage + AI status
+- Confirm backend starts without warnings or hidden fallback modes
+- Ensure all critical routes are reachable and not degraded
+
+6. FRONTEND INTEGRATION CHECK
+- Confirm frontend is successfully calling /api/chat (or equivalent)
+- Ensure no fallback mock responses are active
+- Verify Vite build/runtime is stable
+
+7. FINAL SYSTEM STATUS REPORT
+Return a structured report:
+
+- System Stability Score (0–100)
+- Critical Issues (if any)
+- Warning Issues (if any)
+- Production Readiness: YES / NO
+- Recommended Next Step ONLY if blocking issue exists
+
+RULES:
+- Do NOT add new features
+- Do NOT refactor architecture
+- Do NOT redesign systems
+- Only validate, verify, and stabilize
+- Prefer logs, checks, and confirmations over changes
+
+END GOAL:
+Determine if the system is now safe for production deployment after P0 fixes.
