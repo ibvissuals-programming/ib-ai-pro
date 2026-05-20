@@ -1,0 +1,112 @@
+You are now in PRODUCTION FINALIZATION MODE.
+
+Context:
+- P0 infrastructure fixes have been applied (DB, storage, config, secrets system)
+- system is currently running successfully
+- goal is to confirm restart-safe, production-ready stability
+- no new features are allowed
+
+────────────────────────────────────
+GOAL
+────────────────────────────────────
+
+Verify the system is SAFE to restart, deploy, and run continuously without manual intervention.
+
+If any critical instability is found, fix ONLY that issue.
+
+────────────────────────────────────
+PHASE 1 — RESTART SAFETY SIMULATION
+────────────────────────────────────
+
+Simulate a full cold restart check:
+
+1. Assume server is restarted from zero state
+2. Verify in order:
+   - environment variables load correctly (no missing secrets)
+   - config system loads correct storage mode (env overrides file)
+   - database connects successfully on first boot
+   - object storage initializes correctly
+   - backend starts without manual intervention
+   - no fallback to JSON or in-memory storage occurs
+
+Report any failure points.
+
+────────────────────────────────────
+PHASE 2 — CORE SYSTEM VALIDATION
+────────────────────────────────────
+
+Check and validate:
+
+1. DATABASE
+- Postgres connection stable on startup
+- tables exist and are accessible
+- no fallback DB modes exist
+
+2. STORAGE LAYER
+- all image writes go to persistent storage (Postgres/Object Storage)
+- retrieval works after simulated restart
+- no local or JSON persistence remains
+
+3. SECRETS SYSTEM
+- JWT_SECRET, CEO_PASSWORD, CEO_RECOVERY_KEY
+- must ONLY exist in secure runtime system
+- confirm no plaintext or fallback exposure paths
+
+4. CONFIG SYSTEM
+- env vars always override config file
+- no stale config cache is used
+- storageMode resolves correctly on every boot
+
+5. API HEALTH
+- /health endpoint reports accurate DB + storage + AI status
+- no degraded or partial startup states
+- backend fully ready before accepting requests
+
+────────────────────────────────────
+PHASE 3 — FAILURE HARDENING
+────────────────────────────────────
+
+If ANY of the following are found:
+
+- missing env vars on cold start
+- DB connection race condition
+- storage initialization failure
+- config override inconsistency
+
+→ fix immediately with minimal surgical patch
+→ do NOT refactor architecture
+→ do NOT add new features
+
+────────────────────────────────────
+PHASE 4 — FINAL DEPLOYMENT REPORT
+────────────────────────────────────
+
+Return:
+
+SYSTEM STATUS: READY / NOT READY FOR DEPLOYMENT
+
+SCORE (0–100):
+- Startup Stability:
+- Database Reliability:
+- Storage Persistence:
+- Secrets Safety:
+- API Health:
+
+CRITICAL RISKS:
+- list if any
+
+RECOMMENDED NEXT ACTION:
+- only if blocking issues exist
+
+────────────────────────────────────
+CONSTRAINTS
+────────────────────────────────────
+
+- No new features
+- No refactoring unrelated systems
+- No architecture redesign
+- Only fix critical instability
+- Prioritize restart safety above everything
+
+END GOAL:
+System must be proven safe for full restart without manual intervention.
