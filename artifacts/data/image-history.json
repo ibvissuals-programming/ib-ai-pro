@@ -48,5 +48,16 @@
     "status": "success",
     "retryCount": 0,
     "latencyMs": 14962
+  },
+  {
+    "id": "892e1403-afef-44dd-9323-bd81cd7f95a8",
+    "userId": "e66361c6-3db4-4309-af86-dd009485add3",
+    "type": "generate",
+    "prompt": "test",
+    "mode": "IMAGE_GENERATION",
+    "intensity": "HIGH",
+    "timestamp": 1779266621239,
+    "imageFile": "892e1403-afef-44dd-9323-bd81cd7f95a8.jpg",
+    "mimeType": "image/jpeg"
   }
 ]
