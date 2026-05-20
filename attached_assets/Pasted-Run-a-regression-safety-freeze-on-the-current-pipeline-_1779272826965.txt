@@ -1,0 +1,102 @@
+Run a regression safety freeze on the current pipeline.
+
+Assume detectEditMode, editIntelligence, APRE, FRAE, normalizeCinematicPrompt, and buildStagePlan are production-locked.
+
+Your task is NOT to add new patterns.
+
+Your task is to validate system stability under adversarial mutation pressure.
+
+────────────────────────────────────────
+TEST OBJECTIVE
+────────────────────────────────────────
+
+Verify that NO combination of:
+- morphological variants
+- word reordering
+- synonym substitution
+- punctuation noise
+- prompt stacking
+- mixed intent blending
+
+can cause any of the following failures:
+
+1. Mode drift (wrong resolvedEditMode)
+2. Contract mismatch (wrong buildStagePlan output)
+3. Cross-layer leakage (APRE/FRAE influencing mode)
+4. Over-triggering (multiple modes scoring equally incorrectly)
+5. Under-triggering (valid intent falling to fallback incorrectly)
+
+────────────────────────────────────────
+ADVERSARIAL TEST SET (RUN ALL)
+────────────────────────────────────────
+
+A. Portrait-safe boundary tests
+- "make her face slightly more natural-looking and clean"
+- "enhance this image but keep identity unchanged realistically"
+- "fix skin softness and lighting balance naturally"
+- "improve facial detail without changing structure"
+
+B. Cinematic boundary tests
+- "cinematic mood lighting with dramatic tonal contrast"
+- "studio-lit portrait with teal orange grading and haze"
+- "dramatically lit emotional close-up in low key lighting"
+- "atmospheric neon night scene with directional shadows"
+
+C. Style-transfer ambiguity tests
+- "render as oil painting but keep facial realism"
+- "stylize into vogue editorial fashion shoot aesthetic"
+- "reinterpret as anime but keep subject identity"
+- "as concept art cinematic hybrid portrait"
+
+D. Creative expansion tests
+- "reimagine her in a fantasy world underwater palace"
+- "place him in a surreal dream forest at night"
+- "transform subject into mythological cinematic entity"
+- "completely redesign scene as abstract visual narrative"
+
+E. Edge-case noise tests
+- "!!!!! make her face better ???? naturally??"
+- "make-her-face-look-better-naturally"
+- "MAKE HER FACE LOOK BETTER NATURALLY"
+- "enh4nce f@ce r3al1st1cally"
+
+────────────────────────────────────────
+EXPECTED OUTPUT FORMAT
+────────────────────────────────────────
+
+For EACH input:
+
+1. resolvedEditMode (with pattern justification only)
+2. category
+3. contract selected
+4. APRE/FRAE activation summary
+5. PASS / FAIL (strict)
+
+────────────────────────────────────────
+STRICT RULES
+────────────────────────────────────────
+
+- Mode must be determined ONLY from raw input
+- No enrichment layer may influence classification
+- Contract must match resolvedEditMode exactly
+- Fallback to portrait_safe is ONLY valid if ALL pattern sets = 0
+- Any ambiguity = BUG, not "edge case"
+
+────────────────────────────────────────
+FINAL GOAL
+────────────────────────────────────────
+
+Prove the system is:
+
+- Stable under adversarial phrasing
+- Resistant to morphological drift
+- Deterministic across noisy inputs
+- Fully layer-isolated under stress conditions
+
+Return a final:
+
+SYSTEM ROBUSTNESS SCORE:
+- Mode Stability Under Attack (0–100)
+- Contract Consistency (0–100)
+- Layer Isolation Integrity (0–100)
+- Overall Production Readiness Grade (A–F)
