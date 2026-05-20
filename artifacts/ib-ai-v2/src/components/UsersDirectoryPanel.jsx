@@ -85,7 +85,7 @@ function statusBadgeClass(status) {
 function SkeletonRow() {
   return (
     <tr className="border-b border-border/10">
-      {[80, 55, 50, 70, 80, 100].map((w, i) => (
+      {[80, 55, 50, 70, 40, 40, 80, 100].map((w, i) => (
         <td key={i} className="px-4 py-3">
           <div className="h-3 bg-muted/40 rounded animate-pulse" style={{ width: `${w}%`, maxWidth: `${w}px` }} />
         </td>
@@ -202,6 +202,16 @@ function UserRow({ user, overrides, pending, rowError, onCreditAdjust, onRoleCha
             )}
             {isPending && <RefreshCw size={10} className="text-muted-foreground animate-spin shrink-0" />}
           </div>
+        </td>
+
+        {/* Message count */}
+        <td className="px-4 py-2.5 text-muted-foreground tabular-nums hidden lg:table-cell">
+          {user.messageCount ?? 0}
+        </td>
+
+        {/* Memory count */}
+        <td className="px-4 py-2.5 text-muted-foreground tabular-nums hidden lg:table-cell">
+          {user.memoryCount ?? 0}
         </td>
 
         {/* Joined */}
@@ -449,6 +459,8 @@ export function UsersDirectoryPanel() {
                 <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Role</th>
                 <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Status</th>
                 <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Credits</th>
+                <th className="text-left px-4 py-2.5 text-muted-foreground font-medium hidden lg:table-cell">Msgs</th>
+                <th className="text-left px-4 py-2.5 text-muted-foreground font-medium hidden lg:table-cell">Memory</th>
                 <th className="text-left px-4 py-2.5 text-muted-foreground font-medium hidden sm:table-cell">Joined</th>
                 <th className="text-left px-4 py-2.5 text-muted-foreground font-medium hidden md:table-cell">Last Login</th>
               </tr>
@@ -460,7 +472,7 @@ export function UsersDirectoryPanel() {
 
               {!loading && filtered.length === 0 && !error && (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={8}>
                     <div className="flex flex-col items-center gap-2 py-16 text-center px-4">
                       <UserX size={20} className="text-muted-foreground/40" />
                       <p className="text-sm text-muted-foreground">

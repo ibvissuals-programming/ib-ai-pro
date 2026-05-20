@@ -116,6 +116,16 @@ export function useActivityTimeline() {
   return useEndpointPoll('/admin/logs?limit=100', 30_000);
 }
 
+/** Poll the control overview — aggregate chat + memory + performance stats. */
+export function useOverview() {
+  return useEndpointPoll('/admin/overview', 10_000);
+}
+
+/** Poll the detailed system health — DB, Gemini, memory pipeline. */
+export function useSystemHealth() {
+  return useEndpointPoll('/admin/system-health', 8_000);
+}
+
 export function useAdminPolling() {
   const health           = useEndpointPoll('/admin/health',          8_000);
   const stats            = useEndpointPoll('/admin/stats',          10_000);
@@ -123,6 +133,8 @@ export function useAdminPolling() {
   const logs             = useEndpointPoll('/admin/logs?limit=50',  15_000);
   const activityTimeline = useEndpointPoll('/admin/logs?limit=100', 30_000);
   const aiStatus         = useEndpointPoll('/system/ai-status',     30_000);
+  const overview         = useEndpointPoll('/admin/overview',       10_000);
+  const systemHealth     = useEndpointPoll('/admin/system-health',   8_000);
 
   // Bubble up the most critical auth error code
   const allEndpoints = [health, stats, activeUsers, logs];
@@ -136,6 +148,7 @@ export function useAdminPolling() {
   return {
     health, stats, activeUsers, logs,
     activityTimeline, aiStatus,
+    overview, systemHealth,
     globalErrorCode,
   };
 }

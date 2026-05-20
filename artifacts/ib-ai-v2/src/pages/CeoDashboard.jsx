@@ -19,7 +19,7 @@ import {
   AlertCircle, Clock,
   ChevronRight, ChevronDown, Cpu, Shield,
   LayoutDashboard, UsersRound, Zap,
-  MessageSquare, ChevronUp, User,
+  MessageSquare, ChevronUp, User, Radio,
 } from 'lucide-react';
 import { logout, getAuthHeaders } from '../auth/authService';
 import { useAdminPolling } from '../hooks/useAdminPolling';
@@ -27,6 +27,9 @@ import { useTheme } from '../contexts/ThemeContext';
 import { UsersDirectoryPanel } from '../components/UsersDirectoryPanel';
 import { ActivityTimelinePanel } from '../components/ActivityTimelinePanel';
 import { AiRoutingPanel } from '../components/AiRoutingPanel';
+import { EventFeedPanel } from '../components/EventFeedPanel';
+import { SystemHealthPanel } from '../components/SystemHealthPanel';
+import { ControlOverviewPanel } from '../components/ControlOverviewPanel';
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
@@ -668,9 +671,10 @@ function DashboardHeader({ user }) {
 
 function TabBar({ activeTab, onTabChange }) {
   const tabs = [
-    { id: 'overview',  label: 'Overview',   icon: LayoutDashboard },
-    { id: 'users',     label: 'Users',      icon: UsersRound },
-    { id: 'chatLogs',  label: 'Chat Logs',  icon: MessageSquare },
+    { id: 'overview',  label: 'Overview',    icon: LayoutDashboard },
+    { id: 'users',     label: 'Users',       icon: UsersRound },
+    { id: 'events',    label: 'Live Events', icon: Radio },
+    { id: 'chatLogs',  label: 'Chat Logs',   icon: MessageSquare },
   ];
 
   return (
@@ -715,7 +719,7 @@ function TabBar({ activeTab, onTabChange }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function CeoDashboard() {
-  const { health, stats, activeUsers, logs, activityTimeline, aiStatus, globalErrorCode } = useAdminPolling();
+  const { health, stats, activeUsers, logs, activityTimeline, aiStatus, overview, systemHealth, globalErrorCode } = useAdminPolling();
   const [activeTab, setActiveTab] = useState('overview');
 
   // Handle global auth errors
@@ -760,23 +764,42 @@ export default function CeoDashboard() {
               exit={{ opacity: 0, y: -4 }}
               transition={{ duration: 0.16 }}
             >
-              {/* ── Section: System Health ── */}
+              {/* ── Section: Control Overview ── */}
               <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest flex items-center gap-1.5 mb-3">
+                <LayoutDashboard size={9} /> Control Overview
+              </p>
+              <ControlOverviewPanel
+                data={overview.data}
+                loading={overview.loading}
+                error={overview.error}
+                lastOk={overview.lastOk}
+              />
+
+              {/* ── Section: System Health ── */}
+              <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest flex items-center gap-1.5 mt-6 mb-3">
                 <Activity size={9} /> System Health
               </p>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <HealthPanel
-                  data={health.data}
-                  loading={health.loading}
-                  error={health.error}
-                  lastOk={health.lastOk}
+                <SystemHealthPanel
+                  data={systemHealth.data}
+                  loading={systemHealth.loading}
+                  error={systemHealth.error}
+                  lastOk={systemHealth.lastOk}
                 />
-                <ActiveUsersPanel
-                  data={activeUsers.data}
-                  loading={activeUsers.loading}
-                  error={activeUsers.error}
-                  lastOk={activeUsers.lastOk}
-                />
+                <div className="grid grid-cols-1 gap-4">
+                  <HealthPanel
+                    data={health.data}
+                    loading={health.loading}
+                    error={health.error}
+                    lastOk={health.lastOk}
+                  />
+                  <ActiveUsersPanel
+                    data={activeUsers.data}
+                    loading={activeUsers.loading}
+                    error={activeUsers.error}
+                    lastOk={activeUsers.lastOk}
+                  />
+                </div>
               </div>
 
               {/* ── Section: Activity ── */}
@@ -834,7 +857,20 @@ export default function CeoDashboard() {
             >
               <UsersDirectoryPanel />
               <p className="text-center text-[10px] text-muted-foreground/40 mt-6 pb-4">
-                User list refreshes every 30s — read-only view
+                User list refreshes every 30s — Msgs and Memory columns show per-user totals
+              </p>
+            </motion.div>
+          ) : activeTab === 'events' ? (
+            <motion.div
+              key="events"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.16 }}
+            >
+              <EventFeedPanel />
+              <p className="text-center text-[10px] text-muted-foreground/40 mt-4 pb-4">
+                Real-time SSE pipeline events — chat, memory, and error signals
               </p>
             </motion.div>
           ) : (
