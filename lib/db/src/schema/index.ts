@@ -4,3 +4,5 @@ export * from "./adminLogs";
 export * from "./chatSessions";
 export * from "./chatMessages";
 export * from "./userMemory";
+export * from "./imageJobs";
+export * from "./usageAnalytics";

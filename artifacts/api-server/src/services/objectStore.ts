@@ -84,7 +84,7 @@ export async function deleteObjectByName(objectName: string): Promise<void> {
   try {
     const bucket = getBucket();
     const file = bucket.file(objectName);
-    await file.delete({ ignoreNotFound: true } as Parameters<typeof file.delete>[0]);
+    await file.delete({ ignoreNotFound: true } as unknown as Parameters<typeof file.delete>[0]);
     logger.debug({ objectName }, "[objectStore] Deleted");
   } catch (err) {
     logger.warn({ err, objectName }, "[objectStore] Delete failed (non-fatal)");

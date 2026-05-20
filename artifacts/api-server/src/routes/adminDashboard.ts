@@ -38,6 +38,13 @@ import {
   countEventsInWindow,
   type TrackedEvent,
 } from "../lib/eventTracker";
+import {
+  getSystemAnalyticsSummary,
+  getAllUserAnalytics,
+  getUserSummaries,
+} from "../lib/usageAnalytics";
+import { imageQueue } from "../services/imageQueue";
+import { getJobMetrics } from "../services/imageJobManager";
 import { db, chatMessagesTable, userMemoryTable } from "@workspace/db";
 import { count, eq, sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
@@ -348,6 +355,80 @@ router.get("/admin/event-stream", requireCeo, (req: Request, res: Response) => {
     unsubscribeFromEvents(safeWrite);
     logger.debug("[adminDashboard] SSE client disconnected");
   });
+});
+
+// ── GET /api/admin/analytics ──────────────────────────────────────────────────
+// System-wide image generation + editing analytics aggregated across all users.
+// Best-effort — DB failure returns degraded payload with queue metrics still.
+
+router.get("/admin/analytics", requireCeo, async (_req: Request, res: Response) => {
+  try {
+    const [summary, queueMetrics, jobMetrics] = await Promise.all([
+      getSystemAnalyticsSummary(),
+      Promise.resolve(imageQueue.getMetrics()),
+      Promise.resolve(getJobMetrics()),
+    ]);
+
+    const stats = getTodayStats();
+
+    res.json({
+      timestamp: Date.now(),
+      images: {
+        ...summary,
+        today: {
+          generated: stats.imageGenerated,
+          edited:    stats.imageEdited,
+          analyzed:  stats.imageAnalyzed,
+          genFailed: stats.imageGenerateFailed,
+          editFailed: stats.imageEditFailed,
+        },
+      },
+      queue: {
+        concurrency: queueMetrics.concurrency,
+        active:      queueMetrics.active,
+        pending:     queueMetrics.pending,
+        completed:   queueMetrics.completed,
+        failed:      queueMetrics.failed,
+        avgWaitMs:   queueMetrics.avgWaitMs,
+      },
+      jobs: {
+        total:      jobMetrics.total,
+        queued:     jobMetrics.queued,
+        processing: jobMetrics.processing,
+        succeeded:  jobMetrics.succeeded,
+        failed:     jobMetrics.failed,
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, "[adminDashboard] /analytics error");
+    res.status(500).json({ error: "Failed to fetch analytics" });
+  }
+});
+
+// ── GET /api/admin/analytics/users ────────────────────────────────────────────
+// Per-user analytics breakdown. Returns both per-day rows and collapsed summaries.
+
+router.get("/admin/analytics/users", requireCeo, async (req: Request, res: Response) => {
+  try {
+    const view = (req.query.view as string) ?? "summaries";
+
+    if (view === "daily") {
+      const rows = await getAllUserAnalytics();
+      res.json({ timestamp: Date.now(), count: rows.length, rows });
+      return;
+    }
+
+    // Default: collapsed per-user summaries
+    const summaries = await getUserSummaries();
+    res.json({
+      timestamp: Date.now(),
+      count:     summaries.length,
+      users:     summaries,
+    });
+  } catch (err) {
+    logger.error({ err }, "[adminDashboard] /analytics/users error");
+    res.status(500).json({ error: "Failed to fetch user analytics" });
+  }
 });
 
 export default router;

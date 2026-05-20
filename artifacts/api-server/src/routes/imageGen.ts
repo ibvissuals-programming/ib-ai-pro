@@ -31,6 +31,8 @@ import {
   incImageEdited,
   incImageEditFailed,
 } from "../lib/statsCounter";
+import { imageQueue } from "../services/imageQueue";
+import { recordUsage } from "../lib/usageAnalytics";
 
 const router = Router();
 
@@ -146,7 +148,13 @@ router.post(
     );
 
     try {
-      const b64Image = await generateImage(parsed.data.prompt, req.user?.userId);
+      const _t0 = Date.now();
+      const b64Image = await imageQueue.run(() =>
+        generateImage(parsed.data.prompt, req.user?.userId),
+      );
+      if (req.user?.userId) {
+        recordUsage({ userId: req.user.userId, type: "generate", latencyMs: Date.now() - _t0 });
+      }
       deductRequestCredits(req);
       appendCreditHeaders(req, res);
       incImageGenerated();
@@ -156,6 +164,9 @@ router.post(
       });
       res.json({ b64Image, status: "success" });
     } catch (err: unknown) {
+      if (req.user?.userId) {
+        recordUsage({ userId: req.user.userId, type: "failure" });
+      }
       incImageGenFailed();
       addAuditEntry("image_generate_failure", `Image generate failed: ${err instanceof Error ? err.message.slice(0, 120) : "unknown"}`, {
         username: req.user?.username,
@@ -291,13 +302,19 @@ router.post(
     }
 
     try {
-      const result: EditResult = await editImage(
-        parsed.data.image,
-        effectivePrompt,
-        req.user?.userId,
-        resolvedEditMode,
-        parsed.data.intensity,
+      const _t0 = Date.now();
+      const result: EditResult = await imageQueue.run(() =>
+        editImage(
+          parsed.data.image,
+          effectivePrompt,
+          req.user?.userId,
+          resolvedEditMode,
+          parsed.data.intensity,
+        ),
       );
+      if (req.user?.userId) {
+        recordUsage({ userId: req.user.userId, type: "edit", latencyMs: Date.now() - _t0 });
+      }
       deductRequestCredits(req);
       appendCreditHeaders(req, res);
       incImageEdited();
@@ -333,6 +350,9 @@ router.post(
         },
       });
     } catch (err: unknown) {
+      if (req.user?.userId) {
+        recordUsage({ userId: req.user.userId, type: "failure" });
+      }
       incImageEditFailed();
       addAuditEntry("image_edit_failure", `Image edit failed: ${err instanceof Error ? err.message.slice(0, 120) : "unknown"}`, {
         username: req.user?.username,

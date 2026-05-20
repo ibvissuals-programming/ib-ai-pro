@@ -6,6 +6,7 @@ import { initImageStore } from "./services/imageHistoryStore";
 import { setBootDegraded } from "./lib/bootState";
 import { loadSystemConfig, isPostgresEnabled, getLastMigrationRun } from "./lib/systemConfig";
 import { runMigration } from "./lib/migrationRunner";
+import { recoverStalledJobs } from "./services/imageJobManager";
 
 // ── Global error handlers ─────────────────────────────────────────────────────
 
@@ -86,6 +87,13 @@ async function bootstrap() {
   } catch (err) {
     setBootDegraded();
     logger.warn({ err }, "[system] Image system disabled");
+  }
+
+  // 6. Recover stalled jobs from previous run
+  try {
+    await recoverStalledJobs();
+  } catch (err) {
+    logger.warn({ err }, "[system] Stalled job recovery failed (non-fatal)");
   }
 
   logger.info("[system] Startup complete");
