@@ -1,0 +1,135 @@
+IB AI — MEMORY OBSERVABILITY & CONTINUITY STABILIZATION PASS
+
+MISSION:
+Stabilize the memory intelligence system by improving observability, extraction reliability, and continuity consistency before adding any new features.
+
+DO NOT add new UI surfaces or experimental features.
+Focus ONLY on reliability, traceability, and canonical continuity.
+
+---
+
+1. MEMORY OBSERVABILITY LAYER
+
+Add structured logs for the entire extraction lifecycle.
+
+Required logs:
+
+[mem] extraction:start
+[mem] extraction:skip_short_message
+[mem] extraction:skip_no_signal
+[mem] extraction:gemini_request
+[mem] extraction:gemini_response
+[mem] extraction:parse_success
+[mem] extraction:parse_failed
+[mem] extraction:candidates_filtered
+[mem] extraction:db_write_success
+[mem] extraction:db_write_failed
+[mem] extraction:complete
+
+Each log should include:
+
+- userId
+- candidate count
+- elapsed ms where relevant
+- skip reason where relevant
+
+Goal:
+No more “silent failure” debugging.
+
+---
+
+2. EXTRACTION RELIABILITY AUDIT
+
+Verify:
+
+- extractor ALWAYS fires after successful stream completion
+- extraction NEVER blocks chat response
+- assistantText is finalized correctly before extraction
+- finally block always executes
+- extraction survives rapid consecutive messages
+
+Add defensive guards for:
+
+- empty assistantText
+- malformed Gemini JSON
+- undefined messages
+- stream interruption edge cases
+
+---
+
+3. CANONICAL MEMORY FOUNDATION
+
+Introduce memory categories internally:
+
+- behavioral
+- identity
+- project
+- narrative
+- relationship
+
+Goal:
+Prevent narrative continuity failures like DJ X / Nala.
+
+DO NOT build a UI yet.
+Only structure backend architecture.
+
+---
+
+4. NARRATIVE CONTINUITY RULES
+
+Add continuity-aware guidance inside extraction prompt:
+
+- avoid creating duplicate semantic memories
+- preserve existing canon when possible
+- prioritize consistency over creativity
+- avoid inventing facts not explicitly established
+
+Goal:
+Reduce hallucinated continuity drift.
+
+---
+
+5. MEMORY QUALITY FILTERING
+
+Improve extraction quality:
+
+DO NOT store:
+
+- temporary moods
+- incidental mentions
+- weak one-off statements
+- generic filler
+
+ONLY store:
+
+- durable preferences
+- identity traits
+- ongoing projects
+- meaningful relationships
+- long-term goals
+- repeated behavioral patterns
+
+---
+
+6. FINAL VALIDATION SUITE
+
+Run and verify:
+
+TEST 1 — short replies should NOT trigger extraction
+TEST 2 — long meaningful messages SHOULD trigger extraction
+TEST 3 — rapid consecutive messages should not create semantic duplicates
+TEST 4 — malformed Gemini output should fail safely
+TEST 5 — narrative continuity should remain consistent across 10+ turns
+
+Provide final report:
+
+- what failed
+- what was fixed
+- remaining weaknesses
+- confidence level of current memory architecture
+
+FINAL GOAL:
+Transform memory from:
+“basic persistent storage”
+into:
+“stable conversational continuity infrastructure.”

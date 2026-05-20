@@ -82,7 +82,7 @@ export async function setMemory(
   userId:     string,
   key:        string,
   value:      string,
-  type:       MemoryType       = "preference",
+  type:       MemoryType       = "behavioral",
   confidence: MemoryConfidence = "high",
 ): Promise<MemoryEntry> {
   // Safety gate: low confidence entries must never be stored

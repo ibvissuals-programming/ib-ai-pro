@@ -11,7 +11,7 @@
   {
     "id": "e66361c6-3db4-4309-af86-dd009485add3",
     "username": "ibaiceo",
-    "passwordHash": "d91e5f8665240c5123bfc5f34a38c284:1553859b10997514cbca66a84378b94fc1b1af64dd5870cae91661743d12cb9f4781b0556c239b608ef4a854d3e0b21a12ed46518ae2d477281c945a16f3b0d1",
+    "passwordHash": "12ecdc2e1fb87b08756edbdfc5f63cb6:5da0666df6f18ed51e36945ce58460cbe45f59d96150b271d93df120742960459e9a696443a75d6745ba91ca92a5e4714151ed705caf91c05c2280b4c7d27910",
     "role": "ceo",
     "credits": 40,
     "lastReset": 1778822777673,
@@ -277,5 +277,32 @@
     "credits": 4,
     "lastReset": 1779248400151,
     "createdAt": 1779248400151
+  },
+  {
+    "id": "e1bd6395-f1ed-4136-81a5-82adf1f1d58c",
+    "username": "val5test",
+    "passwordHash": "646e44261b564af5909acc92bab0de2e:3123697202046106045f54046367a9a36cbe2c6376e632f8385356c49bd9fc1844cb8a78497a8d16a0824b1f5e25899ab6432833ef0a5289a3f82fead29fbb3b",
+    "role": "free",
+    "credits": 5,
+    "lastReset": 1779249257596,
+    "createdAt": 1779249257596
+  },
+  {
+    "id": "5828187c-9d8d-4fe7-9f29-0e33aef1c611",
+    "username": "valrun2",
+    "passwordHash": "2c205c368c0fbeaa82412ede8640bc68:e5cab6926a3478bbfda882361930f61bb988432cf60bceafe3f504c16a55c009746895c3638c8ead940b9e0d60f9bb8461a81cb48250659beaa7e0e726978150",
+    "role": "free",
+    "credits": 1,
+    "lastReset": 1779249423122,
+    "createdAt": 1779249423122
+  },
+  {
+    "id": "ca73557d-053c-4f4d-b78e-656885016237",
+    "username": "valrun3",
+    "passwordHash": "8d1b7fc7a9d631f3c5c8ef1a038a25e5:d63659e52603ab3c5654c48e7fdf2224d8cd146a40b0f808685dd8f92ec2f737b2477e940205455757df805f3a1d8bb181bce5a03ce29485d42cd810515fe045",
+    "role": "free",
+    "credits": 5,
+    "lastReset": 1779249642576,
+    "createdAt": 1779249642576
   }
 ]

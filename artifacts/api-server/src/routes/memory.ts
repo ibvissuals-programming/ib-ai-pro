@@ -33,7 +33,7 @@ const memoryPolicy = policyEngine({
 const SetMemorySchema = z.object({
   key:        z.string().min(1).max(MEMORY_LIMITS.maxKeyLength),
   value:      z.string().min(1).max(MEMORY_LIMITS.maxValueLength),
-  type:       z.enum(["preference", "project", "behavior", "goal"]).optional(),
+  type:       z.enum(["behavioral", "identity", "project", "narrative", "relationship", "preference", "behavior", "goal"]).optional(),
   confidence: z.enum(["high", "medium"]).optional(),  // low is never accepted via API
 });
 

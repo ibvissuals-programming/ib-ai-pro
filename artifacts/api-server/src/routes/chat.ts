@@ -278,7 +278,7 @@ router.post(
             ...rawMessages,
             { role: "assistant", content: accumContent },
           ];
-          extractAndStoreMemory(userId, fullTurn, memMap).catch(
+          extractAndStoreMemory(userId, fullTurn).catch(
             (e: unknown) => logger.warn({ err: e }, "[extractor] unhandled error"),
           );
         }
