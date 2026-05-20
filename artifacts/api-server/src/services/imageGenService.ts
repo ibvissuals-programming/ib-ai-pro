@@ -341,11 +341,22 @@ function downgradedMode(mode: EditMode): EditMode {
 // ── Intent detector — auto-assigns edit mode from prompt keywords ──────────────
 
 const PORTRAIT_SAFE_PATTERNS = [
-  /\b(enhance|retouch|cleanup|clean\s*up|touch\s*up|smooth|subtle|refine|polish|natural|freshen)\b/i,
-  /\b(remove\s+(watermark|text|logo|blemish|spot|acne|wrinkle|noise|grain))\b/i,
-  /\b(fix\s+(skin|face|eyes|blemish|lighting))\b/i,
-  /\b(make\s+(it\s+)?(brighter|cleaner|sharper|clearer|more\s+natural))\b/i,
-  /\bskin\s*(smooth|soften|clear)\b/i,
+  // Core enhancement vocabulary — morphologically aware.
+  // Handles suffixed forms: "naturally" (natural+ly), "enhancing" (enhance+ing),
+  // "softly" (soft+ly), "refined" (refine+d), "smoothing" (smooth+ing), etc.
+  /\b(enhanc(?:e|es|ed|ing|ement)|retouch(?:ed|ing)?|clean(?:\s*up|ed|ing)|touch(?:\s*up|ed)?|smooth(?:ed|ing|ly)?|subtle|refin(?:e|es|ed|ing)|polish(?:ed|ing)?|natur(?:al(?:ly)?)|freshen(?:ed|ing)?|soft(?:en(?:ed|ing)?|ly)?|gentle(?:ly)?)\b/i,
+  // Removal operations — blemish, noise, artefacts
+  /\b(remove\s+(?:the\s+)?(watermark|text|logo|blemish|spot|acne|wrinkle|noise|grain))\b/i,
+  // Fix + target — allows intervening pronoun/article: "fix her face", "fix the skin"
+  /\bfix\s+(?:\w+\s+)?(skin|face|eyes|blemish|lighting)\b/i,
+  // Make + result — direct and indirect: "make it cleaner", "make her face look better"
+  /\bmake\s+(?:\w+\s+){0,2}(?:look\s+)?(better|brighter|cleaner|sharper|clearer|more\s+natur(?:al(?:ly)?)?)\b/i,
+  // Skin-specific micro-operations
+  /\bskin\s*(smooth(?:ed|ing)?|soften(?:ed|ing)?|clear(?:ed|ing)?)\b/i,
+  // "look better", "looking better", "look more natural"
+  /\blook(?:ing)?\s+(?:better|more\s+natur(?:al(?:ly)?)?)\b/i,
+  // "improve her appearance", "improve the skin", "improve face quality"
+  /\bimprov(?:e|es|ed|ing)\s+(?:\w+\s+){0,2}(?:look|appearance|skin|face|complexion|quality)\b/i,
 ];
 
 const CINEMATIC_PATTERNS = [
@@ -386,12 +397,17 @@ export function detectEditMode(prompt: string): EditMode {
 
   const max = Math.max(...Object.values(scores));
 
-  if (max === 0) return "cinematic"; // default for ambiguous prompts
+  // Default to portrait_safe when no pattern matches — ambiguous prompts are
+  // more likely face-editing requests than cinematic transformations, and
+  // portrait_safe (maximum identity lock) is the safest fallback contract.
+  if (max === 0) return "portrait_safe";
 
-  // Priority order on tie: portrait_safe > cinematic > style_transfer > creative
+  // Priority order on tie: portrait_safe > style_transfer > cinematic > creative
+  // style_transfer ranks above cinematic on tie: an ambiguous artistic/fashion
+  // request is better served by loose identity lock than medium identity lock.
   if (scores.portrait_safe  === max) return "portrait_safe";
-  if (scores.cinematic       === max) return "cinematic";
   if (scores.style_transfer  === max) return "style_transfer";
+  if (scores.cinematic       === max) return "cinematic";
   return "creative";
 }
 
