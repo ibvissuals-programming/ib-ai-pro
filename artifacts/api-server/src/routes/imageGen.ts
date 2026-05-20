@@ -20,6 +20,7 @@ import { generateImage, editImage, getContractConfig, type EditResult } from "..
 import { generateCinematicInsight, buildDirectorEnhancedPrompt } from "../services/cinematicInsightEngine";
 import { buildEditInstruction } from "../services/editIntelligence";
 import { buildAdaptiveEditPrompt } from "../services/adaptivePromptReinforcement";
+import { buildFacialRegionEnhancement } from "../services/facialRegionAwareness";
 import { logger } from "../lib/logger";
 import { policyEngine, deductRequestCredits, appendCreditHeaders } from "../middleware/policyEngine";
 import { CREDIT_COSTS } from "../lib/userStore";
@@ -229,13 +230,22 @@ router.post(
       strength:        intelligence.strength,
       templateApplied: intelligence.templateApplied,
     });
-    let effectivePrompt = apre.reinforcedPrompt;
+    // ── Facial Region Awareness Engine (FRAE v1) ──────────────────────────────
+    // Detects portrait-oriented edits, selects prioritized facial regions,
+    // injects identity preservation rules and targeted region directives.
+    // Operates on the APRE-reinforced prompt. Synchronous, non-throwing.
+    const frae = buildFacialRegionEnhancement({
+      originalPrompt:     parsed.data.prompt,
+      intelligenceResult: intelligence,
+      apreResult:         apre,
+    });
+    let effectivePrompt = frae.enhancedPrompt;
 
     // ── AI Director pre-analysis ──────────────────────────────────────────────
     // When useCinematicAnalysis=true, call the Cinematic Insight Engine before
     // editImage() to generate director-grade prompt enrichment. Wraps the
-    // APRE-reinforced prompt for best results. Non-fatal: falls through to the
-    // reinforced prompt if analysis fails.
+    // FRAE-enhanced prompt for best results. Non-fatal: falls through to the
+    // FRAE-enhanced prompt if analysis fails.
     let cinematicAnalysisApplied = false;
     if (useCinematicAnalysis) {
       const dataUrlMatch = /^data:([^;]+);base64,(.+)$/.exec(parsed.data.image);
@@ -243,7 +253,7 @@ router.post(
         const [, mimeType, base64] = dataUrlMatch;
         try {
           const insight = await generateCinematicInsight(base64, mimeType);
-          effectivePrompt = buildDirectorEnhancedPrompt(apre.reinforcedPrompt, insight);
+          effectivePrompt = buildDirectorEnhancedPrompt(frae.enhancedPrompt, insight);
           cinematicAnalysisApplied = true;
           logger.info(
             { moodTarget: insight.moodTarget, promptLen: effectivePrompt.length },
@@ -290,6 +300,11 @@ router.post(
           qualityScore:        apre.qualityScore,
           enhancementsApplied: apre.enhancementsApplied,
           reinforced:          apre.reinforcedPrompt !== apre.originalPrompt,
+        },
+        facialRegionAwareness: {
+          portraitDetected:   frae.portraitDetected,
+          targetedRegions:    frae.targetedRegions,
+          enhancementProfile: frae.enhancementProfile,
         },
       });
     } catch (err: unknown) {

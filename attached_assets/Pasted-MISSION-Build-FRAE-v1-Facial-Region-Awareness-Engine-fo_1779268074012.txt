@@ -1,0 +1,133 @@
+MISSION:
+Build FRAE v1 (Facial Region Awareness Engine) for the IB AI image editing pipeline.
+
+GOAL:
+Upgrade the editing system from generic prompt-aware editing to subject-aware facial editing with identity preservation and region-priority enhancement logic.
+
+IMPORTANT RULES:
+
+- DO NOT rewrite the existing edit pipeline
+- DO NOT modify APRE or editIntelligence behavior
+- FRAE must be additive and modular
+- NO external AI calls
+- NO database writes
+- NO async operations
+- Must fail safely and never break edits
+
+TASKS:
+
+1. Create:
+   artifacts/api-server/src/services/facialRegionAwareness.ts
+
+2. FRAE responsibilities:
+
+- Detect portrait-oriented edit requests
+- Detect facial enhancement intent from prompt vocabulary
+- Build region-priority enhancement directives
+
+3. Add facial region awareness categories:
+
+- eyes
+- skin
+- lips
+- hair
+- jawline
+- lighting depth
+- facial texture
+- facial symmetry preservation
+
+4. Add identity preservation rules:
+
+Examples:
+
+- preserve exact identity
+- preserve bone structure
+- preserve natural facial proportions
+- preserve ethnicity
+- preserve recognizable facial structure
+- avoid AI-generated facial reconstruction
+- avoid synthetic beauty artifacts
+- avoid face reshaping
+
+5. Add selective enhancement behavior:
+   FRAE should intelligently prioritize:
+
+- eyes for portrait/fashion prompts
+- skin texture for beauty cleanup
+- lighting depth for cinematic prompts
+- hair detail for fashion/luxury prompts
+- texture realism for realism_enhancement
+
+6. Build:
+   buildFacialRegionEnhancement()
+
+Input:
+
+- originalPrompt
+- intelligenceResult
+- apreResult
+
+Output:
+{
+enhancedPrompt,
+portraitDetected,
+targetedRegions,
+preservationRules,
+enhancementProfile
+}
+
+7. Integration:
+   Wire FRAE into imageGen.ts AFTER:
+
+- editIntelligence
+- APRE
+
+Pipeline order should become:
+
+raw prompt
+→ editIntelligence
+→ APRE
+→ FRAE
+→ cinematic engine
+→ edit pipeline
+
+8. Add route response metadata:
+
+facialRegionAwareness: {
+portraitDetected,
+targetedRegions,
+enhancementProfile
+}
+
+9. Add DEBUG logs:
+   [FRAE] portrait analysis complete
+   [FRAE] region targeting applied
+
+10. Requirements:
+
+- synchronous only
+- zero breaking changes
+- must preserve existing SSE flow
+- must preserve existing auth flow
+- must preserve existing image pipeline contracts
+- fully TypeScript typed
+- safe fallback behavior on all failures
+
+11. After implementation:
+    Run validation tests for:
+
+- portrait polish
+- cinematic portrait
+- luxury fashion edit
+- natural skin cleanup
+- dramatic relighting
+- realism enhancement
+
+Then report:
+
+- all files modified
+- exact integration point
+- runtime behavior
+- region targeting behavior
+- preservation behavior
+- any detected risks
