@@ -1,0 +1,218 @@
+IB AI — ADAPTIVE PROMPT REINFORCEMENT ENGINE (APRE v1)
+
+MISSION:
+Transform weak, vague, or low-quality user image edit prompts into strong, structured, cinematic, identity-safe editing instructions BEFORE they reach the generation pipeline.
+
+GOALS:
+- Improve realism
+- Improve consistency
+- Improve cinematic quality
+- Preserve identity
+- Reduce low-quality edits
+- Make beginner prompts produce professional results
+- Keep system lightweight and synchronous
+- Do NOT add additional AI API calls
+- Do NOT modify SSE/chat/memory systems
+- Do NOT break existing edit pipeline
+
+ARCHITECTURE RULES:
+- Pure synchronous TypeScript module
+- No external API calls
+- No DB writes
+- No AI inference
+- Runs BEFORE cinematic analysis
+- Extends existing editIntelligence.ts architecture
+- Fully modular and composable
+- Additive only — no breaking route changes
+
+BUILD:
+Create:
+artifacts/api-server/src/services/adaptivePromptReinforcement.ts
+
+EXPORT:
+buildAdaptiveEditPrompt()
+
+INPUT:
+{
+  prompt: string,
+  category: EditCategory,
+  strength: EditStrength,
+  templateApplied?: string | null
+}
+
+OUTPUT:
+{
+  originalPrompt: string,
+  reinforcedPrompt: string,
+  enhancementsApplied: string[],
+  qualityScore: number
+}
+
+CORE FEATURES:
+
+1. WEAK PROMPT DETECTOR
+Detect vague prompts like:
+- "make it better"
+- "fix this"
+- "improve quality"
+- "clean this up"
+- "make him look nice"
+- "polish this"
+- "enhance image"
+
+Score prompt specificity from 1–10.
+
+2. PROMPT EXPANSION ENGINE
+Automatically expand weak prompts into structured professional editing instructions.
+
+Example:
+"make him look better"
+
+→ internally becomes:
+
+"Enhance the portrait naturally while preserving exact facial identity and realism. Improve lighting balance, skin texture, facial clarity, natural sharpness, cinematic tonal balance, and overall image polish without changing facial structure, ethnicity, hairstyle, or expression. Avoid artificial skin, overprocessing, or unrealistic AI artifacts."
+
+3. CATEGORY-AWARE ENHANCEMENTS
+
+beauty_retouch:
+- preserve pores
+- avoid plastic skin
+- natural skin cleanup
+- realistic facial detail
+- balanced complexion
+
+relighting:
+- cinematic shadows
+- balanced highlights
+- realistic light direction
+- preserve natural depth
+
+cinematic_grading:
+- cinematic contrast
+- tonal depth
+- film-like balance
+- realistic color separation
+
+fashion_enhancement:
+- premium texture detail
+- fabric realism
+- luxury tonal balance
+- preserve garment structure
+
+cleanup:
+- remove distractions naturally
+- preserve image integrity
+- avoid blur artifacts
+
+realism_enhancement:
+- realistic texture
+- preserve natural imperfections
+- avoid overprocessing
+- maintain authentic detail
+
+4. STRENGTH-BASED REINFORCEMENT
+
+subtle:
+- minimal enhancement
+- realism priority
+
+balanced:
+- moderate cinematic enhancement
+
+cinematic:
+- stronger mood enhancement
+- dramatic but realistic lighting
+
+aggressive:
+- strongest enhancement allowed
+- still identity-safe
+
+5. HUMAN REALISM RULES
+Always inject:
+- preserve identity
+- preserve facial structure
+- preserve ethnicity
+- preserve realism
+- avoid AI-looking skin
+- avoid over-sharpening
+- avoid warped anatomy
+- avoid unnatural lighting
+
+6. DUPLICATE CLEANUP
+Prevent repetitive phrases from stacking during template + reinforcement merges.
+
+7. QUALITY SCORING
+Generate internal quality score:
+- weak prompt → lower score
+- structured prompt → higher score
+
+Range:
+1–100
+
+8. DEBUG LOGGING
+Add:
+[APRE] reinforcement applied
+
+Log:
+- category
+- strength
+- quality score
+- enhancement count
+
+INTEGRATION:
+Wire APRE into:
+artifacts/api-server/src/routes/imageGen.ts
+
+FLOW:
+validate request
+→ editIntelligence.ts
+→ adaptivePromptReinforcement.ts
+→ cinematic analysis
+→ final prompt builder
+→ edit pipeline
+
+IMPORTANT:
+- Existing editIntelligence.ts must remain untouched
+- Existing cinematic engine must remain untouched
+- Existing response structure must remain backward compatible
+- Add metadata only
+
+RETURN TO CLIENT:
+Add:
+adaptiveReinforcement: {
+  qualityScore,
+  enhancementsApplied,
+  reinforced: boolean
+}
+
+TEST CASES:
+1.
+"make him look better"
+
+2.
+"clean this image"
+
+3.
+"cinematic portrait"
+
+4.
+"fix lighting"
+
+5.
+"make this professional"
+
+6.
+"luxury fashion look"
+
+VALIDATION REQUIREMENTS:
+- No TypeScript errors
+- No broken imports
+- No route regressions
+- No SSE regressions
+- No additional API calls
+- No latency spikes >150ms
+- Must work with existing Gemini pipeline
+- Must preserve all current edit intelligence behavior
+
+FINAL GOAL:
+Make IB AI image editing feel professionally directed even when users provide weak prompts.

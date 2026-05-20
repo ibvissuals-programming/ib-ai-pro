@@ -19,6 +19,7 @@ import { z } from "zod";
 import { generateImage, editImage, getContractConfig, type EditResult } from "../services/imageGenService";
 import { generateCinematicInsight, buildDirectorEnhancedPrompt } from "../services/cinematicInsightEngine";
 import { buildEditInstruction } from "../services/editIntelligence";
+import { buildAdaptiveEditPrompt } from "../services/adaptivePromptReinforcement";
 import { logger } from "../lib/logger";
 import { policyEngine, deductRequestCredits, appendCreditHeaders } from "../middleware/policyEngine";
 import { CREDIT_COSTS } from "../lib/userStore";
@@ -205,7 +206,6 @@ router.post(
     // into the user's prompt before it enters the pipeline. Non-throwing —
     // falls back to original prompt on any internal error.
     const intelligence = buildEditInstruction({ userPrompt: parsed.data.prompt });
-    let effectivePrompt = intelligence.enrichedPrompt;
 
     logger.info(
       {
@@ -213,16 +213,29 @@ router.post(
         strength:       intelligence.strength,
         template:       intelligence.templateApplied,
         safetyFixes:    intelligence.safetyFixes.length,
-        enrichedLength: effectivePrompt.length,
+        enrichedLength: intelligence.enrichedPrompt.length,
       },
       "[imageEdit] intelligence layer applied",
     );
 
+    // ── Adaptive Prompt Reinforcement Engine (APRE v1) ────────────────────────
+    // Receives editIntelligence output. Detects weak prompts, expands them
+    // into structured professional instructions, injects category-aware
+    // cinematic enhancements, human realism rules, and strength directives.
+    // Deduplicates against editIntelligence content. Non-throwing.
+    const apre = buildAdaptiveEditPrompt({
+      prompt:          intelligence.enrichedPrompt,
+      category:        intelligence.category,
+      strength:        intelligence.strength,
+      templateApplied: intelligence.templateApplied,
+    });
+    let effectivePrompt = apre.reinforcedPrompt;
+
     // ── AI Director pre-analysis ──────────────────────────────────────────────
     // When useCinematicAnalysis=true, call the Cinematic Insight Engine before
     // editImage() to generate director-grade prompt enrichment. Wraps the
-    // intelligence-enriched prompt (not the raw prompt) for best results.
-    // Non-fatal: if analysis fails we fall through to the enriched prompt.
+    // APRE-reinforced prompt for best results. Non-fatal: falls through to the
+    // reinforced prompt if analysis fails.
     let cinematicAnalysisApplied = false;
     if (useCinematicAnalysis) {
       const dataUrlMatch = /^data:([^;]+);base64,(.+)$/.exec(parsed.data.image);
@@ -230,14 +243,14 @@ router.post(
         const [, mimeType, base64] = dataUrlMatch;
         try {
           const insight = await generateCinematicInsight(base64, mimeType);
-          effectivePrompt = buildDirectorEnhancedPrompt(intelligence.enrichedPrompt, insight);
+          effectivePrompt = buildDirectorEnhancedPrompt(apre.reinforcedPrompt, insight);
           cinematicAnalysisApplied = true;
           logger.info(
             { moodTarget: insight.moodTarget, promptLen: effectivePrompt.length },
             "[imageEdit] cinematic analysis injected",
           );
         } catch (err) {
-          logger.warn({ err }, "[imageEdit] cinematic analysis failed — using intelligence-enriched prompt");
+          logger.warn({ err }, "[imageEdit] cinematic analysis failed — using APRE-reinforced prompt");
         }
       }
     }
@@ -272,6 +285,11 @@ router.post(
           strength:        intelligence.strength,
           templateApplied: intelligence.templateApplied,
           safetyFixes:     intelligence.safetyFixes,
+        },
+        adaptiveReinforcement: {
+          qualityScore:        apre.qualityScore,
+          enhancementsApplied: apre.enhancementsApplied,
+          reinforced:          apre.reinforcedPrompt !== apre.originalPrompt,
         },
       });
     } catch (err: unknown) {
