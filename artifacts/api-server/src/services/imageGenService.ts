@@ -360,18 +360,43 @@ const PORTRAIT_SAFE_PATTERNS = [
 ];
 
 const CINEMATIC_PATTERNS = [
-  /\b(cinematic|film\s*look|color\s*grad|mood\s*light|dramatic\s*light|studio\s*light|atmosphere|teal.?orange)\b/i,
-  /\b(noir|golden\s*hour|blue\s*hour|sunset|sunrise|overcast|neon\s*light|moody|foggy|hazy)\b/i,
-  /\b(make\s+(it\s+)?(more\s+)?(cinematic|dramatic|moody|atmospheric|professional))\b/i,
+  // Core cinematic vocabulary. Fixes word-boundary gap: "mood lighting" /
+  // "studio lighting" / "dramatic lighting" now match (was: \blight\b failed
+  // on "lighting"). Adds bidirectional teal/orange and atmospheric variants.
+  /\b(cinematic|film\s*look|color\s*grad|mood\s*light(?:ing)?|dramatic\s*light(?:ing)?|studio\s*light(?:ing)?|atmospher(?:ic(?:ally)?)?|teal.?orange|orange.?teal)\b/i,
+  // Weather / time-of-day moods + extended atmospheric vocabulary.
+  // Adds: "neon lighting", "atmospheric", "mood lighting" phrase form.
+  /\b(noir|golden\s*hour|blue\s*hour|sunset|sunrise|overcast|neon\s*light(?:ing)?|moody|foggy|hazy|atmospheric|mood\s+light(?:ing)?)\b/i,
+  // Intent phrases — extends to handle intervening words and adverb forms.
+  // "make it more dramatic", "make the scene dramatically different"
+  /\bmake\s+(?:\w+\s+){0,2}(?:more\s+)?(?:cinematic|dramatic(?:ally)?|moody|atmospheric|professional)\b/i,
+  // Technical / optical vocabulary
   /\b(film\s*grain|depth\s*of\s*field|bokeh|lens\s*flare|color\s*grade)\b/i,
+  // Morphological dramatic variants — "dramatically lit", "dramatize", "dramatized"
+  // Not in pattern 3 (which requires "make ..."). Standalone adverb coverage.
+  /\bdramat(?:ic(?:ally)?|ize[ds]?)\b/i,
+  // Compound lighting phrases — requires the word "light/lighting" as qualifier
+  // to avoid firing on "studio shoot" (bare "studio" alone is NOT matched here).
+  /\b(low[\s-]key\s+light(?:ing)?|high[\s-]contrast\s+light(?:ing)?|film\s+light(?:ing)?|hard\s+light(?:ing)?|directional\s+light(?:ing)?)\b/i,
 ];
 
 const STYLE_TRANSFER_PATTERNS = [
+  // Artistic medium vocabulary (unchanged)
   /\b(watercolor|oil\s*paint|sketch|pencil|drawing|illustration|anime|manga|cartoon|comic|ghibli)\b/i,
+  // Fashion / editorial vocabulary (unchanged)
   /\b(fashion|editorial|vogue|runway|magazine|high\s*fashion|luxury\s*fashion)\b/i,
+  // Aesthetic style vocabulary (unchanged)
   /\b(vintage\s*style|retro\s*style|cyberpunk|steampunk|gothic|cottagecore)\b/i,
-  /\b(look\s*like\s*(a|an)\s*(painting|illustration|drawing|sketch|anime|cartoon))\b/i,
-  /\b(art\s*style|artistic\s*style|stylize|stylized)\b/i,
+  // "look like a painting" extended with "as a painting / as concept art /
+  // rendered as anime" — covers "as X" transformation phrasing.
+  /\b(?:look\s*like|render(?:ed)?\s+as|as)\s+(?:a\s+|an\s+)?(painting|illustration|drawing|sketch|anime|cartoon|concept\s+art|oil\s+painting|mural)\b/i,
+  // Stylization vocabulary — morphological: stylize / stylized / stylizing
+  /\b(art\s*style|artistic\s*style|styliz(?:e|ed|ing))\b/i,
+  // Fashion-forward aesthetic phrases — more specific than bare "fashion" /
+  // "editorial" (which pattern 2 already covers).
+  /\b(fashion[\s-]forward|editorial\s+(?:look|style|feel|aesthetic)|vogue\s+(?:style|aesthetic|look)|runway\s+(?:look|feel|aesthetic))\b/i,
+  // Style reinterpretation verbs — no overlap with portrait_safe vocabulary.
+  /\b(restyle(?:d|ing)?|reinterpret(?:ed|ing)?)\b/i,
 ];
 
 const CREATIVE_PATTERNS = [
