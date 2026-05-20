@@ -92,8 +92,10 @@ export async function deleteObjectByName(objectName: string): Promise<void> {
 }
 
 /**
- * Health probe — checks bucket accessibility.
- * Used by the /health endpoint.
+ * Health probe — checks bucket accessibility using an object-list operation.
+ * Uses getFiles(maxResults:1) which only requires storage.objects.list,
+ * a permission the Replit sidecar token grants. bucket.exists() requires
+ * storage.buckets.get which is not available to the sidecar service account.
  */
 export async function checkObjectStorageHealth(): Promise<{
   ok: boolean;
@@ -104,8 +106,8 @@ export async function checkObjectStorageHealth(): Promise<{
     process.env["DEFAULT_OBJECT_STORAGE_BUCKET_ID"] ?? "(not set)";
   try {
     const bucket = getBucket();
-    const [exists] = await bucket.exists();
-    return { ok: exists, bucketId };
+    await bucket.getFiles({ maxResults: 1 });
+    return { ok: true, bucketId };
   } catch (err) {
     return {
       ok: false,

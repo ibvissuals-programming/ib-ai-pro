@@ -4,6 +4,9 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { getBootState } from "./lib/bootState";
+import { isPostgresEnabled } from "./lib/systemConfig";
+import { checkObjectStorageHealth, isObjectStorageEnabled } from "./services/objectStore";
+import { pool } from "@workspace/db";
 
 const app: Express = express();
 
@@ -37,12 +40,39 @@ app.use(express.json({ limit: "8mb" }));
 app.use(express.urlencoded({ extended: true, limit: "8mb" }));
 
 // ── LAYER 6: Root health check — always responds, never behind /api ───────────
-// Satisfies external monitors that probe GET /health without the /api prefix.
-app.get(["/health", "/healthz"], (_req, res) => {
+// Probes PostgreSQL and Object Storage on each request so monitors and
+// deployment health checks get an accurate connectivity report.
+app.get(["/health", "/healthz"], async (_req, res) => {
+  const checks: Record<string, unknown> = {};
+  let degraded = false;
+
+  if (isPostgresEnabled()) {
+    try {
+      await pool.query("SELECT 1");
+      checks["postgres"] = { ok: true };
+    } catch (err) {
+      checks["postgres"] = { ok: false, error: err instanceof Error ? err.message : String(err) };
+      degraded = true;
+    }
+  }
+
+  if (isObjectStorageEnabled()) {
+    try {
+      const result = await checkObjectStorageHealth();
+      checks["objectStorage"] = result;
+      if (!result.ok) degraded = true;
+    } catch (err) {
+      checks["objectStorage"] = { ok: false, error: err instanceof Error ? err.message : String(err) };
+      degraded = true;
+    }
+  }
+
   res.json({
-    status: "ok",
+    status: degraded ? "degraded" : "ok",
     uptime: Math.floor(process.uptime()),
     boot: getBootState(),
+    mode: "full",
+    checks,
   });
 });
 
