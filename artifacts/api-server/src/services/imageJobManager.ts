@@ -26,14 +26,22 @@ export type JobStatus =
   | "failed"
   | "retrying";
 
-export type ModelUsed = "gemini-img2img" | "gemini-vision" | "flux" | "fallback";
+export type ModelUsed =
+  | "gemini-img2img"
+  | "gemini-vision"
+  | "flux"
+  | "fallback"
+  | "gemini-tts"
+  | "video-provider";
 
 export type RequestComplexity = "SIMPLE" | "STANDARD" | "HEAVY";
 
 export type JobType =
   | "IMAGE_EDIT_JOB"
   | "IMAGE_GENERATION_JOB"
-  | "IMAGE_TRANSFORMATION_JOB";
+  | "IMAGE_TRANSFORMATION_JOB"
+  | "TTS_JOB"
+  | "VIDEO_JOB";
 
 export interface StatusEvent {
   status:  JobStatus;

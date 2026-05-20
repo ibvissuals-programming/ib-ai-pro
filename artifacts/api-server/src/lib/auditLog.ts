@@ -24,6 +24,9 @@ export type AuditEventType =
   | "image_edit_failure"
   | "image_analysis_success"
   | "image_analysis_failure"
+  | "tts_success"
+  | "tts_failure"
+  | "video_request"
   | "auth_error"
   | "system_error";
 

@@ -20,8 +20,11 @@ import adminRouter from "./admin";
 import adminSystemRouter from "./adminSystem";
 import aiStatusRouter from "./aiStatus";
 import chatHistoryRouter from "./chatHistory";
-import memoryRouter from "./memory";
-import { trackActivity } from "../middleware/trackActivity";
+import memoryRouter       from "./memory";
+import ttsRouter          from "./tts";
+import videoRouter        from "./video";
+import promptExpandRouter from "./promptExpand";
+import { trackActivity }  from "../middleware/trackActivity";
 
 const router: IRouter = Router();
 
@@ -42,5 +45,8 @@ router.use(adminSystemRouter);
 router.use(aiStatusRouter);
 router.use(chatHistoryRouter);
 router.use(memoryRouter);
+router.use(ttsRouter);
+router.use(videoRouter);
+router.use(promptExpandRouter);
 
 export default router;

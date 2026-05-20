@@ -7,6 +7,7 @@ import { setBootDegraded } from "./lib/bootState";
 import { loadSystemConfig, isPostgresEnabled, getLastMigrationRun } from "./lib/systemConfig";
 import { runMigration } from "./lib/migrationRunner";
 import { recoverStalledJobs } from "./services/imageJobManager";
+import { cleanOldAudioFiles } from "./services/ttsService";
 
 // ── Global error handlers ─────────────────────────────────────────────────────
 
@@ -94,6 +95,13 @@ async function bootstrap() {
     await recoverStalledJobs();
   } catch (err) {
     logger.warn({ err }, "[system] Stalled job recovery failed (non-fatal)");
+  }
+
+  // 7. TTS audio TTL cleanup
+  try {
+    cleanOldAudioFiles();
+  } catch (err) {
+    logger.debug({ err }, "[system] TTS audio cleanup failed (non-fatal)");
   }
 
   logger.info("[system] Startup complete");

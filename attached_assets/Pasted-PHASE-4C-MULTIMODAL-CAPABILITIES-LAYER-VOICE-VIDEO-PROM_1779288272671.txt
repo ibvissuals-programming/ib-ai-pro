@@ -1,0 +1,130 @@
+PHASE 4C — MULTIMODAL CAPABILITIES LAYER (VOICE + VIDEO + PROMPT AI)
+
+GOAL:
+Extend IB AI Studio into a multi-modal AI creation system supporting:
+1. Text-to-Speech (voice generation)
+2. Image-to-Video generation pipeline
+3. Real-time Smart Prompt Generation Engine
+
+DO NOT modify existing architecture.
+DO NOT change job system, queue system, storage, or provider layer.
+ONLY extend using existing infrastructure.
+
+------------------------------------------------------------
+
+1. TEXT-TO-SPEECH (TTS ENGINE)
+
+INTEGRATION:
+Add a new job type: "tts_job"
+
+REQUIREMENTS:
+- input: text + voice style
+- output: audio file (mp3 or wav)
+- must use existing queue system
+- must use providerGuard for safety
+- must not block API response
+- must store audio in Object Storage
+
+VOICE STYLES:
+- cinematic narration
+- female soft voice
+- male deep voice
+- energetic social media voice
+- neutral assistant voice
+
+OUTPUT:
+- audio URL from storage
+- job status tracking
+- duration metadata
+
+------------------------------------------------------------
+
+2. IMAGE → VIDEO SYSTEM
+
+INTEGRATION:
+Add new job type: "video_job"
+
+REQUIREMENTS:
+- input: image + prompt
+- output: short video (mp4)
+- use queue system only
+- must be async and durable
+- must survive restart via DB job recovery
+
+VIDEO MODES:
+- cinematic motion (slow camera movement)
+- zoom + parallax effect
+- social media motion (fast cuts)
+- subtle animation (light movement)
+
+OUTPUT:
+- video file in Object Storage
+- job metadata (duration, resolution, status)
+
+------------------------------------------------------------
+
+3. SMART PROMPT GENERATION ENGINE
+
+INTEGRATION:
+Add AI-powered prompt expansion layer using existing provider system.
+
+FUNCTION:
+convert weak prompts → professional-grade prompts
+
+EXAMPLES:
+Input: "make cinematic"
+Output:
+"cinematic film lighting, dramatic tonal contrast, shallow depth of field, professional color grading, atmospheric shadows, ultra realistic rendering"
+
+REQUIREMENTS:
+- must not override user intent
+- must be lightweight and fast
+- must run before image generation queue
+- must be optional toggle per request
+
+CATEGORIES:
+- cinematic enhancement
+- portrait enhancement
+- fashion/editorial
+- creative fantasy
+- realism boost
+- social media viral style
+
+------------------------------------------------------------
+
+4. ARCHITECTURE RULES
+
+STRICT:
+- reuse existing job queue system
+- reuse providerGuard layer
+- reuse storage system
+- do NOT create new infrastructure layers
+- do NOT introduce new frameworks
+
+EVERYTHING MUST FLOW THROUGH:
+JobQueue → JobManager → ProviderGuard → Storage
+
+------------------------------------------------------------
+
+5. OUTPUT UNIFICATION
+
+All 3 systems must return standardized response:
+
+{
+  jobId,
+  status,
+  type: "tts" | "video" | "image" | "edit",
+  resultUrl,
+  metadata,
+  createdAt
+}
+
+------------------------------------------------------------
+
+SUCCESS CONDITION:
+IB AI Studio now supports:
+- voice generation (TTS)
+- image-to-video generation
+- AI prompt intelligence
+
+ALL BUILT ON EXISTING STABLE INFRASTRUCTURE WITHOUT ARCHITECTURE CHANGES

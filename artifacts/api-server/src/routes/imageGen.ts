@@ -31,8 +31,9 @@ import {
   incImageEdited,
   incImageEditFailed,
 } from "../lib/statsCounter";
-import { imageQueue } from "../services/imageQueue";
-import { recordUsage } from "../lib/usageAnalytics";
+import { imageQueue }  from "../services/imageQueue";
+import { recordUsage }  from "../lib/usageAnalytics";
+import { expandPrompt as expandPromptFn, PROMPT_CATEGORIES } from "../lib/promptExpander";
 
 const router = Router();
 
@@ -41,7 +42,9 @@ const MAX_IMAGE_B64_CHARS = 14_000_000; // ~10 MB decoded
 // ── Validation schemas ────────────────────────────────────────────────────────
 
 const GenerateSchema = z.object({
-  prompt: z.string().min(1, "Prompt is required").max(500, "Prompt too long"),
+  prompt:         z.string().min(1, "Prompt is required").max(500, "Prompt too long"),
+  expandPrompt:   z.boolean().optional(),
+  promptCategory: z.enum(PROMPT_CATEGORIES).optional(),
 });
 
 const VALID_CINEMATIC_PROFILES = [
@@ -148,9 +151,24 @@ router.post(
     );
 
     try {
+      // Optional smart prompt expansion — runs before queue entry
+      let _genPrompt = parsed.data.prompt;
+      if (parsed.data.expandPrompt) {
+        try {
+          const _exp = await expandPromptFn(_genPrompt, parsed.data.promptCategory ?? "cinematic");
+          _genPrompt = _exp.expanded;
+          logger.info(
+            { category: parsed.data.promptCategory ?? "cinematic", wordsAfter: _exp.wordsAfter },
+            "[imageGen] prompt expanded before generation",
+          );
+        } catch (_expandErr) {
+          logger.warn({ err: _expandErr }, "[imageGen] prompt expansion failed — using original");
+        }
+      }
+
       const _t0 = Date.now();
       const b64Image = await imageQueue.run(() =>
-        generateImage(parsed.data.prompt, req.user?.userId),
+        generateImage(_genPrompt, req.user?.userId),
       );
       if (req.user?.userId) {
         recordUsage({ userId: req.user.userId, type: "generate", latencyMs: Date.now() - _t0 });
@@ -162,7 +180,12 @@ router.post(
         username: req.user?.username,
         ip: req.ip ?? undefined,
       });
-      res.json({ b64Image, status: "success" });
+      res.json({
+        b64Image,
+        status:         "success",
+        promptExpanded: parsed.data.expandPrompt ?? false,
+        originalPrompt: parsed.data.expandPrompt ? parsed.data.prompt : undefined,
+      });
     } catch (err: unknown) {
       if (req.user?.userId) {
         recordUsage({ userId: req.user.userId, type: "failure" });
