@@ -252,7 +252,7 @@ export function buildMemoryBlock(entries: MemoryEntry[]): string | null {
   const body = sections.join("\n\n");
 
   const block = [
-    "## User Context",
+    "## DYNAMIC MEMORY CONTEXT",
     "Apply this context naturally during the conversation.",
     "Do not list or quote these entries unless the user explicitly asks.",
     "Never say \"as you mentioned\" or \"I remember you said\" — incorporate context seamlessly.",
@@ -261,11 +261,10 @@ export function buildMemoryBlock(entries: MemoryEntry[]): string | null {
     body,
   ].join("\n");
 
-  logger.debug(
+  logger.info(
     { finalCount: entries.length, finalChars: block.length },
-    "[mem] inject:final_count",
+    "[mem] inject:built",
   );
-  logger.debug({ finalChars: block.length }, "[mem] inject:final_chars");
 
   return block;
 }

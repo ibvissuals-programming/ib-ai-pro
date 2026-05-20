@@ -204,23 +204,31 @@ router.post(
         memoryBlock       = buildMemoryBlock(relevant);
         tMemRetrievalMs   = Date.now() - tMemStart;
 
+        const injectedChars = memoryBlock?.length ?? 0;
+
         logger.info(
           {
             userId,
             retrieved_count: allEntries.length,
             injected_count:  relevant.length,
+            injected_chars:  injectedChars,
             skipped_count:   Math.max(0, allEntries.length - relevant.length),
             retrieval_ms:    tMemRetrievalMs,
           },
           "[mem] pipeline:result",
         );
 
+        // MEMORY_INJECTION_DEBUG — prints the full block to logs (never sent to user)
+        if (process.env["MEMORY_INJECTION_DEBUG"] === "true" && memoryBlock) {
+          logger.info({ memoryBlock }, "[mem] DEBUG:injection_block");
+        }
+
         // Phase 2 events — memory_injected / memory_skipped
         if (relevant.length > 0) {
           pushEvent("memory_injected", {
             userId,
             latencyMs: tMemRetrievalMs,
-            meta: { injected: relevant.length, total: allEntries.length },
+            meta: { injected: relevant.length, total: allEntries.length, chars: injectedChars },
           });
         } else if (allEntries.length > 0) {
           pushEvent("memory_skipped", {

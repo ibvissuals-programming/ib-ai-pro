@@ -28,7 +28,7 @@ import type { MemoryEntry, MemoryType } from "./memoryStore";
 // ── Caps ──────────────────────────────────────────────────────────────────────
 
 const MAX_INJECTED = 8;
-const MAX_CHARS    = 2500;
+const MAX_CHARS    = 2000;
 
 // ── Type priority weights (1 = lowest, 5 = highest) ──────────────────────────
 
