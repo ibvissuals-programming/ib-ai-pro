@@ -974,7 +974,7 @@ export async function editImage(
   imageDataUrl:  string,
   prompt:        string,
   userId?:       string,
-  editMode?:     EditMode | string,
+  editMode:      EditMode = "cinematic",
   intensity?:    string,
 ): Promise<EditResult> {
 
@@ -982,12 +982,10 @@ export async function editImage(
   const jobType = "IMAGE_EDIT_JOB" as const;
 
   // ── Step 1: Resolve edit mode ─────────────────────────────────────────────
-  // If the caller supplied a valid mode, use it. Otherwise auto-detect from prompt.
-  const VALID_MODES: EditMode[] = ["portrait_safe", "cinematic", "style_transfer", "creative"];
-  const resolvedMode: EditMode =
-    editMode && VALID_MODES.includes(editMode as EditMode)
-      ? (editMode as EditMode)
-      : detectEditMode(prompt);
+  // Mode is always resolved by the route layer (imageGen.ts) before this
+  // function is called. detectEditMode() is NOT called here. editMode is
+  // authoritative — no recomputation, no fallback.
+  const resolvedMode: EditMode = editMode;
 
   // ── Step 1b: Resolve intensity ────────────────────────────────────────────
   const resolvedIntensity: IntensityLevel = resolveIntensity(intensity);
@@ -997,7 +995,6 @@ export async function editImage(
     {
       resolvedMode,
       resolvedIntensity,
-      autoDetected: !editMode || !VALID_MODES.includes(editMode as EditMode),
       prompt: prompt.slice(0, 80),
     },
     "[imageEdit] edit mode and intensity resolved",

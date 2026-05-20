@@ -16,7 +16,7 @@
  */
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import { generateImage, editImage, getContractConfig, type EditResult } from "../services/imageGenService";
+import { generateImage, editImage, detectEditMode, getContractConfig, type EditResult } from "../services/imageGenService";
 import { generateCinematicInsight, buildDirectorEnhancedPrompt } from "../services/cinematicInsightEngine";
 import { buildEditInstruction } from "../services/editIntelligence";
 import { buildAdaptiveEditPrompt } from "../services/adaptivePromptReinforcement";
@@ -202,6 +202,22 @@ router.post(
 
     const { useCinematicAnalysis, editMode } = parsed.data;
 
+    // ── Mode resolution (MUST run before any enrichment) ─────────────────────
+    // detectEditMode runs ONCE here on the raw user prompt.
+    // It NEVER runs inside editImage() on the enriched/effectivePrompt.
+    // Client-supplied editMode is the highest-priority override.
+    const overrideUsed      = editMode !== undefined;
+    const resolvedEditMode  = editMode ?? detectEditMode(parsed.data.prompt);
+
+    logger.debug(
+      {
+        rawPrompt:    parsed.data.prompt.slice(0, 80),
+        resolvedMode: resolvedEditMode,
+        overrideUsed,
+      },
+      "[MODE_RESOLVED] mode resolved from raw prompt",
+    );
+
     // ── Edit Intelligence Layer ───────────────────────────────────────────────
     // Phase 1: normalize, classify, safety-clean, and inject preservation rules
     // into the user's prompt before it enters the pipeline. Non-throwing —
@@ -270,7 +286,7 @@ router.post(
         parsed.data.image,
         effectivePrompt,
         req.user?.userId,
-        editMode,
+        resolvedEditMode,
         parsed.data.intensity,
       );
       deductRequestCredits(req);
