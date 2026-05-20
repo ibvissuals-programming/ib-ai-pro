@@ -1,0 +1,126 @@
+Perform a full production readiness evaluation of this system using a structured multi-phase analysis.
+
+You MUST execute each phase in order and treat each phase as a separate audit stage.
+
+────────────────────────
+PHASE 1 — SYSTEM STABILITY AUDIT
+────────────────────────
+Check:
+- frontend health and runtime status
+- backend health and API routing
+- workflow status (frontend + backend)
+- Gemini AI integration (env vars + request flow)
+- database connection + schema sync
+- dependency integrity
+
+Output:
+- SYSTEM STATUS (green / yellow / red per layer)
+- ACTIVE RISKS
+- UNTESTED COMPONENTS
+- LIKELY FAILURE POINTS
+
+────────────────────────
+PHASE 2 — FULL REQUEST PIPELINE TRACE
+────────────────────────
+Trace full lifecycle:
+
+Frontend → API → Backend → AI (Gemini) → DB → Response → Frontend
+
+Check:
+- data shape correctness at each step
+- missing fields or transformations
+- fallback engines or bypass logic
+- error handling paths
+
+Output:
+- request flow diagram (step-by-step)
+- latency bottlenecks
+- broken or bypassed stages
+
+────────────────────────
+PHASE 3 — ENVIRONMENT HARDENING AUDIT
+────────────────────────
+Check:
+- all required environment variables exist
+- no hardcoded secrets
+- Gemini integration fully externalized
+- DB connection stability
+- workflow restart safety (no duplication or drift)
+
+Output:
+- ENV HEALTH SCORE (0–100)
+- missing env vars
+- security risks
+
+────────────────────────
+PHASE 4 — ARCHITECTURE MAP
+────────────────────────
+Generate full system architecture:
+
+- frontend structure
+- backend structure
+- AI integration layer
+- database layer
+- workflow orchestration
+- API structure
+
+Then identify:
+- bottlenecks
+- redundancy
+- over-engineered components
+- missing abstractions
+
+Output:
+- architecture diagram (text form)
+- optimization opportunities
+
+────────────────────────
+PHASE 5 — PRODUCTIZATION REVIEW
+────────────────────────
+Convert system into SaaS blueprint:
+
+Define:
+- core product functionality
+- user journey flow
+- authentication model
+- scaling architecture
+- monetization entry points
+- MVP vs V2 split
+
+Output:
+- product vision
+- core modules
+- scaling plan
+
+────────────────────────
+PHASE 6 — AI LAYER OPTIMIZATION (GEMINI)
+────────────────────────
+Analyze AI integration:
+
+- prompt efficiency
+- token waste
+- redundant API calls
+- latency issues
+- caching opportunities
+- consistency of responses
+
+Output:
+- optimized AI pipeline
+- caching strategy
+- prompt compression strategy
+
+────────────────────────
+PHASE 7 — FINAL PRODUCTION HARDENING
+────────────────────────
+Perform final hardening check:
+
+- remove unstable fallback paths
+- ensure deterministic workflows
+- ensure no silent failure modes
+- ensure logging completeness
+- ensure restart safety
+
+Output:
+- production readiness score (0–100)
+- top 5 deployment risks
+- final stabilization recommendations
