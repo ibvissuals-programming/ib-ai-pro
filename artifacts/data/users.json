@@ -11,7 +11,7 @@
   {
     "id": "e66361c6-3db4-4309-af86-dd009485add3",
     "username": "ibaiceo",
-    "passwordHash": "eed319d222a3750f9da51a6a65dd4e92:fbd51d858da0396aecedc53733dd2a4d9f11a6fd10be183226fa0511f2cd94ae73def5001e0f78a84e6fb3db65d6478f2247034e010e9e4e73f051f6bdc75719",
+    "passwordHash": "d91e5f8665240c5123bfc5f34a38c284:1553859b10997514cbca66a84378b94fc1b1af64dd5870cae91661743d12cb9f4781b0556c239b608ef4a854d3e0b21a12ed46518ae2d477281c945a16f3b0d1",
     "role": "ceo",
     "credits": 40,
     "lastReset": 1778822777673,
@@ -268,5 +268,14 @@
     "credits": 5,
     "lastReset": 1779224016934,
     "createdAt": 1779224016934
+  },
+  {
+    "id": "04b979a9-f783-4da1-8a61-2813aaa886a4",
+    "username": "stabtest1",
+    "passwordHash": "f79c35e949a538d372071fdaeafa3bf6:da41fa56a578a1c61154e240265d39d56b28e971c75999d890db70dddfffa0d1cee00a91606b08c456463ac50e7e1d6116a7ec0ed17a44609d2d7aea8f2e9779",
+    "role": "free",
+    "credits": 4,
+    "lastReset": 1779248400151,
+    "createdAt": 1779248400151
   }
 ]

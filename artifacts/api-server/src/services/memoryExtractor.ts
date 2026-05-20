@@ -17,16 +17,19 @@
  */
 import { ai } from "@workspace/integrations-gemini-ai";
 import { logger } from "../lib/logger";
-import { setMemory } from "./memoryStore";
+import { setMemory, getUserMemoryMap } from "./memoryStore";
 import type { MemoryType, MemoryConfidence } from "./memoryStore";
 import type { ChatMessage } from "./llm";
 
 const EXTRACTOR_MODEL     = "gemini-2.5-flash";
 const MAX_CANDIDATES      = 5;
-const MIN_USER_CHARS      = 30;  // skip extraction for trivially short messages
+const MIN_LAST_MSG_CHARS  = 25;  // minimum chars in the LAST user message — skips "ok", "yes", "sure"
+const MIN_TOTAL_CHARS     = 40;  // minimum total user chars across the whole conversation
 const EXTRACTION_TURNS    = 3;   // analyse last N user+assistant pairs (6 messages)
 const VALID_TYPES         = new Set<MemoryType>(["preference", "project", "behavior", "goal"]);
-const VALID_CONFIDENCES   = new Set<MemoryConfidence>(["high", "medium", "low"]);
+// Only storable confidences — "low" is intentionally excluded so the set
+// doubles as a clear allowlist: anything not in here is discarded.
+const STORABLE_CONFIDENCES = new Set<MemoryConfidence>(["high", "medium"]);
 
 // ── Extraction prompt ─────────────────────────────────────────────────────────
 
@@ -120,26 +123,44 @@ function normaliseKey(raw: string): string {
  * Analyses the completed conversation turn and autonomously stores any
  * persistent facts about the user into their memory profile.
  *
+ * Skip guards (both must pass):
+ *   - Last user message must be >= MIN_LAST_MSG_CHARS (filters "ok", "yes", "sure")
+ *   - Total user content across all messages must be >= MIN_TOTAL_CHARS
+ *
+ * Key hint freshness:
+ *   The existingMemMap passed from the chat route was loaded at request start and
+ *   may be stale if previous async extractions have since written new entries.
+ *   We reload a fresh key list from the DB right before calling Gemini so the
+ *   dedup hint is always current. This is a cheap background SELECT.
+ *
  * @param userId         Authenticated user ID
  * @param messages       Full message array (including the just-completed assistant turn)
- * @param existingMemMap Current memory state — used for dedup key hints
+ * @param existingMemMap Snapshot from request start — used only as a fast-path
+ *                       skip check; fresh keys are always reloaded before extraction
  */
 export async function extractAndStoreMemory(
   userId:         string,
   messages:       ChatMessage[],
   existingMemMap: Record<string, string>,
 ): Promise<void> {
-  // Skip trivially short conversations — not enough signal
-  const userMessages   = messages.filter((m) => m.role === "user");
-  const totalUserChars = userMessages.reduce((sum, m) => sum + m.content.length, 0);
+  const userMessages = messages.filter((m) => m.role === "user");
+  if (userMessages.length < 1) return;
 
-  if (userMessages.length < 1 || totalUserChars < MIN_USER_CHARS) {
-    return;
-  }
+  // Guard 1 — last user message must be substantive (not "ok", "yes", "sure", "k", etc.)
+  const lastUserMsg = userMessages[userMessages.length - 1]!;
+  if (lastUserMsg.content.trim().length < MIN_LAST_MSG_CHARS) return;
+
+  // Guard 2 — total user content across conversation must meet minimum signal threshold
+  const totalUserChars = userMessages.reduce((sum, m) => sum + m.content.length, 0);
+  if (totalUserChars < MIN_TOTAL_CHARS) return;
 
   try {
-    const existingKeys = Object.keys(existingMemMap);
-    const prompt       = buildExtractionPrompt(messages, existingKeys);
+    // Reload fresh keys from DB — the passed-in map may be stale if a prior
+    // async extraction ran between this request's start and now.
+    const freshMemMap  = await getUserMemoryMap(userId);
+    const existingKeys = Object.keys(freshMemMap);
+
+    const prompt = buildExtractionPrompt(messages, existingKeys);
 
     const response = await ai.models.generateContent({
       model:    EXTRACTOR_MODEL,
@@ -181,8 +202,8 @@ export async function extractAndStoreMemory(
       const confidence = item.confidence as MemoryConfidence;
       const type       = item.type       as MemoryType;
 
-      // Only store high and medium confidence
-      if (!VALID_CONFIDENCES.has(confidence) || confidence === "low") continue;
+      // Allowlist check — only "high" and "medium" are storable
+      if (!STORABLE_CONFIDENCES.has(confidence)) continue;
       if (!VALID_TYPES.has(type)) continue;
 
       const key   = normaliseKey(String(item.key));
