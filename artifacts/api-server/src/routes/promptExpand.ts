@@ -20,6 +20,7 @@ import { z }               from "zod";
 import { expandPrompt, getCategoryMeta, PROMPT_CATEGORIES } from "../lib/promptExpander";
 import { policyEngine }    from "../middleware/policyEngine";
 import { sanitizeProviderError } from "../lib/providerGuard";
+import { buildStandardResponse } from "../lib/aiOrchestrator";
 import { logger }          from "../lib/logger";
 
 const router = Router();
@@ -53,7 +54,7 @@ router.post(
     try {
       const result = await expandPrompt(prompt, category);
 
-      res.json({
+      res.json(buildStandardResponse("prompt", {
         original:       result.original,
         expanded:       result.expanded,
         category:       result.category,
@@ -61,11 +62,11 @@ router.post(
         wordsBefore:    result.wordsBefore,
         wordsAfter:     result.wordsAfter,
         expansionRatio: result.expansionRatio,
-      });
+      }));
     } catch (err: unknown) {
       logger.error({ err }, "[promptExpand] expansion failed");
       const message = sanitizeProviderError(err, "Prompt expansion");
-      res.status(503).json({ error: message });
+      res.status(503).json({ success: false, mode: "prompt", error: message });
     }
   },
 );

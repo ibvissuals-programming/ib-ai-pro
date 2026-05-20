@@ -1,0 +1,155 @@
+PHASE 5 — PRODUCTIZATION + ORCHESTRATION LAYER (STABILITY FIRST)
+
+GOAL:
+Transform IB AI Studio from a feature-complete AI system into a stable, production-ready AI product platform with unified orchestration, predictable behavior, and consistent UX across all AI systems.
+
+DO NOT redesign architecture.
+DO NOT rewrite existing systems.
+DO NOT remove or refactor working pipelines.
+
+ONLY ADD orchestration + stability + UX consistency layers.
+
+────────────────────────────────────────
+
+1. UNIFIED AI ORCHESTRATION LAYER
+
+Create a lightweight orchestration layer that standardizes ALL AI operations:
+
+ACTIONS:
+- unify image, tts, video, prompt-expansion under one internal interface
+- normalize job creation format across all systems
+- ensure consistent:
+  - jobId format
+  - timestamps
+  - status states (queued, processing, completed, failed)
+- add a single internal helper:
+  createAIJob(type, payload, userId)
+
+REQUIREMENTS:
+- must NOT break existing routes
+- must wrap existing systems, not replace them
+
+────────────────────────────────────────
+
+2. RESPONSE STANDARDIZATION LAYER
+
+Ensure ALL AI endpoints return consistent response shape:
+
+STANDARD RESPONSE:
+{
+  success: boolean,
+  jobId?: string,
+  data?: any,
+  error?: string,
+  mode: "image" | "tts" | "video" | "prompt"
+}
+
+APPLY TO:
+- image generation
+- image editing
+- tts generation
+- video generation
+- prompt expansion
+
+NO breaking changes to frontend behavior.
+
+────────────────────────────────────────
+
+3. JOB STATE NORMALIZATION FIX
+
+Ensure all job types use identical lifecycle:
+
+queued → processing → completed → failed
+
+Fix any inconsistencies across:
+- image_jobs
+- tts_jobs
+- video_jobs
+
+Add a shared enum:
+AI_JOB_STATES
+
+────────────────────────────────────────
+
+4. SYSTEM-WIDE ERROR NORMALIZER
+
+Create a central error handler:
+
+REQUIREMENTS:
+- no stack traces returned to client
+- provider errors normalized into:
+  - "provider_unavailable"
+  - "timeout"
+  - "invalid_request"
+  - "internal_error"
+- consistent logging format:
+  [AI_ERROR][TYPE][SYSTEM]
+
+────────────────────────────────────────
+
+5. CROSS-SYSTEM JOB TRACKING (LIGHTWEIGHT)
+
+Add optional cross-reference tracking:
+
+- every job stores:
+  source: "image" | "tts" | "video"
+  parentJobId (optional)
+  sessionId (optional)
+
+DO NOT create heavy analytics — just structural linking.
+
+────────────────────────────────────────
+
+6. HEALTH ENDPOINT CONSOLIDATION (FINAL CLEANUP)
+
+Update /health to include:
+
+{
+  "status": "ok",
+  "boot": "success",
+  "systems": {
+    "image": { "ok": true },
+    "tts": { "ok": true },
+    "video": { "ok": true },
+    "prompt": { "ok": true }
+  },
+  "queue": { ... },
+  "storage": { ... },
+  "database": { ... }
+}
+
+No blocking checks allowed.
+
+────────────────────────────────────────
+
+7. STABILITY GUARD PASS
+
+Add final safety checks:
+
+- prevent duplicate job creation on retry
+- ensure idempotency in job creation
+- ensure provider failures never crash request thread
+- ensure queue never blocks API response
+
+────────────────────────────────────────
+
+VALIDATION REQUIRED (DO NOT SKIP)
+
+Run:
+- cold restart test
+- concurrent image + tts + prompt test
+- provider failure simulation
+- queue recovery test
+- /health validation
+
+────────────────────────────────────────
+
+SUCCESS CONDITION:
+
+IB AI Studio now behaves like a unified AI product platform:
+
+- consistent API behavior across all AI types
+- no structural changes to working systems
+- stable job orchestration layer
+- production-safe error handling
+- predictable system state across restarts

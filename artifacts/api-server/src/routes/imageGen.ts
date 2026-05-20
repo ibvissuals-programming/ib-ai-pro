@@ -34,6 +34,7 @@ import {
 import { imageQueue }  from "../services/imageQueue";
 import { recordUsage }  from "../lib/usageAnalytics";
 import { expandPrompt as expandPromptFn, PROMPT_CATEGORIES } from "../lib/promptExpander";
+import { buildStandardResponse, buildErrorResponse } from "../lib/aiOrchestrator";
 
 const router = Router();
 
@@ -139,9 +140,7 @@ router.post(
   async (req: Request, res: Response) => {
     const parsed = GenerateSchema.safeParse(req.body);
     if (!parsed.success) {
-      res
-        .status(400)
-        .json({ error: "Invalid request", details: parsed.error.flatten() });
+      res.status(400).json({ ...buildErrorResponse("image", "Invalid request"), details: parsed.error.flatten() });
       return;
     }
 
@@ -180,12 +179,12 @@ router.post(
         username: req.user?.username,
         ip: req.ip ?? undefined,
       });
-      res.json({
+      res.json(buildStandardResponse("image", {
         b64Image,
         status:         "success",
         promptExpanded: parsed.data.expandPrompt ?? false,
         originalPrompt: parsed.data.expandPrompt ? parsed.data.prompt : undefined,
-      });
+      }));
     } catch (err: unknown) {
       if (req.user?.userId) {
         recordUsage({ userId: req.user.userId, type: "failure" });
@@ -197,7 +196,7 @@ router.post(
       });
       logger.error({ err }, "[imageGen] generate failed");
       const message = toRouteError(err, "generate");
-      res.status(503).json({ error: message });
+      res.status(503).json({ success: false, mode: "image", error: message });
     }
   },
 );
@@ -223,9 +222,7 @@ router.post(
   async (req: Request, res: Response) => {
     const parsed = EditSchema.safeParse(req.body);
     if (!parsed.success) {
-      res
-        .status(400)
-        .json({ error: "Invalid request", details: parsed.error.flatten() });
+      res.status(400).json({ ...buildErrorResponse("image", "Invalid request"), details: parsed.error.flatten() });
       return;
     }
 
@@ -345,11 +342,11 @@ router.post(
         username: req.user?.username,
         ip: req.ip ?? undefined,
       });
-      res.json({
+      res.json(buildStandardResponse("image", {
         b64Image:               result.b64Image,
         status:                 "success",
         job:                    result.job,
-        mode:                   result.mode,
+        editMode:               result.mode,
         intensity:              result.intensity,
         qualityVerified:        result.qualityVerified,
         qualityIssues:          result.qualityIssues,
@@ -371,7 +368,7 @@ router.post(
           targetedRegions:    frae.targetedRegions,
           enhancementProfile: frae.enhancementProfile,
         },
-      });
+      }));
     } catch (err: unknown) {
       if (req.user?.userId) {
         recordUsage({ userId: req.user.userId, type: "failure" });
@@ -387,7 +384,7 @@ router.post(
         err instanceof Error && (err as Error & { statusCode?: number }).statusCode === 413
           ? 413
           : 503;
-      res.status(status).json({ error: message });
+      res.status(status).json({ success: false, mode: "image", error: message });
     }
   },
 );
@@ -404,7 +401,7 @@ router.post(
   async (req: Request, res: Response) => {
     const parsed = CinematicPromptSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+      res.status(400).json({ ...buildErrorResponse("image", "Invalid request"), details: parsed.error.flatten() });
       return;
     }
 

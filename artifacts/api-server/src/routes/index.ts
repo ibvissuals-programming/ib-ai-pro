@@ -7,7 +7,6 @@
 // ║  route that calls createChatStream() as a chat replacement.    ║
 // ╚══════════════════════════════════════════════════════════════════╝
 import { Router, type IRouter } from "express";
-import healthRouter from "./health";
 import authRouter from "./auth";
 import chatRouter from "./chat";
 import imageAnalysisRouter from "./imageAnalysis";
@@ -31,7 +30,6 @@ const router: IRouter = Router();
 // Update lastSeenAt for every request that carries a valid token
 router.use(trackActivity);
 
-router.use(healthRouter);
 router.use(systemRouter);
 router.use(authRouter);
 router.use(adminDashboardRouter);

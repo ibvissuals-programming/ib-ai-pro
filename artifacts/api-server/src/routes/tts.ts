@@ -23,6 +23,7 @@ import { policyEngine, deductRequestCredits, appendCreditHeaders } from "../midd
 import { addAuditEntry }       from "../lib/auditLog";
 import { recordUsage }         from "../lib/usageAnalytics";
 import { sanitizeProviderError } from "../lib/providerGuard";
+import { buildStandardResponse } from "../lib/aiOrchestrator";
 import { logger }              from "../lib/logger";
 
 const router = Router();
@@ -62,6 +63,7 @@ router.post(
       prompt:         text.slice(0, 200),
       expandedPrompt: "",
       userId,
+      source:         "tts",
     });
 
     advanceJob(job, "processing", `TTS started — voice: ${voiceStyle}`);
@@ -87,7 +89,7 @@ router.post(
         ip:       req.ip ?? undefined,
       });
 
-      res.json({
+      res.json(buildStandardResponse("tts", {
         jobId:     job.jobId,
         status:    "success",
         type:      "tts",
@@ -102,7 +104,7 @@ router.post(
         },
         createdAt: job.timestamp,
         job:       jobSummary(job),
-      });
+      }, job.jobId));
     } catch (err: unknown) {
       failJob(job, err instanceof Error ? err.message : String(err));
 
@@ -117,7 +119,7 @@ router.post(
 
       logger.error({ err, jobId: job.jobId }, "[tts] generation failed");
       const message = sanitizeProviderError(err, "Text-to-speech");
-      res.status(503).json({ error: message });
+      res.status(503).json({ success: false, mode: "tts", error: message });
     }
   },
 );

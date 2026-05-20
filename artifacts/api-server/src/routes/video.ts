@@ -26,6 +26,7 @@ import { policyEngine, deductRequestCredits, appendCreditHeaders } from "../midd
 import { addAuditEntry }       from "../lib/auditLog";
 import { recordUsage }         from "../lib/usageAnalytics";
 import { sanitizeProviderError } from "../lib/providerGuard";
+import { buildStandardResponse } from "../lib/aiOrchestrator";
 import { logger }              from "../lib/logger";
 
 const router = Router();
@@ -75,6 +76,7 @@ router.post(
       prompt:         prompt.slice(0, 200),
       expandedPrompt: "",
       userId,
+      source:         "video",
     });
 
     advanceJob(job, "processing", `Video job started — mode: ${mode}`);
@@ -112,20 +114,20 @@ router.post(
         ip:       req.ip ?? undefined,
       });
 
-      res.json({
+      res.json(buildStandardResponse("video", {
         jobId:     job.jobId,
         status:    result.status,
         type:      "video",
         resultUrl: result.videoUrl ?? null,
         metadata: {
-          mode,
+          videoMode:       mode,
           durationSeconds: result.durationSeconds ?? null,
           resolution:      result.resolution      ?? null,
           message:         result.message,
         },
         createdAt: job.timestamp,
         job:       jobSummary(job),
-      });
+      }, job.jobId));
     } catch (err: unknown) {
       failJob(job, err instanceof Error ? err.message : String(err));
 
@@ -135,7 +137,7 @@ router.post(
 
       logger.error({ err, jobId: job.jobId }, "[video] generation failed");
       const message = sanitizeProviderError(err, "Video generation");
-      res.status(503).json({ error: message });
+      res.status(503).json({ success: false, mode: "video", error: message });
     }
   },
 );

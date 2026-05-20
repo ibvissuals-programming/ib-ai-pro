@@ -112,11 +112,41 @@ router.get(["/health", "/healthz"], async (_req, res) => {
     objectStorageEnabled: isObjectStorageEnabled(),
   };
 
+  // ── AI Systems (synchronous — in-memory, non-blocking) ────────────────────
+  // Reports readiness of each AI subsystem without making any external calls.
+  let systemsDegraded = false;
+  try {
+    const aiSt     = getAiStatus();
+    const geminiOk = aiSt.geminiAvailable;
+    if (!geminiOk) systemsDegraded = true;
+    checks["systems"] = {
+      image:  { ok: geminiOk, description: "Image generation & editing pipeline" },
+      tts:    { ok: geminiOk, description: "Text-to-Speech — Gemini 2.0 Flash" },
+      video:  { ok: true,      description: "Image-to-Video — provider-ready infrastructure" },
+      prompt: { ok: geminiOk, description: "Smart Prompt Expansion — Gemini 2.5 Flash" },
+    };
+  } catch {
+    systemsDegraded = true;
+    checks["systems"] = {
+      image:  { ok: false },
+      tts:    { ok: false },
+      video:  { ok: false },
+      prompt: { ok: false },
+    };
+  }
+
+  const bootState = getBootState();
+  const bootField = bootState === "degraded" ? "degraded" : "success";
+
   res.json({
-    status:  degraded ? "degraded" : "ok",
-    uptime:  Math.floor(process.uptime()),
-    boot:    getBootState(),
-    mode:    "full",
+    status:   (degraded || systemsDegraded) ? "degraded" : "ok",
+    boot:     bootField,
+    uptime:   Math.floor(process.uptime()),
+    mode:     "full",
+    systems:  checks["systems"],
+    queue:    checks["queue"]    ?? { ok: false },
+    storage:  checks["storage"]  ?? { ok: false },
+    database: checks["postgres"] ?? { ok: true, note: "postgres not enabled" },
     checks,
   });
 });

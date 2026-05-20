@@ -64,6 +64,10 @@ export interface ImageJob {
   errorReason?:  string;
   timestamp:     number;
   statusHistory: StatusEvent[];
+  // Cross-system tracking (PHASE 5)
+  source?:       "image" | "tts" | "video" | "prompt";
+  parentJobId?:  string;
+  sessionId?:    string;
 }
 
 // ── Job store ──────────────────────────────────────────────────────────────────
@@ -151,6 +155,9 @@ export function createJob(params: {
   prompt:        string;
   expandedPrompt: string;
   userId?:       string;
+  source?:       "image" | "tts" | "video" | "prompt";
+  parentJobId?:  string;
+  sessionId?:    string;
 }): ImageJob {
   const jobId = generateJobId();
   const now   = Date.now();
@@ -173,6 +180,9 @@ export function createJob(params: {
     retryCount:     0,
     timestamp:      now,
     statusHistory:  [initialEvent],
+    source:         params.source,
+    parentJobId:    params.parentJobId,
+    sessionId:      params.sessionId,
   };
 
   jobs.set(jobId, job);
