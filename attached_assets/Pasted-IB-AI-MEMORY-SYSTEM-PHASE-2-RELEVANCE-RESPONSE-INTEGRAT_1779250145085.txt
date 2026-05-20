@@ -1,0 +1,163 @@
+IB AI — MEMORY SYSTEM PHASE 2
+RELEVANCE + RESPONSE INTEGRATION ENGINE (PRODUCTION)
+
+MISSION:
+Transform memory from passive storage into intelligent conversational context.
+
+The AI must:
+- retrieve only relevant memories
+- apply them naturally during responses
+- avoid robotic repetition
+- maintain Grok-like conversational flow
+- preserve response quality and speed
+
+==================================================
+PHASE 1 — RELEVANCE RETRIEVAL
+==================================================
+
+Build semantic relevance filtering before memory injection.
+
+CURRENT PROBLEM:
+All memories are injected equally.
+This dilutes context quality.
+
+GOAL:
+Only inject memories relevant to the current conversation.
+
+IMPLEMENT:
+
+1. memoryRetriever.ts (new service)
+
+Function:
+- input:
+  - current user message
+  - recent conversation turns
+  - stored memories
+
+- output:
+  - top relevant memory entries only
+
+Use:
+- keyword overlap
+- lightweight semantic scoring
+- recency weighting
+- type weighting
+
+Priority order:
+1. active project
+2. current goals
+3. behavioral preferences
+4. identity
+5. old narrative/history
+
+Hard cap:
+- max injected memories = 8
+- max memory chars = 2500
+
+==================================================
+PHASE 2 — MEMORY INJECTION REWRITE
+==================================================
+
+Rewrite buildMemoryBlock().
+
+NEW STRUCTURE:
+
+## User Context
+Use naturally.
+Do not explicitly mention unless directly relevant.
+Do not list memories unless user asks.
+
+Active Relevant Context:
+- ...
+
+Behavioral Guidance:
+- ...
+
+Current Projects:
+- ...
+
+Avoid:
+- robotic callbacks
+- “as you mentioned before”
+- unnecessary personalization
+
+==================================================
+PHASE 3 — STALE MEMORY REDUCTION
+==================================================
+
+Implement decay scoring.
+
+Rules:
+- old unused memories lose priority
+- repeated/recent memories gain priority
+- inactive narrative memories fade naturally
+
+Do NOT delete memories.
+Only reduce injection priority.
+
+==================================================
+PHASE 4 — CONVERSATION CONTINUITY
+==================================================
+
+Enable soft continuity.
+
+The AI should:
+- continue topics naturally
+- remember ongoing projects
+- maintain conversational rhythm
+- preserve emotional continuity
+
+BUT:
+- never force callbacks
+- never hallucinate continuity
+- never over-personalize
+
+==================================================
+PHASE 5 — OBSERVABILITY
+==================================================
+
+Add logs:
+
+[mem] retrieve:start
+[mem] retrieve:scored
+[mem] retrieve:selected
+[mem] inject:final_count
+[mem] inject:final_chars
+
+NO raw sensitive values in logs.
+
+==================================================
+PHASE 6 — PERFORMANCE RULES
+==================================================
+
+Requirements:
+- retrieval runs async + lightweight
+- no vector DB
+- no embeddings yet
+- no latency added to stream start
+- fallback safely on errors
+
+If retrieval fails:
+- continue chat normally
+- inject nothing
+- never break response flow
+
+==================================================
+FINAL GOAL
+==================================================
+
+Memory should feel:
+- invisible
+- intelligent
+- emotionally natural
+- context-aware
+- non-robotic
+
+Target feel:
+ChatGPT memory + Grok conversational continuity.
+
+Maintain:
+- production stability
+- low token usage
+- low latency
+- deterministic behavior

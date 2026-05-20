@@ -203,35 +203,69 @@ export async function clearUserMemory(userId: string): Promise<number> {
 // ── Prompt injection ──────────────────────────────────────────────────────────
 
 /**
- * Build a compact memory block suitable for injection into the system prompt.
+ * Build a structured memory block for injection into the system prompt.
+ *
+ * Accepts a pre-filtered, relevance-scored slice of MemoryEntry rows
+ * (produced by memoryRetriever). Entries are grouped into three sections
+ * based on type so the model knows how to weight each piece of context.
  *
  * Rules:
- *   - Returns null when no memories exist — no injection overhead.
- *   - Skips 'low' confidence entries defensively (they are never stored, but
- *     this guard ensures prompt quality if the DB ever holds legacy rows).
- *   - Caps at MEMORY_LIMITS.maxInjectedEntries (most recently updated) to
- *     prevent prompt bloat. Storage cap (50) is separate from injection cap (20).
- *   - Includes a usage note so the model applies context naturally, not robotically.
+ *   - Returns null when the entries array is empty — no injection overhead.
+ *   - Never includes raw key names in the model's context — values only, to
+ *     avoid the model mechanically echoing storage keys.
+ *   - Usage guidance steers the model to apply context naturally, never
+ *     robotically ("as you mentioned", "I remember you said", etc.).
  *
- * @param map  key→value record returned by getUserMemoryMap (newest-first order).
- * @returns    Formatted string to append to the system prompt, or null.
+ * Observability (no PII in log values):
+ *   [mem] inject:final_count — number of entries emitted
+ *   [mem] inject:final_chars — total characters in the injected block
+ *
+ * @param entries  Relevance-scored entries from memoryRetriever.
+ * @returns        Formatted string block, or null if nothing to inject.
  */
-export function buildMemoryBlock(map: Record<string, string>): string | null {
-  const entries = Object.entries(map);
+export function buildMemoryBlock(entries: MemoryEntry[]): string | null {
   if (entries.length === 0) return null;
 
-  // map is already ordered newest-first from getUserMemoryMap (DESC updatedAt).
-  // Take only the most recently updated entries up to the injection cap.
-  const capped = entries.slice(0, MEMORY_LIMITS.maxInjectedEntries);
+  // Partition by section —————————————————————————————————————————————————————
+  const projectTypes  = new Set<MemoryType>(["project"]);
+  const behaviorTypes = new Set<MemoryType>(["behavioral", "behavior", "goal"]);
+  // identity, narrative, relationship, preference → Active Relevant Context
 
-  const lines = capped.map(([k, v]) => `- ${k}: ${v}`).join("\n");
+  const projects:  string[] = [];
+  const behaviors: string[] = [];
+  const context:   string[] = [];
 
-  // Usage note steers the model to apply context naturally rather than
-  // robotically citing it ("As I recall you mentioned...").
-  return [
+  for (const e of entries) {
+    const line = `- ${e.value}`;
+    if (projectTypes.has(e.type))  projects.push(line);
+    else if (behaviorTypes.has(e.type)) behaviors.push(line);
+    else context.push(line);
+  }
+
+  // Build section blocks (only emit sections with content) ——————————————————
+  const sections: string[] = [];
+
+  if (projects.length  > 0) sections.push(`### Current Projects\n${projects.join("\n")}`);
+  if (behaviors.length > 0) sections.push(`### Behavioral Guidance\n${behaviors.join("\n")}`);
+  if (context.length   > 0) sections.push(`### Active Relevant Context\n${context.join("\n")}`);
+
+  const body = sections.join("\n\n");
+
+  const block = [
     "## User Context",
-    "Use the following known preferences and facts to personalize your responses naturally.",
-    "Do not explicitly cite or reference these entries unless directly relevant.",
-    lines,
+    "Apply this context naturally during the conversation.",
+    "Do not list or quote these entries unless the user explicitly asks.",
+    "Never say \"as you mentioned\" or \"I remember you said\" — incorporate context seamlessly.",
+    "Never force personalisation into responses where it is not relevant.",
+    "",
+    body,
   ].join("\n");
+
+  logger.debug(
+    { finalCount: entries.length, finalChars: block.length },
+    "[mem] inject:final_count",
+  );
+  logger.debug({ finalChars: block.length }, "[mem] inject:final_chars");
+
+  return block;
 }

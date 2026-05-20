@@ -14,7 +14,8 @@ import { logger } from "../lib/logger";
 import { policyEngine, deductRequestCredits } from "../middleware/policyEngine";
 import { CREDIT_COSTS } from "../lib/userStore";
 import { getOrCreateSession, saveMessagePair } from "../services/chatStore";
-import { getUserMemoryMap, buildMemoryBlock } from "../services/memoryStore";
+import { getUserMemory, buildMemoryBlock } from "../services/memoryStore";
+import { retrieveRelevantMemories } from "../services/memoryRetriever";
 import { extractAndStoreMemory } from "../services/memoryExtractor";
 
 const router = Router();
@@ -180,18 +181,21 @@ router.post(
       [...rawMessages].reverse().find((m) => m.role === "user")?.content ?? "";
     const sessionTitle = lastUserContent.slice(0, 60) || "New Chat";
 
-    // Load user memory for context injection — fire-and-forget safe fallback.
-    // Memory is secondary context only; conversation history remains primary.
-    // memMap is also retained so the extractor can use it for dedup key hints.
+    // Load user memory, score for relevance, and inject into system prompt.
+    // retrieval is synchronous + pure (no DB/Gemini); total overhead is one
+    // DB read (getUserMemory). Falls back to no injection on any error.
     let memoryBlock: string | null = null;
-    let memMap: Record<string, string> = {};
     if (req.user?.userId) {
       try {
-        memMap = await getUserMemoryMap(req.user.userId);
-        const memCount = Object.keys(memMap).length;
-        memoryBlock = buildMemoryBlock(memMap);
-        if (memCount > 0) {
-          logger.debug({ userId: req.user.userId, memCount }, "[chat] memory injected");
+        const allEntries   = await getUserMemory(req.user.userId);
+        const lastUserMsg  = lastUserContent;
+        const relevant     = retrieveRelevantMemories(lastUserMsg, rawMessages, allEntries);
+        memoryBlock        = buildMemoryBlock(relevant);
+        if (relevant.length > 0) {
+          logger.debug(
+            { userId: req.user.userId, injected: relevant.length, total: allEntries.length },
+            "[chat] memory injected",
+          );
         }
       } catch (memErr) {
         logger.warn({ err: memErr }, "[chat] memory load failed — continuing without it");
