@@ -1,0 +1,109 @@
+IB AI — POST-MIGRATION STABILITY VALIDATION SUITE (REPLIT ENVIRONMENT)
+
+MISSION:
+Verify that IB AI is fully functional after Replit import.
+Do NOT build features.
+Do NOT refactor architecture.
+Only validate runtime correctness and AI behavior consistency.
+
+==================================================
+TEST 1 — BASIC CHAT PIPELINE
+==================================================
+
+Input:
+"Hello, can you respond?"
+
+Expected:
+- Backend receives request
+- No crashes
+- AI returns a response
+- Frontend renders message correctly
+
+Check:
+- latency < 5s
+- no 500 errors
+- no empty response
+
+==================================================
+TEST 2 — MEMORY INJECTION CHECK
+==================================================
+
+Input:
+"I am building an AI SaaS app using React. I prefer short answers."
+
+Then follow-up:
+"What am I building?"
+
+Expected:
+- memory extraction stores facts
+- second response references:
+  → AI SaaS app
+  → React
+- response remains natural (no robotic listing)
+
+==================================================
+TEST 3 — MEMORY RELEVANCE FILTER
+==================================================
+
+Input:
+"Explain how to cook pasta"
+
+Expected:
+- NO irrelevant memory injection (e.g. SaaS, React)
+- memory system must NOT interfere with unrelated tasks
+- response should be clean and generic
+
+==================================================
+TEST 4 — CONTINUITY TEST
+==================================================
+
+Input sequence:
+1. "I'm working on a fintech startup called NovaPay"
+2. "We are targeting Africa remittance market"
+3. "Summarize my startup"
+
+Expected:
+- system remembers:
+  → NovaPay
+  → fintech
+  → Africa remittance
+- produces coherent summary WITHOUT repeating memory structure explicitly
+
+==================================================
+TEST 5 — SYSTEM STABILITY UNDER LOAD
+==================================================
+
+Send 5 rapid messages:
+
+- "ok"
+- "yes"
+- "build me a dashboard idea"
+- "why is AI useful"
+- "give me a startup idea"
+
+Expected:
+- no crashes
+- no memory spam
+- no duplicated responses
+- consistent latency
+- graceful handling of short inputs
+
+==================================================
+PASS CRITERIA
+==================================================
+
+System is considered STABLE ONLY IF:
+
+- all 5 tests pass
+- no memory leakage into unrelated prompts
+- no broken chat flow
+- no API failures
+- no frontend desync
+
+==================================================
+FINAL OUTPUT REQUIRED
+
+After tests, output:
+
+"IB AI STABILITY STATUS: PASS / FAIL"
+and list any observed issues.
