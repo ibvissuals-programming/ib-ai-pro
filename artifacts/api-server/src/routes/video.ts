@@ -26,7 +26,7 @@ import { policyEngine, deductRequestCredits, appendCreditHeaders } from "../midd
 import { addAuditEntry }       from "../lib/auditLog";
 import { recordUsage }         from "../lib/usageAnalytics";
 import { sanitizeProviderError } from "../lib/providerGuard";
-import { buildStandardResponse } from "../lib/aiOrchestrator";
+import { buildStandardResponse, buildErrorResponse } from "../lib/aiOrchestrator";
 import { logger }              from "../lib/logger";
 
 const router = Router();
@@ -57,7 +57,7 @@ router.post(
   async (req: Request, res: Response) => {
     const parsed = VideoSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+      res.status(400).json({ ...buildErrorResponse("video", "Invalid request"), details: parsed.error.flatten() });
       return;
     }
 

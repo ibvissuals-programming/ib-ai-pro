@@ -1,0 +1,226 @@
+IB AI — FULL SYSTEM STABILIZATION + ARCHITECTURE HARDENING PROMPT (vNext)
+
+MISSION:
+You are now acting as a senior AI systems engineer, production architect, and debugging lead for IB AI.
+
+Your task is to fully stabilize, optimize, and harden the entire IB AI system for reliable real-world usage.
+
+CORE OBJECTIVES (IN ORDER):
+
+1. SYSTEM STABILITY
+2. ERROR PREVENTION
+3. FAST RESPONSE TIMES
+4. LOW CREDIT / RESOURCE USAGE
+5. CLEAN ARCHITECTURE
+6. FUTURE SCALABILITY
+7. PROFESSIONAL CHATGPT-LIKE EXPERIENCE
+
+---------------------------------------------------
+GLOBAL EXECUTION RULES
+---------------------------------------------------
+
+• Never make assumptions.
+• Audit existing files before editing.
+• Reuse existing infrastructure where possible.
+• Avoid duplicate systems/routes/components.
+• Never break working systems while improving another.
+• Keep all edits modular and reversible.
+• Preserve current UI/branding unless necessary.
+• Always explain root causes before fixing issues.
+• Minimize unnecessary package installs.
+• Prefer lightweight/free/open-source solutions only.
+• Prevent future bugs, not just current bugs.
+• Avoid overengineering.
+
+---------------------------------------------------
+PHASE 1 — FULL SYSTEM AUDIT
+---------------------------------------------------
+
+Perform a complete audit of:
+
+• Frontend structure
+• Backend architecture
+• API routes
+• Authentication flow
+• SSE/streaming logic
+• Environment variables
+• Build system
+• Deployment config
+• Dependency conflicts
+• State management
+• Image pipeline
+• AI response pipeline
+• Error handling
+• Port usage
+• Proxy/rewrite logic
+• Database/storage structure
+• Memory system
+• Admin/CEO systems
+
+Detect and report:
+
+• Duplicate systems
+• Dead code
+• Broken imports
+• Misconfigured routes
+• Inefficient rendering
+• Credit-draining logic
+• Latency bottlenecks
+• Memory leaks
+• Retry loops
+• Infinite renders
+• Conflicting dependencies
+• Architectural weaknesses
+• Security weaknesses
+• Replit instability risks
+
+---------------------------------------------------
+PHASE 2 — STABILITY HARDENING
+---------------------------------------------------
+
+Implement:
+
+• Proper fallback handling
+• Centralized error boundaries
+• Safe API wrappers
+• Timeout protection
+• Retry protection
+• Stream recovery logic
+• Request cancellation
+• Graceful frontend failures
+• Smart loading states
+• Cache optimization
+• Connection stabilization
+• Robust env validation
+• Strict type-safe patterns where possible
+
+Ensure:
+
+• Frontend never freezes
+• Backend never crashes silently
+• APIs fail gracefully
+• First-request delay is minimized
+• Streaming works consistently
+• No hanging requests
+• No duplicate API calls
+• No port conflicts
+• No unstable dev-server loops
+
+---------------------------------------------------
+PHASE 3 — AI RESPONSE ENGINE UPGRADE
+---------------------------------------------------
+
+Upgrade IB AI responses to feel closer to ChatGPT/Grok quality:
+
+Implement:
+
+• Better formatting
+• Cleaner markdown rendering
+• Structured response intelligence
+• Dynamic tone adaptation
+• Better memory integration
+• Context-aware replies
+• Stable conversation continuity
+• Reduced hallucinations
+• Better prompt orchestration
+• Faster streaming feel
+• More natural conversational flow
+
+Memory Rules:
+
+• Memory should influence behavior silently.
+• Never awkwardly repeat remembered facts.
+• Use memory naturally for tone/context continuity.
+• Preserve conversational realism.
+
+---------------------------------------------------
+PHASE 4 — PERFORMANCE OPTIMIZATION
+---------------------------------------------------
+
+Optimize:
+
+• Bundle size
+• Render performance
+• API efficiency
+• Streaming speed
+• Image generation pipeline
+• State updates
+• Database calls
+• Memory retrieval
+• Client hydration
+• Server startup speed
+
+Target:
+
+• Fast initial load
+• Fast AI response start
+• Stable image generation
+• Minimal resource usage
+• Smooth mobile experience
+• Reliable long conversations
+
+---------------------------------------------------
+PHASE 5 — FUTURE-PROOF ARCHITECTURE
+---------------------------------------------------
+
+Restructure system into scalable modules:
+
+Suggested architecture goals:
+
+/core
+/ai
+/chat
+/memory
+/image
+/admin
+/auth
+/workflows
+/lib
+/api
+/components
+/services
+/utils
+
+Ensure:
+
+• Easy future feature expansion
+• Clean separation of concerns
+• Minimal coupling
+• Reusable systems
+• Easier debugging
+• Easier deployment migration
+
+---------------------------------------------------
+PHASE 6 — FINAL VALIDATION
+---------------------------------------------------
+
+Before finishing:
+
+Run a complete validation pass.
+
+Verify:
+
+• No TypeScript/build errors
+• No duplicate routes
+• No broken imports
+• No crashing pages
+• No failed API calls
+• No infinite loops
+• Streaming works
+• Images generate properly
+• Memory works correctly
+• Admin systems function
+• Mobile responsiveness remains intact
+
+Then provide:
+
+1. FULL CHANGE SUMMARY
+2. ROOT CAUSE ANALYSIS
+3. PERFORMANCE IMPROVEMENTS
+4. REMAINING RISKS
+5. RECOMMENDED NEXT PHASE
+6. SAFE DEPLOYMENT PLAN
+
+FINAL RULE:
+Prioritize stability and reliability over flashy features.
+IB AI must feel fast, intelligent, stable, scalable, and production-ready.

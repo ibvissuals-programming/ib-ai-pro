@@ -164,6 +164,8 @@ router.post(
 
     if (!parsed.success) {
       res.status(400).json({
+        success: false,
+        mode: "chat",
         error: "Invalid request",
         details: parsed.error.flatten(),
       });
@@ -252,6 +254,12 @@ router.post(
 
     res.write(": connected\n\n");
 
+    let clientDisconnected = false;
+    req.on("close", () => {
+      clientDisconnected = true;
+      logger.debug({ userId }, "[chat] client disconnected — aborting stream");
+    });
+
     let streamSucceeded = false;
     let accumContent = "";
     let resolvedSessionId: string | undefined;
@@ -263,6 +271,7 @@ router.post(
       const stream = await createChatStream(messages);
 
       for await (const chunk of stream) {
+        if (clientDisconnected) break;
         accumContent += chunk;
         res.write(sseEvent({ content: chunk }));
       }

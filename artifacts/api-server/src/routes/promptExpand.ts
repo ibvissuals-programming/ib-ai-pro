@@ -20,7 +20,7 @@ import { z }               from "zod";
 import { expandPrompt, getCategoryMeta, PROMPT_CATEGORIES } from "../lib/promptExpander";
 import { policyEngine }    from "../middleware/policyEngine";
 import { sanitizeProviderError } from "../lib/providerGuard";
-import { buildStandardResponse } from "../lib/aiOrchestrator";
+import { buildStandardResponse, buildErrorResponse } from "../lib/aiOrchestrator";
 import { logger }          from "../lib/logger";
 
 const router = Router();
@@ -40,7 +40,7 @@ router.post(
   async (req: Request, res: Response) => {
     const parsed = ExpandSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+      res.status(400).json({ ...buildErrorResponse("prompt", "Invalid request"), details: parsed.error.flatten() });
       return;
     }
 

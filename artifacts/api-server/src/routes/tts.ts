@@ -23,7 +23,7 @@ import { policyEngine, deductRequestCredits, appendCreditHeaders } from "../midd
 import { addAuditEntry }       from "../lib/auditLog";
 import { recordUsage }         from "../lib/usageAnalytics";
 import { sanitizeProviderError } from "../lib/providerGuard";
-import { buildStandardResponse } from "../lib/aiOrchestrator";
+import { buildStandardResponse, buildErrorResponse } from "../lib/aiOrchestrator";
 import { logger }              from "../lib/logger";
 
 const router = Router();
@@ -43,7 +43,7 @@ router.post(
   async (req: Request, res: Response) => {
     const parsed = TtsSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+      res.status(400).json({ ...buildErrorResponse("tts", "Invalid request"), details: parsed.error.flatten() });
       return;
     }
 
@@ -118,6 +118,21 @@ router.post(
       });
 
       logger.error({ err, jobId: job.jobId }, "[tts] generation failed");
+
+      // Detect infrastructure-level model unavailability — return 501 instead of 503
+      // so callers can distinguish "provider down" from "feature not supported here".
+      const errStr = String(err instanceof Error ? err.message : err);
+      const isModelUnsupported = errStr.includes("UNSUPPORTED_MODEL") || errStr.includes("not supported");
+      if (isModelUnsupported) {
+        res.status(501).json({
+          success: false,
+          mode: "tts",
+          error: "Text-to-speech is not available in this environment.",
+          code: "TTS_MODEL_UNSUPPORTED",
+        });
+        return;
+      }
+
       const message = sanitizeProviderError(err, "Text-to-speech");
       res.status(503).json({ success: false, mode: "tts", error: message });
     }

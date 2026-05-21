@@ -129,7 +129,7 @@ export async function generateSpeech(
 
   const response = await withProviderTimeout(
     () => (ai.models.generateContent as Function)({
-      model:    "gemini-2.5-flash-preview-tts",
+      model:    "gemini-2.0-flash",
       contents: [{ role: "user", parts: [{ text }] }],
       config: {
         responseModalities: ["AUDIO"],

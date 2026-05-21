@@ -77,13 +77,27 @@ function CodeBlock({ lang, code }) {
 
 // ─── Markdown renderer ────────────────────────────────────────────────────────
 
-function renderBold(line) {
-  return line.split(/(\*\*[^*]+\*\*)/g).map((part, j) => {
+function renderInline(line) {
+  return line.split(/(\*\*[^*]+\*\*|`[^`]+`|\*[^*\n]+\*)/g).map((part, j) => {
     if (part.startsWith('**') && part.endsWith('**')) {
       return (
         <strong key={j} className="font-semibold text-foreground">
           {part.slice(2, -2)}
         </strong>
+      );
+    }
+    if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
+      return (
+        <code key={j} className="px-1 py-0.5 rounded text-[11px] font-mono bg-white/10 text-primary/90 border border-white/10">
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+      return (
+        <em key={j} className="italic opacity-90">
+          {part.slice(1, -1)}
+        </em>
       );
     }
     return <span key={j}>{part}</span>;
@@ -126,7 +140,7 @@ function renderContent(text) {
       result.push(
         <div key={`ol-${i}`} className="flex gap-2 my-1">
           <span className="text-primary font-semibold shrink-0 min-w-[1.25rem] text-right">{num}.</span>
-          <span className="leading-relaxed">{renderBold(rest)}</span>
+          <span className="leading-relaxed">{renderInline(rest)}</span>
         </div>
       );
       i++;
@@ -138,9 +152,15 @@ function renderContent(text) {
       result.push(
         <div key={`li-${i}`} className="flex gap-2 my-1">
           <span className="text-primary/70 shrink-0 mt-1.5 w-1 h-1 rounded-full bg-primary/60 inline-block" />
-          <span className="leading-relaxed">{renderBold(rest)}</span>
+          <span className="leading-relaxed">{renderInline(rest)}</span>
         </div>
       );
+      i++;
+      continue;
+    }
+
+    if (trimmed === '---' || trimmed === '***') {
+      result.push(<hr key={`hr-${i}`} className="my-2 border-border/30" />);
       i++;
       continue;
     }
@@ -153,14 +173,14 @@ function renderContent(text) {
         : level === 2
         ? 'text-sm font-semibold text-foreground mt-2.5 mb-1'
         : 'text-sm font-medium text-foreground/80 mt-2 mb-0.5';
-      result.push(<p key={`h-${i}`} className={cls}>{renderBold(text)}</p>);
+      result.push(<p key={`h-${i}`} className={cls}>{renderInline(text)}</p>);
       i++;
       continue;
     }
 
     result.push(
       <p key={`p-${i}`} className="leading-relaxed my-0.5">
-        {renderBold(line)}
+        {renderInline(line)}
       </p>
     );
     i++;

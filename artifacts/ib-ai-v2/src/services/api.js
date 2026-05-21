@@ -20,10 +20,16 @@ const STREAM_TIMEOUT_MS = 55_000;
  * @returns {AsyncGenerator<string>}
  */
 export async function* streamChat(messages, options = {}) {
-  const { sessionId, onSessionId } = options;
+  const { sessionId, onSessionId, signal: externalSignal } = options;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), STREAM_TIMEOUT_MS);
+
+  // Link external signal (e.g. unmount cleanup) to our internal controller
+  if (externalSignal) {
+    if (externalSignal.aborted) { clearTimeout(timer); return; }
+    externalSignal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
 
   let response;
   try {

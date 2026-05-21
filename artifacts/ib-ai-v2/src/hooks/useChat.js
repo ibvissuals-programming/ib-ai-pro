@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { getChats, saveChats, createDefaultChats } from '../utils/storage';
 import { streamChat } from '../services/api';
 import { analyzeImage } from '../services/imageApi';
@@ -62,6 +62,7 @@ function classifyImageError(err) {
 export function useChat(username, { onCreditExhausted } = {}) {
   const [chatData, setChatData] = useState(null);
   const [isTyping, setIsTyping] = useState(false);
+  const streamAbortRef = useRef(null);
 
   useEffect(() => {
     if (!username) return;
@@ -117,6 +118,10 @@ export function useChat(username, { onCreditExhausted } = {}) {
         });
     }
   }, [username]);
+
+  useEffect(() => {
+    return () => { streamAbortRef.current?.abort(); };
+  }, []);
 
   const persist = useCallback((data) => {
     saveChats(username, data);
@@ -183,6 +188,12 @@ export function useChat(username, { onCreditExhausted } = {}) {
   const sendMessage = useCallback(async (text) => {
     if (!chatData || !activeChatId) return;
 
+    const streamController = new AbortController();
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = streamController;
+    let wasAborted = false;
+    streamController.signal.addEventListener('abort', () => { wasAborted = true; }, { once: true });
+
     const userMsg = {
       id: Date.now(),
       role: 'user',
@@ -247,6 +258,7 @@ export function useChat(username, { onCreditExhausted } = {}) {
       for await (const chunk of streamChat(contextMessages, {
         sessionId:   chatSessionId,
         onSessionId: (id) => { resolvedSessionId = id; },
+        signal:      streamController.signal,
       })) {
         finalContent += chunk;
         setChatData(buildState(finalContent));
@@ -255,31 +267,33 @@ export function useChat(username, { onCreditExhausted } = {}) {
         throw new Error('Empty response from AI');
       }
     } catch (err) {
-      console.error('[IB AI Assistant] AI request failed:', err.message);
-      finalContent = classifyStreamError(err);
-    } finally {
-      try {
-        // Include the resolved sessionId in the persisted chat metadata so
-        // subsequent sends can append to the same server session.
-        const finalChatState = {
-          ...withUserMsg,
-          chats: {
-            ...withUserMsg.chats,
-            [activeChatId]: {
-              ...withUserMsg.chats[activeChatId],
-              sessionId: resolvedSessionId,
-              messages: [
-                ...updatedMessages,
-                { id: aiMsgId, role: 'assistant', content: finalContent, timestamp },
-              ],
-            },
-          },
-        };
-        persist(finalChatState);
-      } catch (persistErr) {
-        console.error('[IB AI Assistant] Failed to persist message state:', persistErr);
+      if (!wasAborted) {
+        console.error('[IB AI Assistant] AI request failed:', err.message);
+        finalContent = classifyStreamError(err);
       }
-      setIsTyping(false);
+    } finally {
+      if (!wasAborted) {
+        try {
+          const finalChatState = {
+            ...withUserMsg,
+            chats: {
+              ...withUserMsg.chats,
+              [activeChatId]: {
+                ...withUserMsg.chats[activeChatId],
+                sessionId: resolvedSessionId,
+                messages: [
+                  ...updatedMessages,
+                  { id: aiMsgId, role: 'assistant', content: finalContent, timestamp },
+                ],
+              },
+            },
+          };
+          persist(finalChatState);
+        } catch (persistErr) {
+          console.error('[IB AI Assistant] Failed to persist message state:', persistErr);
+        }
+        setIsTyping(false);
+      }
     }
   }, [chatData, activeChatId, persist]);
 
