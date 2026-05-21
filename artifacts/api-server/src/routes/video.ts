@@ -37,7 +37,7 @@ const MAX_IMAGE_B64 = 14_000_000;
 const VideoSchema = z.object({
   image:  z.string().min(10, "Image is required").max(MAX_IMAGE_B64, "Image too large"),
   prompt: z.string().min(1, "Prompt is required").max(500, "Prompt too long"),
-  mode:   z.enum(VIDEO_MODES).default("cinematic_motion"),
+  mode:   z.enum(VIDEO_MODES).default("subtle_animation"),
 });
 
 // ── POST /api/video/generate ──────────────────────────────────────────────────

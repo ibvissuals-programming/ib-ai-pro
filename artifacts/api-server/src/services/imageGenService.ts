@@ -488,10 +488,11 @@ export function detectEditMode(prompt: string): EditMode {
   }
 
   // Standard priority resolution when creative has not self-qualified.
-  // Default to portrait_safe on zero score (safest identity-preserving fallback).
+  // Default to "polish" on zero score — matches production spec UNCERTAIN_FALLBACK.
+  // polish and portrait_safe share the same contract; "polish" is the spec-canonical label.
   // Priority on tie: portrait_safe > style_transfer > cinematic > creative
   const max = Math.max(scores.portrait_safe, scores.cinematic, scores.style_transfer, scores.creative);
-  if (max === 0)                             return "portrait_safe";
+  if (max === 0)                             return "polish";
   if (scores.portrait_safe  === max)         return "portrait_safe";
   if (scores.style_transfer === max)         return "style_transfer";
   if (scores.cinematic      === max)         return "cinematic";
