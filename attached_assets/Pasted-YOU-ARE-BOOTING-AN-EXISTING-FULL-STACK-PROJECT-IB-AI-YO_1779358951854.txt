@@ -1,0 +1,188 @@
+YOU ARE BOOTING AN EXISTING FULL-STACK PROJECT (IB AI).
+
+YOUR ONLY GOAL IS STABILITY FIRST.
+
+DO NOT ADD NEW FEATURES.
+DO NOT REFACTOR ARCHITECTURE.
+DO NOT “IMPROVE” SYSTEMS.
+DO NOT CREATE NEW WORKFLOWS.
+
+You must strictly perform a deterministic stabilization pass.
+
+------------------------------------------------------------
+PHASE 1 — IMPORT STABILITY LOCK
+------------------------------------------------------------
+
+1. Detect if this is a fresh import OR partial restore.
+2. DO NOT regenerate schema unless missing.
+3. DO NOT reinstall packages unless missing node_modules.
+4. DO NOT overwrite existing environment variables.
+
+Run ONLY:
+- dependency install check
+- DB connection check
+- schema existence check
+
+If DB exists → DO NOTHING.
+
+------------------------------------------------------------
+PHASE 2 — AUTH SYSTEM FIX (CRITICAL)
+------------------------------------------------------------
+
+Fix login instability:
+
+A. Ensure ONE consistent auth flow:
+- frontend expects JSON ONLY responses
+- backend MUST NEVER return HTML or mixed content
+
+B. Fix "Invalid server response (unexpected content type)":
+- enforce Content-Type: application/json on ALL auth routes
+- ensure error responses also return JSON
+
+C. Fix login/session loop:
+- verify JWT signing secret is consistent across restarts
+- ensure cookie/session is not being overwritten on refresh
+- ensure auth middleware does NOT redirect API routes
+
+D. CEO account bootstrap:
+- if CEO_PASSWORD exists → use it
+- if missing → auto-generate ONCE and log it
+- NEVER regenerate on restart
+- NEVER invalidate existing CEO user
+
+E. Recovery key:
+- must NOT be required for login
+- only used for reset endpoint (optional feature gate)
+- must not block authentication flow
+
+------------------------------------------------------------
+PHASE 3 — GEMINI PROVIDER FIX
+------------------------------------------------------------
+
+Fix AI request rejection:
+
+1. Ensure GEMINI_API_KEY is:
+- loaded once at startup
+- not overwritten by agent
+- not re-requested after boot
+
+2. If Gemini fails:
+- fallback MUST be silent (no UI error)
+- return structured JSON error ONLY internally
+
+3. NEVER return:
+- "Request rejected by AI service"
+- raw provider errors to frontend
+
+Instead:
+{
+  success: false,
+  error: "provider_unavailable",
+  fallback: "safe_response"
+}
+
+------------------------------------------------------------
+PHASE 4 — VIDEO (VEO 2) FIX
+------------------------------------------------------------
+
+Fix current bug:
+"Video generates → then shows No Access"
+
+Rules:
+
+1. If video generation succeeds:
+- job must be marked COMPLETE BEFORE access check
+- access control must NOT revalidate after render
+
+2. Remove double validation:
+- DO NOT re-check API permissions on serve endpoint
+- ONLY check at generation time
+
+3. Ensure:
+- job status = completed → always downloadable
+- no second permission gate in frontend
+
+------------------------------------------------------------
+PHASE 5 — AUTH SESSION STABILITY
+------------------------------------------------------------
+
+Fix logout / re-login issues:
+
+1. Ensure:
+- token persists across refresh
+- cookie settings: httpOnly, sameSite: lax
+
+2. Fix:
+- frontend auth context must NOT reset on API retry failure
+- backend must NOT clear session on provider failure
+
+3. Ensure:
+- login failure ≠ logout event
+- API failure ≠ session invalidation
+
+------------------------------------------------------------
+PHASE 6 — RESPONSE FORMAT LOCK
+------------------------------------------------------------
+
+ALL API routes must follow:
+
+SUCCESS:
+{ success: true, data: {...} }
+
+ERROR:
+{ success: false, error: "code", message: "safe message" }
+
+NEVER:
+- return HTML
+- return plain text errors
+- return provider stack traces
+- return mixed content types
+
+------------------------------------------------------------
+PHASE 7 — VEO “NO ACCESS” FIX
+------------------------------------------------------------
+
+If Veo access is missing:
+
+DO NOT:
+- let UI proceed to “processing complete”
+- then fail at download stage
+
+INSTEAD:
+- fail EARLY at generation stage
+- return:
+  {
+    success: false,
+    error: "veo_not_enabled",
+    message: "Video generation requires enabled API access"
+  }
+
+Frontend must display this immediately.
+
+------------------------------------------------------------
+PHASE 8 — SAFE FALLBACK MODE
+------------------------------------------------------------
+
+If ANY provider fails:
+- system MUST remain functional
+- UI MUST NOT crash or logout user
+- show fallback UI states instead of errors
+
+------------------------------------------------------------
+FINAL RULE
+------------------------------------------------------------
+
+You are NOT allowed to:
+- add new features
+- redesign UI
+- restructure backend
+- modify workflows beyond fixing stability
+
+You are ONLY allowed to:
+- fix auth
+- fix API response consistency
+- fix provider handling
+- fix video access gating
+- fix session persistence
+
+END.
