@@ -1,0 +1,126 @@
+IB AI — UI STABILITY HARDENING + PREMIUM GLASS BRAND IDENTITY SYSTEM UPGRADE (SINGLE PASS)
+
+MISSION:
+Upgrade IB AI frontend into a visually premium, stable, production-grade interface AND redesign the logo into a glassmorphism-based brand mark with embedded “IB AI” typography.
+
+PRIMARY RULE:
+Do NOT touch backend logic, API routes, or AI provider systems. Frontend + branding only.
+
+---------------------------------------------------
+PHASE 1 — UI SHAKE REGRESSION PREVENTION AUDIT
+---------------------------------------------------
+
+Scan entire frontend for:
+
+1. Layout shift sources
+   - height: auto animations
+   - conditional rendering that changes DOM height
+   - mount/unmount panel swaps
+   - framer-motion layout inconsistencies
+
+2. State instability patterns
+   - multiple setState calls per interaction
+   - async → UI flicker sequences
+   - uncontrolled loading/result toggles
+
+3. Animation conflicts
+   - overlapping transitions
+   - transform + height animation conflicts
+   - nested motion.div layout thrashing
+
+Output:
+- list of remaining UI instability risks
+- files + line references
+
+---------------------------------------------------
+PHASE 2 — GLOBAL UI STABILITY PATTERN INTRODUCTION
+---------------------------------------------------
+
+Implement a consistent UI stability system:
+
+RULES:
+- All expandable panels must use `layout` animation ONLY (no height:auto transitions)
+- All async UI updates must use single unified state object per component
+- No UI element may shrink/grow without animated layout interpolation
+- No conditional rendering that changes container height abruptly
+- No unintentional remounting of UI panels during async updates
+
+Apply pattern to:
+- AI Director panel
+- Image Tools panel
+- Chat input panels
+
+---------------------------------------------------
+PHASE 3 — PREMIUM GLASS LOGO SYSTEM REDESIGN (CORE FOCUS)
+
+GOAL:
+Design a modern SaaS-grade logo system with GLASSMORPHISM aesthetic and embedded typography.
+
+The logo MUST:
+- prominently include the text: "IB AI"
+- integrate text INTO the logo mark (not separate label)
+- feel premium, minimal, and futuristic
+- use glass/frosted material style (blur, transparency, light refraction)
+- be scalable (favicon → header → full dashboard)
+- avoid generic AI grid/XO or node network designs
+
+Generate 3 logo concepts:
+
+Concept A — “Glass Neural Core”
+- central translucent glass sphere or core
+- subtle internal energy glow
+- “IB AI” engraved or floating inside the glass surface
+- soft refraction edges, premium blur layers
+- futuristic Apple/visionOS-inspired aesthetic
+
+Concept B — “Glass Monolith Mark”
+- vertical geometric monolith or pillar
+- frosted glass material with internal light gradient
+- “IB AI” embedded horizontally or carved into surface
+- strong SaaS enterprise identity (Stripe-level minimalism)
+
+Concept C — “Infinity Glass Pulse”
+- infinity loop constructed from glass ribbons
+- subtle internal pulse/wave energy
+- “IB AI” integrated into one curve of the loop
+- feels alive, intelligent, continuous system
+
+For each concept define:
+- visual structure description
+- glass material behavior (blur, transparency, highlights)
+- lighting direction rules
+- color palette (hex + opacity values)
+- typography integration style (engraved, floating, etched, embedded glow)
+- favicon version
+- dark mode adaptation
+
+---------------------------------------------------
+PHASE 4 — IMPLEMENTATION (SELECT BEST CONCEPT)
+
+Select ONE strongest concept and implement:
+
+- React SVG-based logo component (NO images)
+- glassmorphism styling using CSS (backdrop-blur, rgba, gradients)
+- dark + light mode variants
+- responsive scaling rules (favicon → header → full size)
+- header integration without layout shift
+- ensure logo loads instantly with no flicker
+
+CRITICAL:
+- No layout shift on load
+- No re-render flicker
+- No animation conflicts with UI system
+
+---------------------------------------------------
+PHASE 5 — FINAL SYSTEM OUTPUT
+
+Return:
+- UI stability audit summary
+- confirmed fixed instability points
+- chosen glass logo concept
+- implemented React SVG + CSS system
+- brand identity rules (mini design system)
+- risk rating (before vs after)
+
+FINAL RULE:
+This must result in a production-grade SaaS identity: stable UI + premium glass branding system with embedded “IB AI” typography.

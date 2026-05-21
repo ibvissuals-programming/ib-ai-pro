@@ -1,18 +1,31 @@
 /**
  * IbLogo — IB AI Studio Lab brand logo system.
  *
- * Variants:
- *   mark      — SVG icon only (default size 32)
- *   wordmark  — icon + stacked "IB AI / Studio Lab" (login, splash)
- *   nav       — icon + inline "IB AI Studio Lab" (navbars, sidebars)
- *   compact   — icon + "IB AI" only (tight spaces)
+ * Glass Monolith Mark — Concept B
+ *   A rounded glass slab with frosted highlight, gradient border (simulates
+ *   light refraction), inner blue radial glow, and "IB / AI" embedded
+ *   typography. No images — pure SVG gradients.
  *
- * The mark: 3×3 neural grid — 4 active corner nodes + 1 bright center node,
- * 4 dim edge nodes, faint connecting grid lines.
- * Communicates: structured intelligence, control system.
+ * Variants:
+ *   mark      — SVG glass mark only (default size 32)
+ *   wordmark  — mark + stacked "IB AI / Studio Lab" (login, splash)
+ *   nav       — mark + inline "IB AI Studio Lab" (navbars, sidebars)
+ *   compact   — mark + "IB AI" only (tight spaces)
+ *
+ * All gradient IDs are instance-unique via a static counter to avoid
+ * SVG ID collisions when multiple instances render on the same page.
  */
 
+import { useId } from 'react';
+
 function IbMark({ size = 32 }) {
+  const uid = useId().replace(/:/g, '');
+  const bgId      = `ibm-bg-${uid}`;
+  const glowId    = `ibm-glow-${uid}`;
+  const sheenId   = `ibm-sh-${uid}`;
+  const borderId  = `ibm-bd-${uid}`;
+  const clipId    = `ibm-cl-${uid}`;
+
   return (
     <svg
       width={size}
@@ -22,28 +35,86 @@ function IbMark({ size = 32 }) {
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
     >
-      {/* Grid lines */}
-      <line x1="7" y1="7"  x2="25" y2="7"  stroke="#3b82f6" strokeWidth="0.5" opacity="0.28"/>
-      <line x1="7" y1="16" x2="25" y2="16" stroke="#3b82f6" strokeWidth="0.4" opacity="0.16"/>
-      <line x1="7" y1="25" x2="25" y2="25" stroke="#3b82f6" strokeWidth="0.5" opacity="0.28"/>
-      <line x1="7"  y1="7"  x2="7"  y2="25" stroke="#3b82f6" strokeWidth="0.5" opacity="0.28"/>
-      <line x1="16" y1="7"  x2="16" y2="25" stroke="#3b82f6" strokeWidth="0.4" opacity="0.16"/>
-      <line x1="25" y1="7"  x2="25" y2="25" stroke="#3b82f6" strokeWidth="0.5" opacity="0.28"/>
+      <defs>
+        {/* Dark glass base — subtle blue tint */}
+        <linearGradient id={bgId} x1="3" y1="3" x2="29" y2="29" gradientUnits="userSpaceOnUse">
+          <stop offset="0%"   stopColor="#18223e"/>
+          <stop offset="100%" stopColor="#0c1222"/>
+        </linearGradient>
 
-      {/* Dim mid-edge nodes */}
-      <rect x="13.5" y="4.5"  width="5" height="5" rx="1.2" fill="#3b82f6" opacity="0.24"/>
-      <rect x="4.5"  y="13.5" width="5" height="5" rx="1.2" fill="#3b82f6" opacity="0.24"/>
-      <rect x="22.5" y="13.5" width="5" height="5" rx="1.2" fill="#3b82f6" opacity="0.24"/>
-      <rect x="13.5" y="22.5" width="5" height="5" rx="1.2" fill="#3b82f6" opacity="0.24"/>
+        {/* Inner blue radial glow — centre-top */}
+        <radialGradient id={glowId} cx="50%" cy="32%" r="58%">
+          <stop offset="0%"   stopColor="#3b82f6" stopOpacity="0.20"/>
+          <stop offset="100%" stopColor="#3b82f6" stopOpacity="0"/>
+        </radialGradient>
 
-      {/* Active corner nodes */}
-      <rect x="4.5"  y="4.5"  width="5" height="5" rx="1.2" fill="#3b82f6"/>
-      <rect x="22.5" y="4.5"  width="5" height="5" rx="1.2" fill="#3b82f6"/>
-      <rect x="4.5"  y="22.5" width="5" height="5" rx="1.2" fill="#3b82f6"/>
-      <rect x="22.5" y="22.5" width="5" height="5" rx="1.2" fill="#3b82f6"/>
+        {/* Frosted glass sheen — white fade, top only */}
+        <linearGradient id={sheenId} x1="16" y1="2.5" x2="16" y2="15" gradientUnits="userSpaceOnUse">
+          <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.20"/>
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0"/>
+        </linearGradient>
 
-      {/* Center node — brightest, signature node */}
-      <rect x="13.5" y="13.5" width="5" height="5" rx="1.2" fill="#60a5fa"/>
+        {/* Glass border — light refraction (bright top-left → dim bottom-right) */}
+        <linearGradient id={borderId} x1="3" y1="3" x2="29" y2="29" gradientUnits="userSpaceOnUse">
+          <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.55"/>
+          <stop offset="40%"  stopColor="#60a5fa" stopOpacity="0.35"/>
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0.06"/>
+        </linearGradient>
+
+        {/* Clip mask — top half of the glass slab for sheen layer */}
+        <clipPath id={clipId}>
+          <rect x="0" y="0" width="32" height="14.5"/>
+        </clipPath>
+      </defs>
+
+      {/* Base glass fill */}
+      <rect x="2.5" y="2.5" width="27" height="27" rx="6.5" fill={`url(#${bgId})`}/>
+
+      {/* Inner blue glow */}
+      <rect x="2.5" y="2.5" width="27" height="27" rx="6.5" fill={`url(#${glowId})`}/>
+
+      {/* Frosted sheen — top portion only */}
+      <g clipPath={`url(#${clipId})`}>
+        <rect x="2.5" y="2.5" width="27" height="27" rx="6.5" fill={`url(#${sheenId})`}/>
+      </g>
+
+      {/* Glass border — gradient stroke */}
+      <rect
+        x="2.5" y="2.5" width="27" height="27" rx="6.5"
+        stroke={`url(#${borderId})`}
+        strokeWidth="0.85"
+      />
+
+      {/* Embedded typography: "IB" white / "AI" blue */}
+      <text
+        x="16" y="12"
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fill="#ffffff"
+        fontFamily="Inter,system-ui,sans-serif"
+        fontWeight="800"
+        fontSize="9"
+        letterSpacing="-0.4"
+      >IB</text>
+
+      <text
+        x="16" y="21.5"
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fill="#60a5fa"
+        fontFamily="Inter,system-ui,sans-serif"
+        fontWeight="800"
+        fontSize="9"
+        letterSpacing="-0.4"
+      >AI</text>
+
+      {/* Thin separator line between IB and AI */}
+      <line
+        x1="9" y1="16.5" x2="23" y2="16.5"
+        stroke="#60a5fa"
+        strokeWidth="0.5"
+        strokeOpacity="0.25"
+      />
     </svg>
   );
 }
@@ -83,7 +154,10 @@ export function IbLogo({ variant = 'wordmark', size = 32, className = '' }) {
     return (
       <div className={`inline-flex items-center gap-2 ${className}`}>
         <IbMark size={24} />
-        <span className="text-sm font-semibold tracking-tight text-foreground" style={{ fontFamily: 'Inter, sans-serif', letterSpacing: '-0.02em' }}>
+        <span
+          className="text-sm font-semibold tracking-tight text-foreground"
+          style={{ fontFamily: 'Inter, sans-serif', letterSpacing: '-0.02em' }}
+        >
           IB <span className="text-primary">AI</span>{' '}
           <span className="font-normal text-muted-foreground">Studio Lab</span>
         </span>
@@ -95,7 +169,10 @@ export function IbLogo({ variant = 'wordmark', size = 32, className = '' }) {
     return (
       <div className={`inline-flex items-center gap-2 ${className}`}>
         <IbMark size={22} />
-        <span className="text-sm font-semibold tracking-tight text-foreground" style={{ fontFamily: 'Inter, sans-serif', letterSpacing: '-0.02em' }}>
+        <span
+          className="text-sm font-semibold tracking-tight text-foreground"
+          style={{ fontFamily: 'Inter, sans-serif', letterSpacing: '-0.02em' }}
+        >
           IB <span className="text-primary">AI</span>
         </span>
       </div>
