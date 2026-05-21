@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useMemo } from 'react';
+import { Clock } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { useAuth } from '../hooks/useAuth';
 import { useChat } from '../hooks/useChat';
@@ -12,6 +13,25 @@ import { detectMode } from '../services/aiEngine';
 
 const SWIPE_EDGE_PX = 24;   // touch must start within this many px from left edge
 const SWIPE_MIN_DX = 60;    // must swipe at least this far right to open
+
+function RateLimitBadge({ remaining, resetAt }) {
+  const secLeft = Math.max(0, Math.ceil((resetAt * 1000 - Date.now()) / 1000));
+  const isBlocked = remaining === 0;
+  return (
+    <div className="px-4 pb-1">
+      <span className={`inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full border ${
+        isBlocked
+          ? 'text-rose-400 bg-rose-500/10 border-rose-400/20'
+          : 'text-amber-400 bg-amber-500/10 border-amber-400/20'
+      }`}>
+        <Clock size={9} />
+        {isBlocked
+          ? `Rate limited — resets in ${secLeft}s`
+          : `${remaining} message${remaining === 1 ? '' : 's'} left this minute`}
+      </span>
+    </div>
+  );
+}
 
 export default function ChatApp() {
   const [, setLocation] = useLocation();
@@ -27,6 +47,7 @@ export default function ChatApp() {
     activeChatId,
     messages,
     isTyping,
+    rateLimitState,
     sendMessage,
     sendImageAnalysis,
     sendImageEdit,
@@ -130,6 +151,10 @@ export default function ChatApp() {
         />
 
         <ChatWindow key={activeChatId} messages={messages} isTyping={isTyping} />
+
+        {rateLimitState && rateLimitState.remaining <= 5 && (
+          <RateLimitBadge remaining={rateLimitState.remaining} resetAt={rateLimitState.resetAt} />
+        )}
 
         <InputBox
           onSend={sendMessage}

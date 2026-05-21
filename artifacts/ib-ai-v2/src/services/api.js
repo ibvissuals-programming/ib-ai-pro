@@ -20,7 +20,7 @@ const STREAM_TIMEOUT_MS = 55_000;
  * @returns {AsyncGenerator<string>}
  */
 export async function* streamChat(messages, options = {}) {
-  const { sessionId, onSessionId, signal: externalSignal } = options;
+  const { sessionId, onSessionId, signal: externalSignal, onRateLimit } = options;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), STREAM_TIMEOUT_MS);
@@ -57,6 +57,14 @@ export async function* streamChat(messages, options = {}) {
     if (response.status === 401) throw new Error('UNAUTHENTICATED');
     if (response.status === 402) throw new Error('CREDITS_EXHAUSTED');
     throw new Error(`API error ${response.status}: ${body}`);
+  }
+
+  // Extract rate-limit headers while we still have the response object
+  const rlLimit     = response.headers.get('X-RateLimit-Limit');
+  const rlRemaining = response.headers.get('X-RateLimit-Remaining');
+  const rlReset     = response.headers.get('X-RateLimit-Reset');
+  if (onRateLimit && rlLimit && rlRemaining && rlReset) {
+    onRateLimit(parseInt(rlLimit, 10), parseInt(rlRemaining, 10), parseInt(rlReset, 10));
   }
 
   const reader = response.body.getReader();

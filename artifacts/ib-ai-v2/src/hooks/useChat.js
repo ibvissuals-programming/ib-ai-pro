@@ -68,6 +68,7 @@ function classifyImageError(err) {
 export function useChat(username, { onCreditExhausted } = {}) {
   const [chatData, setChatData] = useState(null);
   const [isTyping, setIsTyping] = useState(false);
+  const [rateLimitState, setRateLimitState] = useState(null);
   const streamAbortRef = useRef(null);
 
   useEffect(() => {
@@ -265,6 +266,9 @@ export function useChat(username, { onCreditExhausted } = {}) {
         sessionId:   chatSessionId,
         onSessionId: (id) => { resolvedSessionId = id; },
         signal:      streamController.signal,
+        onRateLimit: (limit, remaining, resetAt) => {
+          setRateLimitState({ limit, remaining, resetAt });
+        },
       })) {
         finalContent += chunk;
         setChatData(buildState(finalContent));
@@ -500,6 +504,7 @@ export function useChat(username, { onCreditExhausted } = {}) {
     activeChatId,
     messages,
     isTyping,
+    rateLimitState,
     sendMessage,
     sendImageAnalysis,
     sendImageEdit,

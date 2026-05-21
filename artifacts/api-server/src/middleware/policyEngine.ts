@@ -176,14 +176,21 @@ export function policyEngine(opts: PolicyOptions) {
       const w = windows.get(key);
 
       if (!w || now >= w.resetAt) {
-        windows.set(key, { count: 1, resetAt: now + rateWindowMs });
+        const newW = { count: 1, resetAt: now + rateWindowMs };
+        windows.set(key, newW);
+        res.setHeader("X-RateLimit-Limit",     String(rateMax));
+        res.setHeader("X-RateLimit-Remaining", String(rateMax - 1));
+        res.setHeader("X-RateLimit-Reset",     String(Math.ceil(newW.resetAt / 1000)));
       } else if (w.count >= rateMax) {
         const retryAfter = Math.ceil((w.resetAt - now) / 1000);
         logger.warn(
           { ip, route: rateKey, count: w.count, retryAfter },
           "[policy] rate limit reached",
         );
-        res.setHeader("Retry-After", String(retryAfter));
+        res.setHeader("X-RateLimit-Limit",     String(rateMax));
+        res.setHeader("X-RateLimit-Remaining", "0");
+        res.setHeader("X-RateLimit-Reset",     String(Math.ceil(w.resetAt / 1000)));
+        res.setHeader("Retry-After",           String(retryAfter));
         res.status(429).json({
           error: "Too many requests. Please try again later.",
           retryAfter,
@@ -191,6 +198,9 @@ export function policyEngine(opts: PolicyOptions) {
         return;
       } else {
         w.count++;
+        res.setHeader("X-RateLimit-Limit",     String(rateMax));
+        res.setHeader("X-RateLimit-Remaining", String(rateMax - w.count));
+        res.setHeader("X-RateLimit-Reset",     String(Math.ceil(w.resetAt / 1000)));
       }
     }
 
