@@ -1,22 +1,14 @@
 import { GoogleGenAI, Modality } from "@google/genai";
+import { resolveGeminiKey, resolveGeminiBaseUrl } from "../geminiEnv";
 
 function createImageAiClient(): GoogleGenAI {
-  const baseUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
-  const apiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY ?? process.env.GEMINI_API_KEY;
-
-  if (!apiKey) {
-    throw new Error(
-      "GEMINI_API_KEY must be set. Please add your Gemini API key to the Replit Secrets.",
-    );
-  }
+  const apiKey = resolveGeminiKey();
+  const baseUrl = resolveGeminiBaseUrl();
 
   if (baseUrl) {
     return new GoogleGenAI({
       apiKey,
-      httpOptions: {
-        apiVersion: "",
-        baseUrl,
-      },
+      httpOptions: { apiVersion: "", baseUrl },
     });
   }
 

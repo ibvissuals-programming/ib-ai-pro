@@ -12,6 +12,7 @@
  *   - Never log secret values — only boolean presence.
  */
 import { logger } from "./logger";
+import { isGeminiConfigured } from "./geminiEnv";
 
 export const VERSION = "1.0.0";
 export const BUILD_DATE = "2026-05-19";
@@ -27,10 +28,7 @@ export interface ProviderStatus {
 export function checkProviders(): ProviderStatus {
   const jwtRaw = process.env["JWT_SECRET"];
   return {
-    gemini: !!(
-      process.env["AI_INTEGRATIONS_GEMINI_API_KEY"] ??
-      process.env["GEMINI_API_KEY"]
-    ),
+    gemini: isGeminiConfigured(),
     // Flag as insecure if still using the well-known dev default
     jwtSecret: !!(jwtRaw && jwtRaw !== "ib-ai-dev-secret-change-in-production"),
     ceoRecovery: !!process.env["CEO_RECOVERY_KEY"],

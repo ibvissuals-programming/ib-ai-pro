@@ -25,6 +25,7 @@ import { getHistoryStatsSnapshot } from "../services/imageHistoryStore";
 import { getAllUsers } from "../lib/userStore";
 import { getActiveUsers, getTrackedUserCount } from "../lib/activityTracker";
 import { getBootState } from "../lib/bootState";
+import { isGeminiConfigured } from "../lib/geminiEnv";
 
 const router = Router();
 
@@ -51,8 +52,7 @@ router.get("/admin/system/health", requireCeo, async (req: Request, res: Respons
   }
 
   // ── AI provider status ────────────────────────────────────────────────────
-  const geminiKey = process.env["AI_INTEGRATIONS_GEMINI_API_KEY"] ?? process.env["GEMINI_API_KEY"];
-  const gemini = geminiKey ? "active" : "missing";
+  const gemini = isGeminiConfigured() ? "active" : "missing";
 
   // ── Users ─────────────────────────────────────────────────────────────────
   const allUsers     = getAllUsers();

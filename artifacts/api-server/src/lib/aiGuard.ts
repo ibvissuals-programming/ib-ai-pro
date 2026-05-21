@@ -4,6 +4,8 @@
 // ║  Called before every API call. Cannot be bypassed at runtime.  ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
+import { isGeminiConfigured } from "./geminiEnv";
+
 const GEMINI_MODEL_PREFIX = "gemini-";
 
 class AiProviderViolation extends Error {
@@ -15,8 +17,7 @@ class AiProviderViolation extends Error {
 }
 
 export function assertGeminiProvider(model: string): void {
-  const apiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY ?? process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  if (!isGeminiConfigured()) {
     throw new AiProviderViolation(
       "GEMINI_API_KEY is not set — Gemini provider is not configured",
     );

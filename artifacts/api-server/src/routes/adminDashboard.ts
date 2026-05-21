@@ -48,6 +48,7 @@ import { getJobMetrics } from "../services/imageJobManager";
 import { db, chatMessagesTable, userMemoryTable } from "@workspace/db";
 import { count, eq, sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
+import { isGeminiConfigured } from "../lib/geminiEnv";
 
 const router = Router();
 
@@ -226,10 +227,7 @@ router.get("/admin/system-health", requireCeo, async (_req: Request, res: Respon
     ]);
 
     const boot         = getBootState();
-    const geminiOk     = !!(
-      process.env.AI_INTEGRATIONS_GEMINI_API_KEY ??
-      process.env.GEMINI_API_KEY
-    );
+    const geminiOk     = isGeminiConfigured();
     const recentErrors = getRecentErrors(5);
     const mem          = process.memoryUsage();
 

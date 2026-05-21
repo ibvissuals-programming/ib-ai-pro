@@ -1,3 +1,5 @@
+import { isGeminiConfigured } from "./geminiEnv";
+
 /**
  * AI Routing Metrics — IB AI Assistant
  *
@@ -98,10 +100,7 @@ export interface AiStatus {
  */
 export function getAiStatus(): AiStatus {
   const groqConfigured = !!process.env["GROQ_API_KEY"];
-  const geminiConfigured = !!(
-    process.env["AI_INTEGRATIONS_GEMINI_API_KEY"] ??
-    process.env["GEMINI_API_KEY"]
-  );
+  const geminiConfigured = isGeminiConfigured();
 
   const groq = providerStats.groq;
   const gemini = providerStats.gemini;
