@@ -1,0 +1,121 @@
+IB AI — ROUTE MAPPING + SAFE MULTIMODAL RE-INTEGRATION (v1)
+
+MISSION:
+Now that the system baseline is stable, map all frontend ↔ backend API relationships and safely prepare multimodal features (TTS, prompt expand, image tools) for re-enablement WITHOUT destabilizing the Groq chat core.
+
+PRIMARY RULE:
+Do NOT modify working chat/auth/streaming systems. Only map, isolate, and safely prepare integrations.
+
+---------------------------------------------------
+PHASE 1 — FULL API ROUTE MAPPING
+---------------------------------------------------
+
+Scan and document:
+
+FRONTEND CALLS:
+- All API requests in frontend code (useChat, api.js, services, hooks)
+- Identify hardcoded endpoints
+- Identify mismatched routes (404 sources)
+
+BACKEND ROUTES:
+- List all registered routes by module:
+  /auth
+  /chat
+  /ai
+  /memory
+  /admin
+  /tts (if exists)
+  /image (if exists)
+
+OUTPUT:
+Create a clean ROUTE MAP:
+
+Frontend → Actual Backend Endpoint → Status (OK / MISMATCH / MISSING)
+
+---------------------------------------------------
+PHASE 2 — FEATURE DEPENDENCY CLASSIFICATION
+---------------------------------------------------
+
+Classify features into:
+
+CORE (DO NOT TOUCH):
+- Groq chat streaming
+- Auth / JWT
+- DB / sessions
+- Admin dashboard
+
+OPTIONAL (DISABLED OR PARTIAL):
+- Gemini prompt expand
+- TTS system
+- Image generation
+- AI fallback router
+
+For each optional feature:
+- identify dependency (env, provider, route)
+- identify failure reason
+- mark “safe to enable” vs “requires rebuild”
+
+---------------------------------------------------
+PHASE 3 — SAFE MULTIMODAL RE-INTEGRATION PLAN
+---------------------------------------------------
+
+For each disabled feature (TTS, prompt expand, image tools):
+
+DO NOT IMPLEMENT YET.
+
+Instead output:
+
+1. Required API keys
+2. Required env variables
+3. Required provider (Groq vs Google Gemini vs other)
+4. Required backend route changes
+5. Frontend UI dependencies
+6. Risk level (LOW / MEDIUM / HIGH)
+
+---------------------------------------------------
+PHASE 4 — AI ROUTER DESIGN (NO CODE YET)
+---------------------------------------------------
+
+Design a clean routing strategy:
+
+Example structure:
+
+- Groq → chat + reasoning
+- Gemini → multimodal tools (TTS, image, expand)
+- Fallback → safe error handling layer
+
+Define:
+- routing rules
+- failover logic
+- feature flags structure
+- where routing decision is made (frontend vs backend)
+
+DO NOT IMPLEMENT CODE — ONLY DESIGN.
+
+---------------------------------------------------
+PHASE 5 — STABILITY GUARANTEE CHECK
+---------------------------------------------------
+
+Before finishing, verify:
+
+- No changes made to working chat system
+- No auth modifications
+- No DB schema changes
+- No streaming modifications
+- No regression risk introduced
+
+---------------------------------------------------
+FINAL OUTPUT
+
+Provide:
+
+1. FULL ROUTE MAP
+2. BROKEN / MISSING ENDPOINT LIST
+3. FEATURE STATUS TABLE
+4. SAFE REBUILD PLAN (multimodal layer)
+5. AI ROUTER DESIGN (architecture only)
+6. NEXT IMPLEMENTATION STEP (single action only)
+
+FINAL RULE:
+Stability of Groq chat system is absolute priority.
+Everything else is modular and optional.
