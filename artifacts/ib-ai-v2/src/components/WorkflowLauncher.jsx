@@ -16,7 +16,7 @@ import {
   X, Plus, Pin, PinOff, Trash2, Copy, Download,
   ImageIcon, Mic, Video, MessageSquare,
   Zap, Sparkles, ChevronDown, ChevronRight,
-  RefreshCw, AlertCircle, Layers,
+  RefreshCw, AlertCircle, Layers, Clock, History,
 } from 'lucide-react';
 import {
   listCreatorSessions,
@@ -107,6 +107,49 @@ const TOOL_PATHS = {
   chat:  '/chat',
 };
 
+// ── Recent workflow memory (localStorage only) ────────────────────────────────
+
+const RECENT_KEY = 'ib_ai_recent_workflows';
+const RECENT_MAX = 3;
+
+function buildRecentEntry(config, name) {
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name: name ?? `${config.tool ?? 'image'} workflow`,
+    type: config.tool ?? 'image',
+    mode: config.editMode ?? config.voiceStyle ?? config.videoMode ?? null,
+    prompt: config.prompt ? config.prompt.slice(0, 40) : null,
+    timestamp: Date.now(),
+    config,
+  };
+}
+
+function useRecentWorkflows() {
+  const [recents, setRecents] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]'); }
+    catch { return []; }
+  });
+
+  const addRecent = useCallback((entry) => {
+    setRecents(prev => {
+      const key = `${entry.name}|${entry.type}|${entry.mode}`;
+      const next = [entry, ...prev.filter(e => `${e.name}|${e.type}|${e.mode}` !== key)].slice(0, RECENT_MAX);
+      try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch { /* quota */ }
+      return next;
+    });
+  }, []);
+
+  const removeRecent = useCallback((id) => {
+    setRecents(prev => {
+      const next = prev.filter(e => e.id !== id);
+      try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch { /* quota */ }
+      return next;
+    });
+  }, []);
+
+  return [recents, addRecent, removeRecent];
+}
+
 // ── URL param builder ─────────────────────────────────────────────────────────
 
 function buildLaunchUrl(config) {
@@ -149,7 +192,7 @@ const PresetCard = memo(function PresetCard({ preset, onLaunch, onSave }) {
       </div>
       <div className="flex flex-col gap-1.5 shrink-0">
         <button
-          onClick={() => onLaunch(preset.config)}
+          onClick={() => onLaunch(preset.config, preset.name)}
           className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-[10px] font-semibold hover:bg-primary/90 transition-colors shadow-sm shadow-primary/20"
         >
           <Zap size={9} />
@@ -196,7 +239,7 @@ const SessionCard = memo(function SessionCard({ session, onLaunch, onPin, onDupl
       </div>
       <div className="flex items-center gap-1 shrink-0">
         <button
-          onClick={() => onLaunch(session.config)}
+          onClick={() => onLaunch(session.config, session.name)}
           className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-[10px] font-semibold hover:bg-primary/90 transition-colors"
         >
           <Zap size={9} />
@@ -239,6 +282,64 @@ const SessionCard = memo(function SessionCard({ session, onLaunch, onPin, onDupl
             )}
           </AnimatePresence>
         </div>
+      </div>
+    </motion.div>
+  );
+});
+
+// ── Recent workflow card ───────────────────────────────────────────────────────
+
+function relativeTime(ts) {
+  const diff = Date.now() - ts;
+  if (diff < 60_000)        return 'just now';
+  if (diff < 3_600_000)     return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000)    return `${Math.floor(diff / 3_600_000)}h ago`;
+  return `${Math.floor(diff / 86_400_000)}d ago`;
+}
+
+const RecentWorkflowCard = memo(function RecentWorkflowCard({ item, onLaunch, onRemove }) {
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -4 }}
+      className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-border/40 bg-secondary/20 hover:bg-secondary/40 transition-colors group"
+    >
+      <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 text-primary">
+        {TOOL_ICONS[item.type]}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] font-semibold text-foreground truncate leading-tight">{item.name}</p>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          {item.mode && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-background/60 border border-border/40 text-muted-foreground/80 shrink-0">
+              {item.mode.replace(/_/g, ' ')}
+            </span>
+          )}
+          {item.prompt && (
+            <span className="text-[9px] text-muted-foreground/50 truncate">{item.prompt}</span>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        <span className="text-[9px] text-muted-foreground/40 flex items-center gap-0.5 hidden sm:flex">
+          <Clock size={8} />{relativeTime(item.timestamp)}
+        </span>
+        <button
+          onClick={() => onLaunch(item.config, item.name)}
+          className="flex items-center gap-1 px-2 py-1 rounded-lg bg-primary text-primary-foreground text-[9px] font-semibold hover:bg-primary/90 transition-colors ml-1"
+        >
+          <Zap size={8} />
+          Re-run
+        </button>
+        <button
+          onClick={() => onRemove(item.id)}
+          className="p-1 rounded-lg text-muted-foreground/30 hover:text-muted-foreground hover:bg-secondary transition-colors opacity-0 group-hover:opacity-100"
+          aria-label="Remove from recents"
+        >
+          <X size={9} />
+        </button>
       </div>
     </motion.div>
   );
@@ -326,6 +427,7 @@ export function WorkflowLauncher({ trigger }) {
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [saveTarget, setSaveTarget] = useState(null);
   const [error, setError] = useState(null);
+  const [recents, addRecent, removeRecent] = useRecentWorkflows();
 
   const loadSessions = useCallback(async () => {
     setLoadingSessions(true);
@@ -344,10 +446,11 @@ export function WorkflowLauncher({ trigger }) {
     if (open && tab === 'mine') loadSessions();
   }, [open, tab, loadSessions]);
 
-  const handleLaunch = useCallback((config) => {
+  const handleLaunch = useCallback((config, name) => {
+    addRecent(buildRecentEntry(config, name));
     setOpen(false);
     navigate(buildLaunchUrl(config));
-  }, [navigate]);
+  }, [navigate, addRecent]);
 
   const handleSaveSession = useCallback(async (payload) => {
     await createCreatorSession(payload);
@@ -477,6 +580,25 @@ export function WorkflowLauncher({ trigger }) {
 
               {tab === 'mine' && (
                 <>
+                  {/* ── Recently Launched ── */}
+                  {recents.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] text-muted-foreground/60 uppercase tracking-widest font-semibold flex items-center gap-1.5">
+                        <History size={8} /> Recently Launched
+                      </p>
+                      <AnimatePresence mode="popLayout">
+                        {recents.map(item => (
+                          <RecentWorkflowCard
+                            key={item.id}
+                            item={item}
+                            onLaunch={handleLaunch}
+                            onRemove={removeRecent}
+                          />
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                  )}
+
                   {error && (
                     <div className="flex items-center gap-2 text-[11px] text-amber-400 bg-amber-400/10 rounded-lg px-3 py-2 border border-amber-400/20">
                       <AlertCircle size={11} /> {error}
