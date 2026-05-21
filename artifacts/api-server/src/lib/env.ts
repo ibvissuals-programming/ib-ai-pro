@@ -28,8 +28,8 @@ export function checkProviders(): ProviderStatus {
   const jwtRaw = process.env["JWT_SECRET"];
   return {
     gemini: !!(
-      process.env["AI_INTEGRATIONS_GEMINI_BASE_URL"] &&
-      process.env["AI_INTEGRATIONS_GEMINI_API_KEY"]
+      process.env["AI_INTEGRATIONS_GEMINI_API_KEY"] ??
+      process.env["GEMINI_API_KEY"]
     ),
     // Flag as insecure if still using the well-known dev default
     jwtSecret: !!(jwtRaw && jwtRaw !== "ib-ai-dev-secret-change-in-production"),

@@ -15,15 +15,10 @@ class AiProviderViolation extends Error {
 }
 
 export function assertGeminiProvider(model: string): void {
-  if (!process.env.AI_INTEGRATIONS_GEMINI_BASE_URL) {
+  const apiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY ?? process.env.GEMINI_API_KEY;
+  if (!apiKey) {
     throw new AiProviderViolation(
-      "AI_INTEGRATIONS_GEMINI_BASE_URL is not set — Gemini provider is not configured",
-    );
-  }
-
-  if (!process.env.AI_INTEGRATIONS_GEMINI_API_KEY) {
-    throw new AiProviderViolation(
-      "AI_INTEGRATIONS_GEMINI_API_KEY is not set — Gemini provider is not configured",
+      "GEMINI_API_KEY is not set — Gemini provider is not configured",
     );
   }
 

@@ -99,8 +99,8 @@ export interface AiStatus {
 export function getAiStatus(): AiStatus {
   const groqConfigured = !!process.env["GROQ_API_KEY"];
   const geminiConfigured = !!(
-    process.env["AI_INTEGRATIONS_GEMINI_BASE_URL"] &&
-    process.env["AI_INTEGRATIONS_GEMINI_API_KEY"]
+    process.env["AI_INTEGRATIONS_GEMINI_API_KEY"] ??
+    process.env["GEMINI_API_KEY"]
   );
 
   const groq = providerStats.groq;

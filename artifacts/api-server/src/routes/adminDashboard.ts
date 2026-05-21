@@ -227,8 +227,8 @@ router.get("/admin/system-health", requireCeo, async (_req: Request, res: Respon
 
     const boot         = getBootState();
     const geminiOk     = !!(
-      process.env.AI_INTEGRATIONS_GEMINI_BASE_URL &&
-      process.env.AI_INTEGRATIONS_GEMINI_API_KEY
+      process.env.AI_INTEGRATIONS_GEMINI_API_KEY ??
+      process.env.GEMINI_API_KEY
     );
     const recentErrors = getRecentErrors(5);
     const mem          = process.memoryUsage();
