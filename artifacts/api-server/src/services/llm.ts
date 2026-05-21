@@ -209,15 +209,15 @@ async function createGeminiStream(messages: ChatMessage[]): Promise<AsyncIterabl
   })();
 }
 
-// ── Public API — Groq with conditional Gemini fallback ────────────────────────
+// ── Public API — Groq with Gemini fallback ────────────────────────────────────
 //
 // Routing logic:
 //   1. If GROQ_API_KEY is absent → route directly to Gemini.
 //   2. If GROQ_API_KEY is present → try Groq first.
-//      - Transient errors (429, 503, timeout, network reset) → Gemini fallback.
-//      - Non-transient errors (401, 400, 404, invalid model) → throw immediately.
-//        Non-transient failures indicate misconfiguration and must NOT be masked
-//        by silently routing to Gemini.
+//      - Any Groq failure (transient OR non-transient) → Gemini fallback.
+//        This ensures a misconfigured Groq key (401/400/bad model) never
+//        breaks chat — Gemini is always the safety net.
+//      - Only throws to the caller when Gemini also fails.
 //
 // Instrumentation:
 //   - Every routing path records provider, fallback flag, latency, and
@@ -265,18 +265,13 @@ export async function createChatStream(messages: ChatMessage[]): Promise<AsyncIt
     groqErrIsTransient = isTransientError(groqErr);
     recordCompletion("groq", false, Date.now() - groqStartMs, false);
 
-    if (!groqErrIsTransient) {
-      // Non-transient: misconfiguration or bad request — do not mask with fallback.
-      logger.error(
-        { err: groqErrMsg, model: CHAT_MODEL, reason: "non_transient" },
-        "[llm] Groq non-transient error — not falling back to Gemini",
-      );
-      throw new Error(`Chat provider error: ${sanitizeProviderError(groqErr, "chat")}`);
-    }
-
-    logger.warn(
-      { err: groqErrMsg, model: CHAT_MODEL, fallback: GEMINI_FALLBACK_MODEL },
-      "[llm] Groq transient failure — activating Gemini fallback",
+    // All Groq failures (transient or not) fall back to Gemini.
+    // Non-transient Groq errors (401, 400, bad model) still allow Gemini to serve
+    // the request, preventing a broken/misconfigured Groq key from taking down chat.
+    const logLevel = groqErrIsTransient ? "warn" : "error";
+    logger[logLevel](
+      { err: groqErrMsg, model: CHAT_MODEL, fallback: GEMINI_FALLBACK_MODEL, transient: groqErrIsTransient },
+      "[llm] Groq failure — activating Gemini fallback",
     );
   }
 

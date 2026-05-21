@@ -303,10 +303,11 @@ router.post(
       const errMsg = err instanceof Error ? err.message : String(err);
       logger.error({ err: errMsg }, "LLM stream error");
 
+      // Sanitize: never send raw provider error messages to clients
       res.write(
         sseEvent({
           error: true,
-          code: errMsg,
+          code: "provider_unavailable",
         })
       );
     } finally {

@@ -19,6 +19,12 @@ function classifyStreamError(err) {
   if (msg.startsWith('API error 5') || msg.includes('502') || msg.includes('503')) {
     return 'AI service temporarily unavailable. Please try again in a moment.';
   }
+  if (msg === 'UNAUTHENTICATED') {
+    return 'Your session has expired. Please log in again.';
+  }
+  if (msg === 'CREDITS_EXHAUSTED') {
+    return "You've used all your chat credits. Your balance resets daily.";
+  }
   if (msg.startsWith('API error 4')) {
     return 'Request rejected by the AI service. Please try again.';
   }

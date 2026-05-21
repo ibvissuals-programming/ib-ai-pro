@@ -1,0 +1,243 @@
+YOU ARE CONTINUING AN EXISTING IB AI REPLIT IMPORT.
+
+THE IMPORT IS ALREADY MOSTLY SUCCESSFUL.
+
+CURRENT STATE (DO NOT REPEAT WORK):
+- dependencies already installed
+- workflows already running
+- database schema already pushed
+- GEMINI_API_KEY already set
+- GROQ_API_KEY already set
+- frontend already loads
+- backend already boots
+
+DO NOT:
+- reinstall packages
+- recreate workflows
+- rerun broad project scans
+- rewrite architecture
+- rebuild features already working
+
+MISSION:
+Perform a STABILITY + AUTH + PROVIDER VALIDATION PASS ONLY.
+
+============================================================
+PHASE 1 — AUTH SYSTEM VALIDATION (TOP PRIORITY)
+============================================================
+
+Audit and fix the ENTIRE auth flow end-to-end.
+
+Known live issues from previous import:
+- CEO password randomly stops working
+- recovery key instability
+- users randomly logged out
+- login sometimes returns:
+  "Invalid server response (unexpected content type)"
+- newly created accounts sometimes fail immediately after signup
+
+TASKS:
+
+1. Ensure ALL auth endpoints ALWAYS return:
+Content-Type: application/json
+
+2. Verify NO auth route returns:
+- HTML
+- redirects
+- plain text
+- stack traces
+
+3. Standardize all auth responses:
+
+SUCCESS:
+{
+  success: true,
+  data: ...
+}
+
+ERROR:
+{
+  success: false,
+  error: "safe_error_code",
+  message: "safe readable message"
+}
+
+4. Fix JWT/session persistence:
+- token must survive refresh
+- provider/API failures must NEVER invalidate auth
+- auth middleware must NOT clear sessions on request failure
+
+5. CEO bootstrap rules:
+- NEVER recreate CEO user if already exists
+- NEVER overwrite existing CEO password
+- recovery key must NEVER block login
+- if CEO_PASSWORD missing:
+  auto-generate ONCE only
+  log temp password once
+  persist permanently
+
+6. Verify signup/login/logout cycle end-to-end.
+
+============================================================
+PHASE 2 — AI PROVIDER VALIDATION
+============================================================
+
+Known issue:
+chat sometimes replies:
+"Request rejected by the AI service"
+
+Fix provider handling.
+
+RULES:
+
+1. Gemini failures must NEVER surface raw provider errors.
+
+2. Frontend must NEVER receive:
+- provider stack traces
+- rejected promise text
+- raw SDK exceptions
+
+3. Add safe provider normalization:
+Return:
+{
+  success: false,
+  error: "provider_unavailable"
+}
+
+4. Groq missing/failing:
+- MUST silently fallback to Gemini
+- MUST NOT break chat
+- MUST NOT logout user
+
+5. Ensure provider init occurs ONCE at startup only.
+
+============================================================
+PHASE 3 — VIDEO PIPELINE FIX
+============================================================
+
+Known issue:
+video generates → file exists → frontend shows "No Access"
+
+This means access validation is happening TWICE.
+
+Fix it.
+
+RULES:
+
+1. Permission/provider access check happens ONLY during generation request.
+
+2. NEVER revalidate Veo access during:
+- polling
+- playback
+- download
+- serve endpoint
+
+3. If job marked COMPLETE:
+video MUST be downloadable.
+
+4. If Veo unavailable:
+FAIL EARLY before processing starts.
+
+Frontend should immediately receive:
+{
+  success: false,
+  error: "veo_not_enabled"
+}
+
+5. Remove contradictory states:
+- "generation complete"
+- then "No Access"
+
+This must NEVER happen again.
+
+============================================================
+PHASE 4 — RESPONSE FORMAT HARDENING
+============================================================
+
+Audit ALL API routes.
+
+Enforce:
+application/json everywhere.
+
+Fix any route returning:
+- HTML
+- redirects
+- malformed text
+- mixed content type
+
+Especially inspect:
+- auth routes
+- chat routes
+- image routes
+- video routes
+- health routes
+
+============================================================
+PHASE 5 — SESSION STABILITY
+============================================================
+
+Fix random logout behavior.
+
+Ensure:
+- frontend auth context survives API retries
+- failed AI request ≠ logout
+- failed video request ≠ logout
+- failed provider call ≠ auth reset
+
+Inspect:
+- auth provider/context
+- API interceptor
+- token refresh logic
+- protected route behavior
+
+============================================================
+PHASE 6 — HEALTH VALIDATION
+============================================================
+
+Run ONLY targeted validation.
+
+DO NOT run massive audits.
+
+Validate:
+- signup
+- login
+- CEO login
+- chat request
+- image request
+- TTS request
+- video request
+- auth persistence after refresh
+
+============================================================
+PHASE 7 — SAFE OUTPUT RULES
+============================================================
+
+DO NOT:
+- add features
+- redesign UI
+- add dashboards
+- add observability systems
+- create new workflows
+- touch unrelated systems
+
+ONLY:
+- stabilize auth
+- stabilize providers
+- stabilize response contracts
+- stabilize video access logic
+- stabilize session persistence
+
+============================================================
+FINAL OUTPUT FORMAT
+============================================================
+
+After fixes:
+Provide ONLY:
+
+1. exact files modified
+2. exact bugs fixed
+3. validation results
+4. remaining blockers (if any)
+
+DO NOT continue expanding scope.
+DO NOT suggest new features.
+STOP after validation.

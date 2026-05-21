@@ -135,7 +135,7 @@ router.post(
               prompt:       prompt.slice(0, 300),
               mode,
               jobId:        job.jobId,
-              videoUrl:     `/api/video/serve/${job.jobId}`,
+              videoUrl:     null,   // no file written when provider is not configured
               status:       "provider_not_configured",
               thumbnailB64: null,
               timestamp:    Date.now(),

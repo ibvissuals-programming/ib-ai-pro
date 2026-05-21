@@ -87,11 +87,6 @@ async function safeParseJson(res) {
     return { error: 'Server returned an empty response' };
   }
 
-  const ct = res.headers?.get?.('content-type') ?? '';
-  if (ct && !ct.includes('application/json') && !ct.includes('text/plain')) {
-    return { error: 'Invalid server response (unexpected content type)' };
-  }
-
   try {
     return JSON.parse(text);
   } catch {
@@ -343,11 +338,14 @@ export async function verifySession() {
       AUTH_TIMEOUT_MS,
     );
     if (!res.ok) {
-      if (res.status === 403) {
+      if (res.status === 401) {
+        // Token is definitively invalid or expired — clear it
+        clearToken();
         return null;
       }
-      clearToken();
-      return null;
+      // 403, 5xx, or other errors: do NOT clear the token.
+      // Return the cached user so transient server errors don't log the user out.
+      return loadCachedUser();
     }
     const data = await safeParseJson(res);
     if (data.user) {

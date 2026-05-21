@@ -132,7 +132,7 @@ function statusColor(status) {
 function statusLabel(status) {
   if (status === 'completed') return 'Ready';
   if (status === 'failed')    return 'Failed';
-  if (status === 'provider_not_configured') return 'No Access';
+  if (status === 'provider_not_configured') return 'Not Available';
   return status;
 }
 
