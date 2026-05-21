@@ -12,6 +12,7 @@
 import { type Request, type Response, type NextFunction } from "express";
 import {
   getUserById,
+  getUserByIdFromDb,
   hasCredits,
   deductCredits,
   toPublicUser,
@@ -45,7 +46,7 @@ declare global {
  *   deductRequestCredits(req)
  */
 export function creditGuard(cost: number) {
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     if (cost === 0) {
       next();
       return;
@@ -67,7 +68,8 @@ export function creditGuard(cost: number) {
       return;
     }
 
-    const user = getUserById(req.user.userId);
+    // Re-hydrate from PostgreSQL — credit/role state must reflect live DB value.
+    const user = await getUserByIdFromDb(req.user.userId);
     if (!user) {
       res.status(401).json({ error: "User not found", code: "USER_NOT_FOUND" });
       return;
@@ -105,10 +107,11 @@ export function deductRequestCredits(req: Request): void {
  * Append credit headers to a successful response so the frontend
  * can sync credit display without a separate polling call.
  */
-export function appendCreditHeaders(req: Request, res: Response): void {
+export async function appendCreditHeaders(req: Request, res: Response): Promise<void> {
   if (!req.user) return;
   try {
-    const user = getUserById(req.user.userId);
+    // Re-hydrate from PostgreSQL so credit headers reflect live DB state.
+    const user = await getUserByIdFromDb(req.user.userId);
     if (!user) return;
     const pub = toPublicUser(user);
     if (pub.role !== "ceo") {
@@ -117,6 +120,6 @@ export function appendCreditHeaders(req: Request, res: Response): void {
     }
     res.setHeader("X-Credits-Plan", pub.role);
   } catch {
-    // Non-critical
+    // Non-critical — header failure never blocks the response
   }
 }

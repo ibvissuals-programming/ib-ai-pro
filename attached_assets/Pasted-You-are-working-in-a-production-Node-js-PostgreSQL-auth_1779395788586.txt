@@ -1,0 +1,144 @@
+You are working in a production Node.js + PostgreSQL authentication system.
+
+OBJECTIVE:
+LOCK CEO authentication and session identity to PostgreSQL as the ONLY source of truth across the entire system (auth, sessions, boot, and routes).
+
+DO NOT:
+- change database schema
+- modify frontend UI
+- reintroduce recovery authentication
+- redesign auth architecture
+- add new identity systems
+
+------------------------------------------------------------
+1 — ABSOLUTE IDENTITY RULE (CRITICAL)
+------------------------------------------------------------
+
+CEO identity MUST ALWAYS come from PostgreSQL.
+
+RULE:
+- PostgreSQL is the single source of truth for:
+  - username
+  - role
+  - password_hash
+  - account status
+
+NEVER use:
+- in-memory userStore for identity decisions
+- cached user objects for authentication decisions
+
+------------------------------------------------------------
+2 — LOGIN AUTHORITY LOCK
+------------------------------------------------------------
+
+All login flows MUST:
+
+Step 1:
+→ fetch user directly from PostgreSQL
+
+Step 2:
+→ verify password using ONLY DB password_hash
+
+Step 3:
+→ return result immediately
+
+FORBIDDEN:
+- cache-based authentication
+- bootstrap-based authentication
+- repair functions influencing login
+- fallback identity sources
+
+------------------------------------------------------------
+3 — SESSION HYDRATION RULE (CRITICAL FIX)
+------------------------------------------------------------
+
+On EVERY authenticated request:
+
+- DO NOT trust in-memory user object alone
+- RE-HYDRATE user from PostgreSQL when identity is required
+
+Session token may exist, but:
+
+→ authoritative identity = DB
+
+------------------------------------------------------------
+4 — BOOT PROCESS MUST BE READ-ONLY FOR CEO
+
+At startup:
+
+ONLY ALLOWED:
+- check CEO exists
+- validate role = "ceo"
+- validate password_hash format
+
+NOT ALLOWED:
+- no modifications
+- no repairs
+- no role corrections
+- no password mutations
+
+------------------------------------------------------------
+5 — REMOVE ALL MUTATION PATHS
+
+Ensure NONE of the following modify CEO data:
+
+- repairCeoAccount()
+- startupIntegrityCheck() writes
+- authenticateUser() fallback mutations
+- any "sync userStore with DB" logic
+
+If found:
+→ convert to READ-ONLY logging only
+
+------------------------------------------------------------
+6 — SINGLE SOURCE OF TRUTH ENFORCEMENT
+
+If any discrepancy is detected between:
+- memory user
+- DB user
+
+RULE:
+→ DB ALWAYS wins
+→ memory must never overwrite DB
+
+------------------------------------------------------------
+7 — AUTH FAILURE CONSISTENCY
+
+All auth failures must be:
+
+{
+  success: false,
+  code: "auth_failed" | "user_not_found" | "password_mismatch" | "invalid_request",
+  error: "..."
+}
+
+NO:
+- empty responses
+- thrown exceptions to client
+- raw stack traces
+
+------------------------------------------------------------
+8 — FINAL SYSTEM GUARANTEE
+
+After implementation:
+
+- CEO login is deterministic across restarts
+- no hidden mutation anywhere in system
+- sessions never drift from DB identity
+- password only changes via explicit reset endpoint
+- recovery system fully removed from flow
+
+------------------------------------------------------------
+FINAL OUTPUT:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CEO AUTH LOCK REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DB SOURCE:        ENFORCED
+CACHE AUTH:       DISABLED
+BOOT MUTATION:    BLOCKED
+SESSION DRIFT:    PREVENTED
+LOGIN STABILITY:  GUARANTEED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OVERALL:          LOCKED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

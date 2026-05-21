@@ -75,6 +75,35 @@ export async function pgPersistAllUsers(users: PgUserRecord[]): Promise<void> {
   logger.info({ count: users.length }, "[pgUserStore] Users upserted to PostgreSQL");
 }
 
+// ── Single-user fetch by userId (fresh DB read — used by session hydration) ───
+
+/**
+ * pgGetUserById() — fetch one user row directly from PostgreSQL by primary key.
+ *
+ * Used by getUserByIdFromDb() so that every identity-bearing route
+ * (GET /me, credit checks, policy engine) always reads live DB state.
+ *
+ * Returns null if the user does not exist in the DB.
+ */
+export async function pgGetUserById(userId: string): Promise<PgUserRecord | null> {
+  const rows = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+  if (!rows[0]) return null;
+  const r = rows[0];
+  return {
+    id:           r.id,
+    username:     r.username,
+    passwordHash: r.passwordHash,
+    role:         r.role,
+    credits:      r.credits,
+    lastReset:    r.lastReset,
+    createdAt:    r.createdAt,
+  };
+}
+
 // ── Single-user fetch by username (fresh DB read — used by auth flow) ─────────
 
 /**

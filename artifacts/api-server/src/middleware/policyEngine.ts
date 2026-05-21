@@ -31,6 +31,7 @@ import { type Request, type Response, type NextFunction } from "express";
 import { verifyToken, type TokenPayload } from "../lib/token";
 import {
   getUserById,
+  getUserByIdFromDb,
   hasCredits,
   toPublicUser,
   FREE_CREDITS,
@@ -119,7 +120,7 @@ function extractToken(req: Request): string | null {
 export function policyEngine(opts: PolicyOptions) {
   const { cost, rateKey, rateMax, rateWindowMs, allowRecovery = false } = opts;
 
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const start = Date.now();
 
     // ── Step 1: Authentication ─────────────────────────────────────────────
@@ -209,7 +210,8 @@ export function policyEngine(opts: PolicyOptions) {
     let creditsBefore: number | null = null;
 
     if (!isCeo && cost > 0) {
-      const user = getUserById(payload.userId);
+      // Re-hydrate from PostgreSQL — credit/role state must reflect live DB value.
+      const user = await getUserByIdFromDb(payload.userId);
       if (!user) {
         logger.warn({ userId: payload.userId }, "[policy] user not found");
         res.status(401).json({ error: "User not found", code: "USER_NOT_FOUND" });

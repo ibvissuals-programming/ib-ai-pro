@@ -21,6 +21,7 @@ import {
   authenticateUser,
   authenticateUserFromDb,
   getUserById,
+  getUserByIdFromDb,
   getUserByUsername,
   toPublicUser,
   changeUserPassword,
@@ -538,10 +539,11 @@ router.post(
 // ── GET /api/auth/me ──────────────────────────────────────────────────────────
 // requireNormalAuth blocks recovery sessions — they must change password first.
 
-router.get("/auth/me", requireNormalAuth, (req: Request, res: Response) => {
-  const user = getUserById(req.user!.userId);
+router.get("/auth/me", requireNormalAuth, async (req: Request, res: Response) => {
+  // Re-hydrate from PostgreSQL — identity endpoint always reflects live DB state.
+  const user = await getUserByIdFromDb(req.user!.userId);
   if (!user) {
-    res.status(404).json({ error: "User not found" });
+    res.status(404).json({ error: "User not found", code: "USER_NOT_FOUND" });
     return;
   }
 

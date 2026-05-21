@@ -18,7 +18,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { logger } from "./logger";
 import { isPostgresEnabled } from "./systemConfig";
-import { pgLoadAllUsers, pgPersistAllUsers, pgGetUserByUsername } from "./pgUserStore";
+import { pgLoadAllUsers, pgPersistAllUsers, pgGetUserByUsername, pgGetUserById } from "./pgUserStore";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "../../data");
@@ -284,6 +284,49 @@ export function getUserById(id: string): User | undefined {
   const user = store.get(id);
   if (user) refillIfExpired(user);
   return user;
+}
+
+/**
+ * getUserByIdFromDb() — PostgreSQL-authoritative user fetch by primary key.
+ *
+ * Used by every route that needs live identity data (GET /me, credit checks,
+ * policy enforcement). When PG is enabled it issues a fresh SELECT on every call
+ * so role/credit state is always the DB value, never a potentially stale copy.
+ *
+ * On success the returned User also updates the in-memory cache so that
+ * deductCredits() (which writes to memory) stays consistent.
+ *
+ * Falls back to the in-memory store when PG is disabled.
+ */
+export async function getUserByIdFromDb(id: string): Promise<User | undefined> {
+  if (!isPostgresEnabled()) {
+    return getUserById(id);
+  }
+
+  let dbRecord;
+  try {
+    dbRecord = await pgGetUserById(id);
+  } catch (err) {
+    logger.error({ err, userId: id }, "[userStore] getUserByIdFromDb — DB fetch failed, falling back to memory");
+    return getUserById(id);
+  }
+
+  if (!dbRecord) return undefined;
+
+  // Rebuild / refresh the in-memory entry from the authoritative DB record.
+  // This keeps the cache consistent with DB without any separate sync job.
+  const refreshed: User = {
+    id:           dbRecord.id,
+    username:     dbRecord.username,
+    passwordHash: dbRecord.passwordHash,
+    role:         dbRecord.role,
+    credits:      dbRecord.credits,
+    lastReset:    dbRecord.lastReset,
+    createdAt:    dbRecord.createdAt,
+  };
+  store.set(refreshed.id, refreshed);
+  usernameIndex.set(refreshed.username, refreshed.id);
+  return refreshed;
 }
 
 export function getUserByUsername(username: string): User | undefined {
