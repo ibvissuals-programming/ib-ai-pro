@@ -1,0 +1,112 @@
+IB AI — AI TOOL LAYER STABILIZATION (PRODUCTION EXECUTION PASS)
+
+MISSION:
+Stabilize all AI tool capabilities into a unified, production-grade execution layer.
+
+Tools in scope:
+- TTS
+- Image generation
+- Image editing
+- Image-to-video
+- Prompt expansion
+- Image analysis
+
+PRIMARY RULE:
+Do NOT touch UI, branding, or frontend animation. Do NOT re-audit UI stability. Assume UI is already stable.
+
+---------------------------------------------------
+PHASE 1 — MINIMAL TOOL HEALTH CHECK (NO FULL SCAN)
+
+For each tool, check ONLY:
+- Is it callable? (yes/no)
+- Does it return success response? (yes/no)
+- Does it fail with consistent schema? (yes/no)
+
+Do NOT inspect unrelated backend systems.
+
+---------------------------------------------------
+PHASE 2 — STANDARDIZE RESPONSE CONTRACT
+
+Enforce universal response format:
+
+{
+  success: boolean,
+  mode: string,
+  data?: any,
+  error?: string,
+  code?: "PROVIDER_UNAVAILABLE" | "FEATURE_DISABLED" | "RUNTIME_ERROR"
+}
+
+Rules:
+- No raw provider errors exposed
+- No inconsistent HTTP status usage (500 vs 503)
+- All tools MUST return same schema shape
+- Every failure must be safely wrapped
+
+---------------------------------------------------
+PHASE 3 — CRITICAL FIX ONLY (NO REFACTORING)
+
+Fix ONLY breaking issues:
+
+TTS:
+- ensure graceful fallback if model/provider unsupported
+- ensure no unhandled promise rejection
+
+Image editing:
+- prevent partial pipeline output
+- enforce full success/fail atomicity
+
+Image-to-video:
+- ensure completion validation before response return
+- prevent half-generated outputs
+
+Prompt expansion:
+- ensure consistent wrapped response format
+
+Image analysis:
+- sanitize provider error leaks
+- ensure no internal config exposure
+
+---------------------------------------------------
+PHASE 4 — TOOL ROUTER VALIDATION
+
+Verify single execution path:
+
+request → tool router → provider → standardized wrapper → response
+
+Rules:
+- Groq = chat only (unchanged)
+- Gemini = multimodal tools only
+- No direct frontend-to-provider calls
+- No bypass routes
+
+---------------------------------------------------
+PHASE 5 — LIGHTWEIGHT FUNCTIONAL TEST
+
+Run ONE test per tool:
+
+- TTS test call
+- image generation call
+- image edit call
+- image-to-video call
+- prompt expansion call
+- image analysis call
+
+Validate only:
+- response shape consistency
+- no crashes
+- no raw errors
+- no timeout hangs
+
+---------------------------------------------------
+PHASE 6 — FINAL OUTPUT (MINIMAL)
+
+Return:
+- broken tools list (if any)
+- fixes applied (if any)
+- unified schema confirmation
+- stability score (0–10)
+- production readiness status
+
+FINAL RULE:
+This pass must improve tool stability with minimal changes and zero UI impact.
