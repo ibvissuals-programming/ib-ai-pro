@@ -368,6 +368,15 @@ export default function VideoStudio() {
   const isWorking  = genState === 'submitting' || genState === 'polling';
   const isDone     = genState === 'completed' || genState === 'failed' || genState === 'provider_not_configured';
 
+  // ── Restore from URL params on mount (WorkflowLauncher session restore) ──
+  useEffect(() => {
+    const params   = new URLSearchParams(window.location.search);
+    const urlPrompt = params.get('prompt');
+    const urlVMode  = params.get('vmode');
+    if (urlPrompt) setPrompt(urlPrompt);
+    if (urlVMode && VIDEO_MODES.some(m => m.id === urlVMode)) setMode(urlVMode);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Load persistent history on mount ─────────────────────────────────────
   useEffect(() => {
     fetchVideoHistory()

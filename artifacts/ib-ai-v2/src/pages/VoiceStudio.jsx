@@ -270,6 +270,15 @@ export default function VoiceStudio() {
   const overLimit  = remaining < 0;
   const activeVoice = VOICES.find(v => v.id === selectedVoice) ?? VOICES[0];
 
+  // ── Restore from URL params on mount (WorkflowLauncher session restore) ──
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlText  = params.get('prompt');
+    const urlVoice = params.get('voice');
+    if (urlText) setText(urlText);
+    if (urlVoice && VOICES.some(v => v.id === urlVoice)) setVoice(urlVoice);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Load persistent history on mount ─────────────────────────────────────
   useEffect(() => {
     fetchTtsHistory()

@@ -207,8 +207,8 @@ function ErrorBox({ message }) {
 }
 
 // ── Generate tab ──────────────────────────────────────────────────────────────
-function GenerateTab() {
-  const [prompt, setPrompt] = useState('');
+function GenerateTab({ initialPrompt = '' }) {
+  const [prompt, setPrompt] = useState(initialPrompt);
   const [output, setOutput] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -475,16 +475,16 @@ function AiDirectorPanel({ sourceImage, onApplyPrompt }) {
 }
 
 // ── Edit tab ──────────────────────────────────────────────────────────────────
-function EditTab() {
+function EditTab({ initialPrompt = '', initialMode = '', initialIntensity = '' }) {
   const [sourceImage, setSourceImage] = useState(null);
-  const [prompt, setPrompt] = useState('');
+  const [prompt, setPrompt] = useState(initialPrompt);
   const [output, setOutput] = useState(null);
   const [outputMeta, setOutputMeta] = useState(null); // { mode, intensity, cinematicAnalysisUsed }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [dragOver, setDragOver] = useState(false);
-  const [editMode, setEditMode] = useState('');
-  const [intensityLevel, setIntensityLevel] = useState('');
+  const [editMode, setEditMode] = useState(initialMode);
+  const [intensityLevel, setIntensityLevel] = useState(initialIntensity);
   const [useDirectorAnalysis, setUseDirectorAnalysis] = useState(false);
   const [showBeforeAfter, setShowBeforeAfter] = useState(false);
   const fileInputRef = useRef(null);
@@ -1080,8 +1080,16 @@ function HistoryTab() {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function ImageTools() {
-  const [tab, setTab] = useState('generate');
   const { theme, toggleTheme } = useTheme();
+
+  // ── Read URL params once on mount (session restore from WorkflowLauncher) ──
+  const [urlParams] = useState(() => new URLSearchParams(window.location.search));
+  const urlPrompt   = urlParams.get('prompt')    ?? '';
+  const urlMode     = urlParams.get('mode')       ?? '';
+  const urlIntensity = urlParams.get('intensity') ?? '';
+  const initialTab  = (urlMode || urlPrompt) ? 'edit' : 'generate';
+
+  const [tab, setTab] = useState(initialTab);
 
   const TABS = [
     { id: 'generate', icon: Sparkles, label: 'Generate' },
@@ -1150,8 +1158,8 @@ export default function ImageTools() {
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.15 }}
               >
-                {tab === 'generate' && <GenerateTab />}
-                {tab === 'edit'     && <EditTab />}
+                {tab === 'generate' && <GenerateTab initialPrompt={urlPrompt} />}
+                {tab === 'edit'     && <EditTab initialPrompt={urlPrompt} initialMode={urlMode} initialIntensity={urlIntensity} />}
                 {tab === 'history'  && <HistoryTab />}
               </motion.div>
             </AnimatePresence>
