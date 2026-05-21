@@ -1,0 +1,91 @@
+IB AI — TOOL LAYER SAFE ACTIVATION PLAN (NO CODE EXECUTION)
+
+MISSION:
+Prepare Gemini multimodal features for activation WITHOUT risking instability in the Groq core system.
+
+PRIMARY RULE:
+Do NOT enable any features yet. Do NOT inject secrets yet. Only simulate and validate safe activation steps.
+
+---------------------------------------------------
+PHASE 1 — ENV VAR DEPENDENCY TRACE
+---------------------------------------------------
+
+Map exactly which features depend on:
+
+- AI_INTEGRATIONS_GEMINI_API_KEY
+- AI_INTEGRATIONS_GEMINI_BASE_URL
+
+For each feature:
+• TTS
+• Image editing
+• Prompt expand
+• AI fallback router
+
+Output:
+- exact dependency chain per feature
+- what breaks if missing
+- what partially works
+
+---------------------------------------------------
+PHASE 2 — PARTIAL ACTIVATION SIMULATION
+---------------------------------------------------
+
+Simulate system behavior if Gemini is enabled:
+
+- Which features activate correctly
+- Which fail silently
+- Which fallback incorrectly triggers Groq
+- Which UI states are affected
+
+Classify each:
+
+SAFE / PARTIAL / RISKY
+
+---------------------------------------------------
+PHASE 3 — FEATURE FLAG DESIGN (CRITICAL)
+---------------------------------------------------
+
+Design a proper feature flag system:
+
+Example structure:
+- tools.gemini.tts.enabled
+- tools.gemini.imageEdit.enabled
+- tools.gemini.promptExpand.enabled
+
+Define:
+- default state (OFF)
+- safe fallback behavior
+- error response consistency
+- frontend handling rules
+
+DO NOT IMPLEMENT — ONLY DESIGN
+
+---------------------------------------------------
+PHASE 4 — SAFE ACTIVATION SEQUENCE PLAN
+---------------------------------------------------
+
+Define the EXACT order features should be re-enabled:
+
+Example:
+1. prompt expand (lowest risk)
+2. image analysis
+3. image editing
+4. TTS
+5. fallback router (last)
+
+For each:
+- required validation step
+- rollback condition
+- success criteria
+
+---------------------------------------------------
+PHASE 5 — FINAL RISK ASSESSMENT
+
+Output:
+- Activation risk score (0–10)
+- Stability risk factors
+- Recommended activation method:
+  (single toggle / staged rollout / per-feature activation)
+
+FINAL RULE:
+Groq core system must remain untouched and fully stable.
