@@ -1,0 +1,83 @@
+IB AI — GEMINI RUNTIME BEHAVIOR & FAILURE CONSISTENCY VALIDATION (NO CODE CHANGES)
+
+MISSION:
+Validate the actual runtime behavior of all Gemini-powered tools under real failure conditions and confirm system stability boundaries before introducing any feature flag system.
+
+PRIMARY RULE:
+Do NOT implement feature flags. Do NOT modify architecture. Only observe, trace, and validate runtime behavior.
+
+---------------------------------------------------
+PHASE 1 — RUNTIME FAILURE FLOW TRACE
+---------------------------------------------------
+
+For each tool:
+
+• prompt_expand
+• analyze_image
+• cinematic_prompt
+• tts
+• image_edit
+
+Trace full execution path:
+
+Frontend call →
+Backend route →
+Gemini proxy initialization →
+AI call attempt →
+Failure point →
+catch block →
+response format →
+frontend handling
+
+Output:
+Exact failure chain per tool
+
+---------------------------------------------------
+PHASE 2 — FAILURE CONSISTENCY CHECK
+---------------------------------------------------
+
+Verify all tools return:
+
+- consistent status codes (503 vs 500 vs custom)
+- consistent response shape
+- consistent error messages
+- no silent failures
+- no unhandled promise rejection
+- no backend crash propagation
+
+Identify inconsistencies.
+
+---------------------------------------------------
+PHASE 3 — GROQ ISOLATION VERIFICATION
+---------------------------------------------------
+
+Confirm:
+
+- Groq chat never imports Gemini client
+- Groq fallback is NOT accidentally triggered
+- no shared runtime state between Groq and Gemini
+- no cross-provider contamination
+
+Output:
+YES/NO + evidence
+
+---------------------------------------------------
+PHASE 4 — TOOL EXECUTION TIMING ANALYSIS
+
+Measure:
+- time-to-failure for each Gemini tool
+- latency overhead of lazy proxy initialization
+- retry loops (if any)
+- memory retention across failed calls
+
+---------------------------------------------------
+PHASE 5 — STABILITY VERDICT
+
+Output:
+
+- System Stability Score (0–10)
+- Risk of feature flag layer introduction (LOW / MEDIUM / HIGH)
+- Whether current architecture should be LEFT AS-IS or REFACTORED
+
+FINAL RULE:
+Do NOT suggest or implement any new architecture until runtime behavior is fully validated.
