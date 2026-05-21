@@ -1,32 +1,21 @@
 /**
  * aiHealth.ts — IB AI Assistant
  *
- * GET /api/ai/health — Live AI tool health matrix + system stability score
+ * Two read-only observability endpoints:
  *
- * Auth: open — observability endpoint, no auth required
- * No credits consumed, no side effects.
+ *   GET /api/ai/health
+ *     — Full health matrix + system score (original endpoint)
+ *     — Optional header: x-ai-debug: true  → adds raw debug envelope
  *
- * Response shape:
- *   {
- *     groq:        { status, latency, successRate, lastError, totalCalls, ... },
- *     gemini:      { ... },
- *     tts:         { ... },
- *     image:       { ... },
- *     video:       { ... },
- *     prompt:      { ... },
- *     systemScore: { global, breakdown: { successRate, latencyStability, fallbackRate, errorFrequency } }
- *   }
+ *   GET /api/ai/system-health
+ *     — Per-tool: status, successRate, latency, circuit state, fallbackCount, totalCalls
+ *     — System score breakdown
+ *     — Optional ?debug=true  → adds last 10 calls + circuit details per tool
  *
- * Status values:
- *   healthy   — successRate > 90%
- *   degraded  — successRate 50–90%
- *   failing   — successRate < 50%
- *   offline   — no calls recorded yet
+ * Auth: open — no token required, no credits consumed, no side effects.
  *
- * Optional debug envelope:
- *   Header: x-ai-debug: true
- *   Adds _debug field with sliding window data, raw counts, score weights,
- *   request timestamp, and server uptime. Never exposes API keys or user data.
+ * Status values: healthy (>90%) · degraded (50-90%) · failing (<50%) · offline (no calls)
+ * Circuit states: closed · open · half-open
  */
 import { Router, type Request, type Response } from "express";
 import {
@@ -34,20 +23,62 @@ import {
   getSystemScore,
   getDebugData,
 } from "../lib/toolHealthMonitor";
+import { getAllCircuitStatuses } from "../lib/circuitBreaker";
+import { getAllLastNCalls }      from "../lib/toolTelemetryStore";
+
+const TOOL_NAMES = ["groq", "gemini", "tts", "image", "video", "prompt"] as const;
 
 const router = Router();
 
-router.get("/ai/health", (_req: Request, res: Response) => {
+// ── GET /api/ai/health ────────────────────────────────────────────────────────
+
+router.get("/ai/health", (req: Request, res: Response) => {
   const matrix = getHealthMatrix();
   const score  = getSystemScore();
 
+  const payload: Record<string, unknown> = { ...matrix, systemScore: score };
+
+  if (req.headers["x-ai-debug"] === "true") {
+    payload["_debug"] = getDebugData();
+  }
+
+  res.json(payload);
+});
+
+// ── GET /api/ai/system-health ─────────────────────────────────────────────────
+
+router.get("/ai/system-health", (req: Request, res: Response) => {
+  const matrix   = getHealthMatrix();
+  const score    = getSystemScore();
+  const circuits = getAllCircuitStatuses();
+
+  // Merge health matrix + circuit states into a per-tool shape
+  const tools: Record<string, unknown> = {};
+  for (const tool of TOOL_NAMES) {
+    const h = matrix[tool];
+    const c = circuits[tool];
+    tools[tool] = {
+      status:        h.status,
+      successRate:   h.successRate,
+      latency:       h.latency,
+      circuit:       c?.state ?? "closed",
+      fallbackCount: h.fallbackCount,
+      totalCalls:    h.totalCalls,
+      lastError:     h.lastError,
+    };
+  }
+
   const payload: Record<string, unknown> = {
-    ...matrix,
+    tools,
     systemScore: score,
+    timestamp:   new Date().toISOString(),
   };
 
-  if (_req.headers["x-ai-debug"] === "true") {
-    payload["_debug"] = getDebugData();
+  if (req.query["debug"] === "true") {
+    payload["_debug"] = {
+      lastCalls:      getAllLastNCalls(10),
+      circuitDetails: circuits,
+    };
   }
 
   res.json(payload);

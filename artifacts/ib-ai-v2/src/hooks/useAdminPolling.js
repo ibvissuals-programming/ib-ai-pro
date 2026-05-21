@@ -126,6 +126,11 @@ export function useSystemHealth() {
   return useEndpointPoll('/admin/system-health', 8_000);
 }
 
+/** Poll AI tool system health — per-tool status, circuit state, system score. */
+export function useAiSystemHealth() {
+  return useEndpointPoll('/ai/system-health', 30_000);
+}
+
 export function useAdminPolling() {
   const health           = useEndpointPoll('/admin/health',          8_000);
   const stats            = useEndpointPoll('/admin/stats',          10_000);
@@ -135,6 +140,7 @@ export function useAdminPolling() {
   const aiStatus         = useEndpointPoll('/system/ai-status',     30_000);
   const overview         = useEndpointPoll('/admin/overview',       10_000);
   const systemHealth     = useEndpointPoll('/admin/system-health',   8_000);
+  const aiToolHealth     = useEndpointPoll('/ai/system-health',     30_000);
 
   // Bubble up the most critical auth error code
   const allEndpoints = [health, stats, activeUsers, logs];
@@ -148,7 +154,7 @@ export function useAdminPolling() {
   return {
     health, stats, activeUsers, logs,
     activityTimeline, aiStatus,
-    overview, systemHealth,
+    overview, systemHealth, aiToolHealth,
     globalErrorCode,
   };
 }

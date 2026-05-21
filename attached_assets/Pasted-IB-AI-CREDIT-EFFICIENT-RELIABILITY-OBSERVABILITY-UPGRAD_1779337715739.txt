@@ -1,0 +1,79 @@
+IB AI — CREDIT-EFFICIENT RELIABILITY + OBSERVABILITY UPGRADE (SINGLE PASS)
+
+MISSION:
+Implement production-grade reliability + observability layer with minimal tool usage, no redundant reads, single-pass execution, plus CEO system health dashboard.
+
+DO NOT change core AI behavior. DO NOT refactor unrelated architecture.
+
+HARD CONSTRAINTS:
+1. NO repeated file scans (each file read ONCE only)
+2. NO exploratory reads or verification passes
+3. BATCH ALL CHANGES (one pass per file max)
+4. NO BEHAVIOR CHANGES (only monitoring/reliability)
+5. MINIMIZE TOOL CALLS (multi-file edits only)
+
+PHASE 1 — TOOL TELEMETRY
+Create lib/toolTelemetry.ts:
+- trackToolCall(tool, fn)
+- success/failure tracking
+- latency tracking
+- fallback tracking
+- in-memory only
+
+PHASE 2 — CIRCUIT BREAKER
+Create lib/circuitBreaker.ts:
+- per-tool failure tracking
+- threshold: 5 failures / 20 calls
+- open state disables tool for 30s
+- auto recovery
+- must not break API responses
+
+TOOLS:
+groq, gemini, tts, image, video, prompt
+
+PHASE 3 — AUTO DISABLE LOGIC
+If circuit OPEN:
+- skip provider call
+- return fallback internally
+- set degraded = true (internal only)
+- keep API unchanged
+
+PHASE 4 — PERSISTENCE LAYER
+Create lib/toolTelemetryStore.ts:
+- in-memory default
+- optional DB/Redis stub
+- store last 100 calls
+- success rate + latency + failures
+
+PHASE 5 — SYSTEM HEALTH API
+GET /api/ai/system-health:
+- tool status (healthy / degraded / offline)
+- success rate
+- latency average
+- circuit state
+- fallback count
+
+GET /api/ai/system-health?debug=true:
+- last 10 calls per tool
+- raw telemetry snapshot
+
+PHASE 6 — OPTIONAL UI
+If admin panel exists:
+- SystemHealthPanel
+- auto refresh 30s
+- simple table only
+
+PHASE 7 — FINAL TEST
+- trigger each tool once
+- confirm telemetry works
+- confirm no API contract changes
+- confirm circuit breaker stability
+
+OUTPUT:
+- changed files list
+- system health snapshot
+- circuit breaker status per tool
+- confirmation: zero contract changes
+
+FINAL RULE:
+Production hardening only. No refactor. No behavior changes.

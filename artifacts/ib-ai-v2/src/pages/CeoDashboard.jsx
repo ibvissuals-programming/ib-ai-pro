@@ -26,7 +26,8 @@ import { useAdminPolling } from '../hooks/useAdminPolling';
 import { useTheme } from '../contexts/ThemeContext';
 import { UsersDirectoryPanel } from '../components/UsersDirectoryPanel';
 import { ActivityTimelinePanel } from '../components/ActivityTimelinePanel';
-import { AiRoutingPanel } from '../components/AiRoutingPanel';
+import { AiRoutingPanel }      from '../components/AiRoutingPanel';
+import { AiToolHealthPanel }  from '../components/AiToolHealthPanel';
 import { EventFeedPanel } from '../components/EventFeedPanel';
 import { SystemHealthPanel } from '../components/SystemHealthPanel';
 import { ControlOverviewPanel } from '../components/ControlOverviewPanel';
@@ -722,7 +723,7 @@ function TabBar({ activeTab, onTabChange }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function CeoDashboard() {
-  const { health, stats, activeUsers, logs, activityTimeline, aiStatus, overview, systemHealth, globalErrorCode } = useAdminPolling();
+  const { health, stats, activeUsers, logs, activityTimeline, aiStatus, overview, systemHealth, aiToolHealth, globalErrorCode } = useAdminPolling();
   const [activeTab, setActiveTab] = useState('overview');
 
   // Handle global auth errors
@@ -834,6 +835,12 @@ export default function CeoDashboard() {
                 error={aiStatus.error}
                 lastOk={aiStatus.lastOk}
               />
+              <AiToolHealthPanel
+                data={aiToolHealth.data}
+                loading={aiToolHealth.loading}
+                error={aiToolHealth.error}
+                lastOk={aiToolHealth.lastOk}
+              />
 
               {/* ── Section: Timeline ── */}
               <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest flex items-center gap-1.5 mt-6 mb-3">
@@ -847,7 +854,7 @@ export default function CeoDashboard() {
               />
 
               <p className="text-center text-[10px] text-muted-foreground/40 mt-6 pb-4">
-                Live data — health 8s · stats 10s · users 12s · logs 15s · ai routing 30s · timeline 30s
+                Live data — health 8s · stats 10s · users 12s · logs 15s · ai routing 30s · ai tool health 30s · timeline 30s
               </p>
             </motion.div>
           ) : activeTab === 'users' ? (

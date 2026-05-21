@@ -22,6 +22,8 @@
  *   - Never log API keys, prompts, or user content
  */
 import { logger } from "./logger";
+import { checkCircuit, recordCircuitOutcome } from "./circuitBreaker";
+import { appendCall }                         from "./toolTelemetryStore";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -151,19 +153,41 @@ export function recordToolCall(
  *   const result = await trackToolExecution("tts", () => generateSpeech(text, voice, jobId));
  *   const data   = await trackToolExecution("image", () => generateImage(prompt, userId));
  */
+/** Thrown when a tool's circuit breaker is open and the call is fast-failed. */
+export class CircuitOpenError extends Error {
+  constructor(public readonly tool: ToolName) {
+    super(`circuit_open: ${tool}`);
+    this.name = "CircuitOpenError";
+  }
+}
+
 export async function trackToolExecution<T>(
   tool: ToolName,
   fn:   () => Promise<T>,
   opts: RecordOptions = {},
 ): Promise<T> {
+  // Circuit breaker gate — fast-fail without calling fn if circuit is open
+  const { allowed } = checkCircuit(tool);
+  if (!allowed) {
+    recordToolCall(tool, 0, false, { ...opts, errorMessage: "circuit_open" });
+    appendCall(tool, 0, false, "circuit_open");
+    throw new CircuitOpenError(tool);
+  }
+
   const startMs = Date.now();
   try {
-    const result = await fn();
-    recordToolCall(tool, Date.now() - startMs, true, opts);
+    const result   = await fn();
+    const latency  = Date.now() - startMs;
+    recordToolCall(tool, latency, true, opts);
+    recordCircuitOutcome(tool, true);
+    appendCall(tool, latency, true);
     return result;
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    recordToolCall(tool, Date.now() - startMs, false, { ...opts, errorMessage: msg });
+    const latency = Date.now() - startMs;
+    const msg     = err instanceof Error ? err.message : String(err);
+    recordToolCall(tool, latency, false, { ...opts, errorMessage: msg });
+    recordCircuitOutcome(tool, false);
+    appendCall(tool, latency, false, msg.slice(0, 200));
     throw err;
   }
 }
