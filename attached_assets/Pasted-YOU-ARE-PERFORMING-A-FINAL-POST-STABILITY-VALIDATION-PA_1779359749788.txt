@@ -1,0 +1,121 @@
+YOU ARE PERFORMING A FINAL POST-STABILITY VALIDATION PASS.
+
+THE PREVIOUS STABILITY FIXES ARE ALREADY IMPLEMENTED.
+
+DO NOT:
+- rebuild systems
+- add features
+- refactor architecture
+- create dashboards
+- expand workflows
+- rewrite UI
+
+MISSION:
+VERIFY THE SYSTEM ACTUALLY WORKS END-TO-END.
+
+============================================================
+PHASE 1 — AUTH VALIDATION
+============================================================
+
+Test ALL auth flows manually:
+
+1. CEO login
+2. normal signup
+3. logout
+4. login again
+5. refresh persistence
+6. protected route persistence
+
+VERIFY:
+- no random logout
+- no invalid content-type response
+- no session reset after refresh
+- no auth loss after failed AI request
+
+If ANY route returns non-JSON:
+fix immediately.
+
+============================================================
+PHASE 2 — CHAT VALIDATION
+============================================================
+
+Test:
+- simple prompt
+- long prompt
+- Groq unavailable fallback
+- Gemini fallback
+
+VERIFY:
+- no "Request rejected by AI service"
+- no raw provider errors
+- no logout during failures
+- no broken SSE stream
+
+============================================================
+PHASE 3 — VIDEO VALIDATION
+============================================================
+
+IMPORTANT:
+Determine whether Veo access ACTUALLY exists.
+
+If Veo access exists:
+- verify full generation pipeline
+- verify polling
+- verify playback
+- verify download
+
+If Veo access DOES NOT exist:
+- fail EARLY and CLEANLY
+- NEVER create fake completed jobs
+- NEVER show “completed” then “not available”
+
+Frontend must show:
+"Video generation is not enabled for this API key."
+
+============================================================
+PHASE 4 — IMAGE + TTS VALIDATION
+============================================================
+
+Verify:
+- image generation
+- image editing
+- TTS playback
+- history persistence
+
+Ensure:
+- failures never clear auth
+- failures never crash frontend
+- all responses remain JSON-safe
+
+============================================================
+PHASE 5 — RESPONSE CONTRACT AUDIT
+============================================================
+
+Spot-check all major routes:
+
+- auth
+- chat
+- image
+- video
+- tts
+- health
+
+VERIFY:
+Content-Type = application/json
+
+No HTML.
+No plain text.
+No raw stack traces.
+
+============================================================
+PHASE 6 — FINAL OUTPUT
+============================================================
+
+Provide ONLY:
+
+1. tests performed
+2. exact remaining failures
+3. exact files modified (if any)
+4. whether system is production-stable or not
+
+STOP AFTER VALIDATION.

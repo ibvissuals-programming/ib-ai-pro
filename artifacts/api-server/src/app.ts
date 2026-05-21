@@ -43,6 +43,13 @@ app.use(healthRouter);
 
 app.use("/api", router);
 
+// ── JSON 404 handler ──────────────────────────────────────────────────────────
+// Catches any /api/* path that no route matched and returns JSON — never HTML.
+// Must be placed AFTER all routes but BEFORE the error handler.
+app.use((_req: Request, res: Response): void => {
+  res.status(404).json({ error: "Not found" });
+});
+
 // ── Global JSON error handler ─────────────────────────────────────────────────
 // Catches body-parser SyntaxErrors (malformed request JSON) and any other
 // unhandled errors. Ensures every error response is valid JSON — never HTML.
