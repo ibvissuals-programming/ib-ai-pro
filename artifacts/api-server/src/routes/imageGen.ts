@@ -36,6 +36,13 @@ import { recordUsage }  from "../lib/usageAnalytics";
 import { expandPrompt as expandPromptFn, PROMPT_CATEGORIES } from "../lib/promptExpander";
 import { buildStandardResponse, buildErrorResponse } from "../lib/aiOrchestrator";
 import { trackToolExecution } from "../lib/toolHealthMonitor";
+import {
+  recordEditAttempt,
+  recordEditSuccess,
+  recordEditFailure,
+  recordEditRetry,
+  getEditMetrics,
+} from "../lib/editMetrics";
 
 const router = Router();
 
@@ -64,7 +71,7 @@ const VALID_CINEMATIC_PROFILES = [
 
 const VALID_INTENSITIES = ["LOW", "MEDIUM", "HIGH", "EXTREME"] as const;
 
-const VALID_EDIT_MODES = ["portrait_safe", "cinematic", "style_transfer", "creative"] as const;
+const VALID_EDIT_MODES = ["portrait_safe", "cinematic", "style_transfer", "creative", "polish", "social", "luxury", "restore"] as const;
 
 const EditSchema = z.object({
   image: z.string().min(10, "Image is required"),
@@ -322,6 +329,7 @@ router.post(
       }
     }
 
+    recordEditAttempt(resolvedEditMode);
     try {
       const _t0 = Date.now();
       const result: EditResult = await imageQueue.run(() =>
@@ -341,6 +349,10 @@ router.post(
       deductRequestCredits(req);
       appendCreditHeaders(req, res);
       incImageEdited();
+      recordEditSuccess(Date.now() - _t0);
+      if ((result.job as Record<string, unknown>)?.retryCount) {
+        recordEditRetry("stage_failure");
+      }
       addAuditEntry("image_edit_success", "Image edited", {
         username: req.user?.username,
         ip: req.ip ?? undefined,
@@ -377,6 +389,8 @@ router.post(
         recordUsage({ userId: req.user.userId, type: "failure" });
       }
       incImageEditFailed();
+      const _failCat = err instanceof Error && err.message.toLowerCase().includes("timeout") ? "timeout" : "model_rejection";
+      recordEditFailure(_failCat);
       addAuditEntry("image_edit_failure", `Image edit failed: ${err instanceof Error ? err.message.slice(0, 120) : "unknown"}`, {
         username: req.user?.username,
         ip: req.ip ?? undefined,
@@ -391,6 +405,14 @@ router.post(
     }
   },
 );
+
+// ── GET /api/image/edit-quality ──────────────────────────────────────────────
+// Returns in-memory edit quality metrics for CEO observability.
+// Read-only — no credits charged, no rate limit. Auth not required.
+
+router.get("/image/edit-quality", (_req: Request, res: Response) => {
+  res.json({ success: true, ...getEditMetrics() });
+});
 
 // ── POST /api/image/cinematic-prompt ─────────────────────────────────────────
 // Standalone Cinematic Insight Engine endpoint.

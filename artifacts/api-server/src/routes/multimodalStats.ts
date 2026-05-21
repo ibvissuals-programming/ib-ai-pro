@@ -37,7 +37,7 @@ router.get(
       ]);
 
       const toolStat = (tool: string) => {
-        const t = (matrix.tools as Record<string, { totalCalls?: number; successRate?: number; avgLatencyMs?: number; status?: string; lastSuccess?: number }>)?.[tool] ?? {};
+        const t = ((matrix as unknown as Record<string, unknown>).tools as Record<string, { totalCalls?: number; successRate?: number; avgLatencyMs?: number; status?: string; lastSuccess?: number }>)?.[tool] ?? {};
         return {
           totalCalls:   t.totalCalls   ?? 0,
           successRate:  t.successRate  ?? null,

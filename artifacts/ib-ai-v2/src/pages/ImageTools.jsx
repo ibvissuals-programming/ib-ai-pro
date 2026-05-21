@@ -5,7 +5,7 @@ import {
   Cpu, ArrowLeft, Wand2, Upload, ImageIcon,
   Download, X, Loader2, AlertCircle, Sparkles, Copy, Check,
   History, Trash2, RefreshCw, Clock, Film, Zap, ChevronDown, ChevronUp,
-  Lightbulb, Eye, Sun, Moon, Palette, Aperture,
+  Lightbulb, Eye, Sun, Moon, Palette, Aperture, Shield,
 } from 'lucide-react';
 import { generateImage, editImage, fetchImageHistory, deleteHistoryEntry, generateCinematicPrompt } from '../services/imageToolsApi';
 import { useTheme } from '../contexts/ThemeContext';
@@ -136,6 +136,61 @@ function OutputCard({ src, onClear, mode, intensity }) {
   );
 }
 
+// ── Before / after comparison slider ─────────────────────────────────────────
+function BeforeAfterSlider({ before, after }) {
+  const [pos, setPos] = useState(50);
+  return (
+    <div className="relative rounded-2xl overflow-hidden border border-border/60 select-none" style={{ touchAction: 'none' }}>
+      <img src={before} alt="Before" className="w-full object-contain max-h-[520px] bg-black/20" draggable={false} />
+      <div className="absolute inset-0" style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}>
+        <img src={after} alt="After" className="w-full object-contain max-h-[520px] bg-black/20" draggable={false} />
+      </div>
+      <div className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${pos}%` }}>
+        <div className="w-0.5 h-full bg-white/80 shadow-lg" />
+        <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-7 h-7 rounded-full bg-white shadow-xl flex items-center justify-center">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 7L3 5M5 7L3 9M9 7L11 5M9 7L11 9" stroke="#333" strokeWidth="1.5" strokeLinecap="round" /></svg>
+        </div>
+      </div>
+      <input type="range" min="0" max="100" value={pos} onChange={(e) => setPos(Number(e.target.value))}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-ew-resize"
+        style={{ WebkitAppearance: 'none', margin: 0, padding: 0 }}
+      />
+      <div className="absolute top-2 left-2 text-[10px] bg-black/60 backdrop-blur text-white px-2 py-0.5 rounded-md font-medium pointer-events-none">Before</div>
+      <div className="absolute top-2 right-2 text-[10px] bg-primary/80 backdrop-blur text-white px-2 py-0.5 rounded-md font-medium pointer-events-none">After</div>
+    </div>
+  );
+}
+
+// ── Processing stage indicator ────────────────────────────────────────────────
+const PROC_STAGES = ['Uploading', 'Analyzing', 'Editing', 'Validating', 'Finalizing'];
+function ProcessingStageIndicator({ active }) {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    if (!active) { setIdx(0); return; }
+    const delays = [600, 2000, 12000, 4000, 2000];
+    let cur = 0;
+    const advance = () => {
+      cur = Math.min(cur + 1, PROC_STAGES.length - 1);
+      setIdx(cur);
+      if (cur < PROC_STAGES.length - 1) setTimeout(advance, delays[cur]);
+    };
+    const t = setTimeout(advance, delays[0]);
+    return () => clearTimeout(t);
+  }, [active]);
+  if (!active) return null;
+  return (
+    <div className="flex items-center justify-center gap-1 flex-wrap py-2">
+      {PROC_STAGES.map((stage, i) => (
+        <div key={stage} className="flex items-center gap-1">
+          <div className={`w-1.5 h-1.5 rounded-full transition-all ${i < idx ? 'bg-emerald-400' : i === idx ? 'bg-primary animate-pulse' : 'bg-border'}`} />
+          <span className={`text-[10px] transition-colors ${i === idx ? 'text-foreground font-medium' : i < idx ? 'text-emerald-400' : 'text-muted-foreground/40'}`}>{stage}</span>
+          {i < PROC_STAGES.length - 1 && <div className={`w-3 h-px ${i < idx ? 'bg-emerald-400/50' : 'bg-border/40'}`} />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Error display ─────────────────────────────────────────────────────────────
 function ErrorBox({ message }) {
   return (
@@ -227,41 +282,15 @@ function GenerateTab() {
 
 // ── Edit mode options ─────────────────────────────────────────────────────────
 const EDIT_MODES = [
-  {
-    value:       '',
-    label:       'Auto-Detect',
-    description: 'Let AI choose the best mode based on your instruction',
-    icon:        '✦',
-    color:       'text-muted-foreground',
-  },
-  {
-    value:       'portrait_safe',
-    label:       'Portrait Safe',
-    description: 'Enhancement only — face & body structure fully preserved',
-    icon:        '🛡',
-    color:       'text-emerald-400',
-  },
-  {
-    value:       'cinematic',
-    label:       'Cinematic',
-    description: 'Cinematic lighting, color grading & mood — identity kept',
-    icon:        '🎬',
-    color:       'text-blue-400',
-  },
-  {
-    value:       'style_transfer',
-    label:       'Style Transfer',
-    description: 'Full artistic transformation — loose subject preservation',
-    icon:        '🎨',
-    color:       'text-violet-400',
-  },
-  {
-    value:       'creative',
-    label:       'Creative',
-    description: 'Full artistic freedom — complete transformation allowed',
-    icon:        '⚡',
-    color:       'text-orange-400',
-  },
+  { value: '',             label: 'Auto-Detect',    description: 'AI selects best mode for your instruction',             icon: '✦',  color: 'text-muted-foreground' },
+  { value: 'polish',       label: 'Polish',          description: 'Natural skin cleanup, lighting balance, sharpness',      icon: '✨',  color: 'text-emerald-400' },
+  { value: 'cinematic',    label: 'Cinematic',       description: 'Filmic contrast, atmospheric depth, premium color grade', icon: '🎬', color: 'text-blue-400' },
+  { value: 'social',       label: 'Social',          description: 'Punchy mobile-optimized, vibrant and controlled',        icon: '📱', color: 'text-cyan-400' },
+  { value: 'luxury',       label: 'Luxury',          description: 'Ultra-clean premium aesthetic, soft highlights',         icon: '💎', color: 'text-amber-400' },
+  { value: 'restore',      label: 'Restore',         description: 'Noise cleanup, blur reduction, image restoration',       icon: '🔧', color: 'text-orange-400' },
+  { value: 'portrait_safe', label: 'Portrait Safe',  description: 'Maximum identity preservation, enhancement only',        icon: '🛡',  color: 'text-green-400' },
+  { value: 'style_transfer', label: 'Style Transfer', description: 'Full artistic transformation — loose subject preservation', icon: '🎨', color: 'text-violet-400' },
+  { value: 'creative',     label: 'Creative',        description: 'Full artistic freedom — complete transformation',         icon: '⚡',  color: 'text-orange-400' },
 ];
 
 const INTENSITY_LEVELS = [
@@ -457,15 +486,20 @@ function EditTab() {
   const [editMode, setEditMode] = useState('');
   const [intensityLevel, setIntensityLevel] = useState('');
   const [useDirectorAnalysis, setUseDirectorAnalysis] = useState(false);
+  const [showBeforeAfter, setShowBeforeAfter] = useState(false);
   const fileInputRef = useRef(null);
   const checkRate = useRateLimit();
 
   const EXAMPLES_BY_MODE = {
-    '':               ['Add dramatic cinematic lighting', 'Make it look like a watercolor painting', 'Remove the watermark', 'Make the background a sunset beach'],
-    portrait_safe:    ['Smooth skin and improve lighting', 'Remove blemishes naturally', 'Fix the exposure and make it brighter', 'Clean up the background slightly'],
-    cinematic:        ['Add dramatic cinematic lighting', 'Convert to black and white film noir style', 'Apply golden hour warm tones', 'Add moody blue-hour atmosphere'],
-    style_transfer:   ['Make it look like a watercolor painting', 'Convert to Studio Ghibli anime style', 'Apply editorial fashion photography look', 'Render as an oil painting'],
-    creative:         ['Transport them to a fantasy forest', 'Reimagine as a sci-fi concept art', 'Place them in a neon cyberpunk city', 'Transform into a surreal dreamscape'],
+    '':            ['Add dramatic cinematic lighting', 'Make it look like a watercolor painting', 'Remove the watermark', 'Make the background a sunset beach'],
+    polish:        ['Smooth skin naturally and balance lighting', 'Remove blemishes and even skin tone', 'Clean up skin and sharpen the eyes', 'Improve skin texture naturally'],
+    cinematic:     ['Add dramatic cinematic lighting', 'Apply golden hour warm tones', 'Add moody blue-hour atmosphere', 'Film noir black and white grade'],
+    social:        ['Make it pop for Instagram', 'Vibrant punchy mobile edit', 'Enhance for social media', 'TikTok-tuned color grade'],
+    luxury:        ['Apply luxury editorial look', 'Premium campaign aesthetic', 'Soft luxury color grade', 'High-end fashion editorial treatment'],
+    restore:       ['Remove noise and sharpen', 'Restore old photo quality', 'Fix blur and compression artifacts', 'Clean up and enhance detail'],
+    portrait_safe: ['Subtle lighting improvement', 'Remove blemishes naturally', 'Fix exposure gently', 'Clean up background slightly'],
+    style_transfer: ['Make it look like a watercolor painting', 'Convert to Studio Ghibli anime style', 'Apply editorial fashion photography look', 'Render as an oil painting'],
+    creative:      ['Transport to a fantasy forest', 'Reimagine as sci-fi concept art', 'Place in a neon cyberpunk city', 'Transform into a surreal dreamscape'],
   };
 
   const examples = EXAMPLES_BY_MODE[editMode] ?? EXAMPLES_BY_MODE[''];
@@ -656,6 +690,7 @@ function EditTab() {
       </div>
 
       <AnimatePresence>{error && <ErrorBox message={error} />}</AnimatePresence>
+      <ProcessingStageIndicator active={loading} />
       <AnimatePresence>{loading && <ImageSkeleton label="Applying your edit…" />}</AnimatePresence>
 
       {/* ── LAYER 8: Before / After viewer ── */}
@@ -690,7 +725,36 @@ function EditTab() {
                     AI Director
                   </span>
                 )}
+                {outputMeta?.mode && ['portrait_safe', 'polish', 'restore'].includes(outputMeta.mode) && (
+                  <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-400/20 font-medium">
+                    <Shield size={8} />
+                    Identity Protected
+                  </span>
+                )}
+                {outputMeta?.mode && ['cinematic', 'social', 'luxury'].includes(outputMeta.mode) && (
+                  <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-400/20 font-medium">
+                    <Sparkles size={8} />
+                    Cinematic Grade
+                  </span>
+                )}
+                {sourceImage && (
+                  <button
+                    onClick={() => setShowBeforeAfter(v => !v)}
+                    className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors ${
+                      showBeforeAfter
+                        ? 'bg-primary/15 text-primary border-primary/30'
+                        : 'bg-secondary/40 text-muted-foreground border-border/50 hover:text-foreground hover:border-primary/30'
+                    }`}
+                  >
+                    {showBeforeAfter ? 'Hide Compare' : 'Compare'}
+                  </button>
+                )}
               </div>
+            )}
+
+            {/* Before / After drag slider */}
+            {showBeforeAfter && sourceImage && output && (
+              <BeforeAfterSlider before={sourceImage} after={output} />
             )}
 
             {/* Pipeline debug tracker */}

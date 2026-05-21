@@ -166,7 +166,7 @@ export function enhancePrompt(raw: string): string {
 //   style_transfer  — loose lock, full aesthetic transformation
 //   creative        — minimal lock, full artistic freedom
 
-export type EditMode = "portrait_safe" | "cinematic" | "style_transfer" | "creative";
+export type EditMode = "portrait_safe" | "cinematic" | "style_transfer" | "creative" | "polish" | "social" | "luxury" | "restore";
 
 // Mode → display label (returned in EditResult.mode for frontend badges)
 const MODE_LABELS: Record<EditMode, string> = {
@@ -174,6 +174,10 @@ const MODE_LABELS: Record<EditMode, string> = {
   cinematic:      "Cinematic",
   style_transfer: "Style Transfer",
   creative:       "Creative",
+  polish:         "Polish",
+  social:         "Social",
+  luxury:         "Luxury",
+  restore:        "Restore",
 };
 
 // ── Mode contracts ─────────────────────────────────────────────────────────────
@@ -326,16 +330,28 @@ function contractForMode(mode: EditMode): string {
     case "cinematic":      return CONTRACT_CINEMATIC;
     case "style_transfer": return CONTRACT_STYLE_TRANSFER;
     case "creative":       return CONTRACT_CREATIVE;
+    case "polish":         return CONTRACT_PORTRAIT_SAFE;
+    case "social":         return CONTRACT_CINEMATIC;
+    case "luxury":         return CONTRACT_CINEMATIC;
+    case "restore":        return CONTRACT_PORTRAIT_SAFE;
   }
 }
 
 // ── Mode downgrade chain (used by failsafe retry) ─────────────────────────────
-// creative → style_transfer → cinematic → portrait_safe
+// creative → style_transfer → social → cinematic → luxury → polish → restore → portrait_safe
 
 function downgradedMode(mode: EditMode): EditMode {
-  const chain: EditMode[] = ["portrait_safe", "cinematic", "style_transfer", "creative"];
-  const idx = chain.indexOf(mode);
-  return idx > 0 ? chain[idx - 1]! : "portrait_safe";
+  const chain: Record<EditMode, EditMode> = {
+    creative:      "style_transfer",
+    style_transfer: "social",
+    social:        "cinematic",
+    cinematic:     "luxury",
+    luxury:        "polish",
+    polish:        "restore",
+    restore:       "portrait_safe",
+    portrait_safe: "portrait_safe",
+  };
+  return chain[mode];
 }
 
 // ── Intent detector — auto-assigns edit mode from prompt keywords ──────────────
@@ -452,6 +468,10 @@ export function detectEditMode(prompt: string): EditMode {
     cinematic:      0,
     style_transfer: 0,
     creative:       0,
+    polish:         0,
+    social:         0,
+    luxury:         0,
+    restore:        0,
   };
 
   for (const p of PORTRAIT_SAFE_PATTERNS)   if (p.test(prompt)) scores.portrait_safe++;
@@ -882,6 +902,10 @@ const STAGE_3_BASE_TEMPERATURES: Record<EditMode, number> = {
   cinematic:      1.00,
   style_transfer: 1.05,
   creative:       1.10,
+  polish:         0.75,
+  social:         0.90,
+  luxury:         0.85,
+  restore:        0.70,
 };
 
 const INTENSITY_TEMPERATURE_MODIFIERS: Record<IntensityLevel, number> = {
@@ -903,6 +927,10 @@ const MODE_EXPLANATION: Record<EditMode, string> = {
   cinematic:      "Enabled full cinematic grading in Stage 3",
   style_transfer: "Skipped enhancement stage to prioritize artistic transformation",
   creative:       "Allowed maximum stylistic freedom across Stage 2 and Stage 3",
+  polish:         "Applied natural skin cleanup, lighting balance, and sharpness refinement",
+  social:         "Applied punchy mobile-optimized enhancement with vibrant controlled tones",
+  luxury:         "Applied ultra-clean premium aesthetic with soft highlights and campaign quality",
+  restore:        "Applied precision cleanup: noise reduction, blur recovery, artifact removal",
 };
 
 const INTENSITY_EXPLANATION: Record<IntensityLevel, string> = {
@@ -945,9 +973,10 @@ function buildExplanation(params: {
   }
 
   // Temperature summary
+  const NO_STAGE3_MODES: EditMode[] = ["portrait_safe", "polish", "restore"];
   let temperatureSummary: string;
-  if (usedMode === "portrait_safe") {
-    temperatureSummary = "No Stage 3 executed — portrait_safe mode preserves identity with cleanup and enhancement only";
+  if (NO_STAGE3_MODES.includes(usedMode)) {
+    temperatureSummary = `No Stage 3 executed — ${usedMode} mode preserves identity with cleanup and enhancement only`;
   } else {
     const s3Temp = computeStage3Temperature(usedMode, intensity);
     temperatureSummary = `Final Stage 3 temperature set to ${s3Temp.toFixed(2)} (${usedMode} base + ${intensity} intensity modifier)`;
@@ -1019,12 +1048,36 @@ function buildStagePlan(mode: EditMode, intensity: IntensityLevel): StageDescrip
     instruction: (_) => `Enhance this image: improve lighting, contrast, dynamic range, sharpness, and skin texture naturally. Do not apply artistic styling.${S2_INTENSITY_ADDENDUM[intensity]}`,
   };
 
+  const s2Polish: StageDescriptor = {
+    stageNum:    2,
+    label:       "Polish Engine",
+    contract:    STAGE_2_ENHANCEMENT_CONTRACT,
+    temperature: STAGE_TEMPERATURES.enhancement,
+    instruction: (_) => `Polish this image naturally: gentle skin cleanup, blemish and redness reduction, natural skin smoothing with texture preserved, balanced lighting, sharpness refinement. Preserve all identity. Do not apply artistic styling.${S2_INTENSITY_ADDENDUM[intensity]}`,
+  };
+
   const s3Cinematic: StageDescriptor = {
     stageNum:    3,
     label:       "Cinematic Engine",
     contract:    STAGE_3_CINEMATIC_CONTRACT,
     temperature: s3Temp,
     instruction: (p) => p,
+  };
+
+  const s3Social: StageDescriptor = {
+    stageNum:    3,
+    label:       "Social Engine",
+    contract:    STAGE_3_CINEMATIC_CONTRACT,
+    temperature: s3Temp,
+    instruction: (p) => `${p} Apply vibrant mobile-optimized color enhancement: punchy contrast, lifted midtones, controlled vibrant saturation, sharp clean highlights, Instagram/TikTok tuned color grade. Preserve skin tone and subject identity exactly.`,
+  };
+
+  const s3Luxury: StageDescriptor = {
+    stageNum:    3,
+    label:       "Luxury Engine",
+    contract:    STAGE_3_CINEMATIC_CONTRACT,
+    temperature: s3Temp,
+    instruction: (p) => `${p} Apply luxury editorial color grade: creamy soft highlights, warm-neutral fill light, ultra-refined skin rendering, muted elegant shadows, aspirational lifestyle atmosphere, premium fashion campaign quality. Preserve identity with precision.`,
   };
 
   const s3StyleTransfer: StageDescriptor = {
@@ -1048,6 +1101,10 @@ function buildStagePlan(mode: EditMode, intensity: IntensityLevel): StageDescrip
     case "cinematic":      return [s1, s2, s3Cinematic];
     case "style_transfer": return [s1, s3StyleTransfer];
     case "creative":       return [s1, s2, s3Creative];
+    case "polish":         return [s1, s2Polish];
+    case "social":         return [s1, s2, s3Social];
+    case "luxury":         return [s1, s2, s3Luxury];
+    case "restore":        return [s1];
   }
 }
 
@@ -1357,5 +1414,81 @@ export async function editImage(
     return await Promise.race([runPipeline(), deadlinePromise]);
   } finally {
     if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
+  }
+}
+
+// ── Phase 2 — Identity Lock Prompt ───────────────────────────────────────────
+//
+// Deterministic identity preservation string injected into all edit requests.
+// Encodes the full set of identity-critical preservation directives.
+
+const IDENTITY_LOCK_RULES = [
+  "Preserve exact subject identity — same face, same person, same defining features",
+  "Preserve bone structure, natural facial proportions, and spatial relationships between all features",
+  "Preserve ethnicity and all characteristics that make this face uniquely recognizable",
+  "Preserve hairstyle shape, color, and natural movement unless explicitly instructed to change it",
+  "Preserve clothing, pose, and body proportions unless explicitly instructed to change them",
+  "Preserve camera angle, subject framing, and background composition",
+  "Enhancement ≠ regeneration — this is an edit, not a reimagination — preserve subject realism throughout",
+] as const;
+
+export function buildIdentityLockPrompt(): string {
+  return `IDENTITY LOCK ACTIVE: ${IDENTITY_LOCK_RULES.join(". ")}.`;
+}
+
+// ── Phase 4 — Stable Edit Prompt Builder ─────────────────────────────────────
+//
+// Single-call wrapper for the full deterministic edit prompt pipeline:
+//   user request → safety-clean → classify → identity lock → mode template → realism constraints
+//
+// Runs the complete editIntelligence → APRE → FRAE chain and returns
+// a fully constructed, pipeline-ready prompt. Non-throwing.
+
+export interface StableEditPromptResult {
+  finalPrompt:  string;
+  category:     string;
+  strength:     string;
+  identityLock: string;
+  safetyFixes:  string[];
+}
+
+export async function buildStableEditPrompt(
+  userRequest: string,
+): Promise<StableEditPromptResult> {
+  try {
+    const { buildEditInstruction } = await import("./editIntelligence");
+    const { buildAdaptiveEditPrompt } = await import("./adaptivePromptReinforcement");
+    const { buildFacialRegionEnhancement } = await import("./facialRegionAwareness");
+
+    const intelligence = buildEditInstruction({ userPrompt: userRequest });
+    const apre = buildAdaptiveEditPrompt({
+      prompt:          intelligence.enrichedPrompt,
+      category:        intelligence.category,
+      strength:        intelligence.strength,
+      templateApplied: intelligence.templateApplied,
+    });
+    const frae = buildFacialRegionEnhancement({
+      originalPrompt:     userRequest,
+      intelligenceResult: intelligence,
+      apreResult:         apre,
+    });
+    const identityLock = buildIdentityLockPrompt();
+
+    return {
+      finalPrompt:  frae.enhancedPrompt,
+      category:     intelligence.category,
+      strength:     intelligence.strength,
+      identityLock,
+      safetyFixes:  intelligence.safetyFixes,
+    };
+  } catch (err) {
+    logger.warn({ err }, "[buildStableEditPrompt] pipeline threw — returning original request");
+    return {
+      finalPrompt:  userRequest,
+      category:     "general",
+      strength:     "balanced",
+      identityLock: buildIdentityLockPrompt(),
+      safetyFixes:  [],
+    };
   }
 }

@@ -1,0 +1,285 @@
+IB AI — EDITING MODEL STABILITY + CINEMATIC QUALITY ENGINE (CREDIT-EFFICIENT PRODUCTION PASS)
+
+MISSION:
+Transform IB AI image editing into a reliable, high-quality, production-grade editing tool with stable outputs, identity preservation, cinematic enhancement quality, and deterministic execution behavior.
+
+CRITICAL RULES:
+- DO NOT rebuild stable infrastructure
+- DO NOT touch import/bootstrap systems
+- DO NOT rewrite routing architecture
+- DO NOT rescan unrelated frontend files
+- ONLY target image editing quality + execution reliability
+
+PRIMARY GOAL:
+Make editing feel like a real commercial AI editing product rather than a prompt experiment.
+
+---------------------------------------------------
+PHASE 1 — EDIT PIPELINE AUDIT
+---------------------------------------------------
+
+Audit ONLY the editing pipeline:
+
+- image edit route
+- imageGenService edit flow
+- Gemini image editing calls
+- prompt expansion for edits
+- upload preprocessing
+- output validation
+- retry behavior
+
+Identify:
+- identity drift causes
+- over-stylization causes
+- face mutation causes
+- prompt instability
+- inconsistent enhancement quality
+- timeout/failure points
+- unnecessary prompt inflation
+
+Output:
+- exact causes
+- exact files
+- exact execution sequence
+
+DO NOT audit unrelated systems.
+
+---------------------------------------------------
+PHASE 2 — IDENTITY PRESERVATION LAYER
+---------------------------------------------------
+
+Implement a deterministic edit-preservation system.
+
+RULES:
+- preserve original face structure
+- preserve skin tone
+- preserve pose
+- preserve camera angle
+- preserve facial proportions
+- preserve hairstyle unless explicitly requested
+- preserve clothing unless explicitly requested
+
+Add:
+buildIdentityLockPrompt()
+
+Injected automatically into ALL edit requests.
+
+Behavior:
+- enhancement ≠ regeneration
+- edit ≠ reimagination
+- preserve subject realism
+
+---------------------------------------------------
+PHASE 3 — CINEMATIC EDIT INTELLIGENCE
+---------------------------------------------------
+
+Create editing modes:
+
+1. POLISH
+- skin cleanup
+- lighting enhancement
+- sharpness balancing
+- natural realism
+
+2. CINEMATIC
+- filmic contrast
+- atmospheric depth
+- premium color grading
+- subtle glow handling
+
+3. SOCIAL
+- punchy mobile-optimized enhancement
+- vibrant but controlled
+- TikTok/Instagram tuned
+
+4. LUXURY
+- ultra-clean premium aesthetic
+- soft highlights
+- luxury campaign look
+
+5. RESTORE
+- noise cleanup
+- blur reduction
+- old image restoration
+
+Implement:
+- deterministic mode prompt templates
+- controlled intensity scaling
+- anti-overprocessing rules
+
+---------------------------------------------------
+PHASE 4 — PROMPT STABILITY ENGINE
+---------------------------------------------------
+
+Replace unstable freeform edit prompting.
+
+Implement:
+buildStableEditPrompt()
+
+Pipeline:
+user request
+→ sanitize
+→ classify edit type
+→ inject identity lock
+→ inject mode template
+→ inject realism constraints
+→ final stable prompt
+
+ANTI-FAILURE RULES:
+- avoid conflicting instructions
+- remove duplicate adjectives
+- cap prompt size
+- block over-stylization chains
+- reduce hallucination risk
+
+---------------------------------------------------
+PHASE 5 — OUTPUT VALIDATION SYSTEM
+---------------------------------------------------
+
+Add post-generation validation.
+
+Detect:
+- broken faces
+- warped anatomy
+- severe identity drift
+- low-detail outputs
+- corrupted images
+- blank outputs
+
+If validation fails:
+- auto-retry once with reduced stylization
+- preserve same job ID
+- mark retry reason internally
+
+DO NOT expose provider internals to frontend.
+
+---------------------------------------------------
+PHASE 6 — EXECUTION STABILITY HARDENING
+---------------------------------------------------
+
+Improve runtime reliability.
+
+Add:
+- editing timeout isolation
+- transient retry handling
+- provider failure fallback handling
+- safe cancellation
+- upload size normalization
+- image dimension normalization
+
+RULES:
+- no hanging edit jobs
+- no infinite polling
+- no silent failures
+- all failures return standardized responses
+
+---------------------------------------------------
+PHASE 7 — EDIT UX IMPROVEMENTS
+---------------------------------------------------
+
+Improve Image Studio UX WITHOUT redesigning layout.
+
+Add:
+- editing mode selector chips
+- intensity slider labels
+- “identity protected” badge
+- “cinematic optimized” badge
+- processing stage indicator:
+  - upload
+  - analyzing
+  - editing
+  - validating
+  - finalizing
+
+Add:
+before/after quick compare slider.
+
+RULE:
+NO layout shift.
+NO unstable animation patterns.
+
+Follow existing UI stability law.
+
+---------------------------------------------------
+PHASE 8 — CEO EDIT QUALITY OBSERVABILITY
+---------------------------------------------------
+
+Expand CEO observability.
+
+Track:
+- edit success rate
+- retry frequency
+- identity drift retries
+- avg edit latency
+- provider failures
+- mode usage distribution
+
+Add:
+EditQualityPanel.jsx
+
+Display:
+- stability score
+- retry causes
+- top failure categories
+- edit mode popularity
+
+---------------------------------------------------
+PHASE 9 — HEALTH INTEGRATION
+---------------------------------------------------
+
+Expand:
+GET /api/ai/system-health
+
+Add:
+{
+  "editingPipeline": {
+    "status": "healthy",
+    "identityProtection": true,
+    "validationLayer": true,
+    "retryProtection": true,
+    "modeSystem": true
+  }
+}
+
+---------------------------------------------------
+PHASE 10 — VALIDATION
+---------------------------------------------------
+
+Run controlled tests:
+
+1. Face polish
+2. Hair cleanup
+3. Luxury enhancement
+4. Cinematic portrait
+5. Restore old image
+6. Social enhancement
+
+Verify:
+✔ identity preserved
+✔ no face mutation
+✔ no body distortion
+✔ stable latency
+✔ retry system works
+✔ health endpoint updated
+✔ UI stable
+✔ no provider leakage
+
+---------------------------------------------------
+FINAL RULES
+---------------------------------------------------
+
+- Preserve existing architecture
+- Reuse current health systems
+- Reuse current observability systems
+- Reuse current multimodal infrastructure
+- Avoid broad scans
+- Avoid frontend rewrites
+- Minimize credit usage aggressively
+- Focus ONLY on editing quality + stability
+
+OUTPUT:
+- files modified
+- stability improvements
+- edit quality improvements
+- retry logic summary
+- validation results
+- final editing reliability score

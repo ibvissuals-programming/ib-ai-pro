@@ -33,6 +33,7 @@ import { SystemHealthPanel } from '../components/SystemHealthPanel';
 import { ControlOverviewPanel } from '../components/ControlOverviewPanel';
 import { MultimodalStatsPanel } from '../components/MultimodalStatsPanel';
 import { ProviderStabilityPanel } from '../components/ProviderStabilityPanel';
+import { EditQualityPanel } from '../components/EditQualityPanel';
 import { IbLogo } from '../components/IbLogo';
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
@@ -850,12 +851,15 @@ export default function CeoDashboard() {
               </p>
               <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4">
                 <MultimodalStatsPanel />
-                <ProviderStabilityPanel
-                  data={aiToolHealth.data}
-                  loading={aiToolHealth.loading}
-                  error={aiToolHealth.error}
-                  lastOk={aiToolHealth.lastOk}
-                />
+                <div className="space-y-4">
+                  <ProviderStabilityPanel
+                    data={aiToolHealth.data}
+                    loading={aiToolHealth.loading}
+                    error={aiToolHealth.error}
+                    lastOk={aiToolHealth.lastOk}
+                  />
+                  <EditQualityPanel />
+                </div>
               </div>
 
               {/* ── Section: Timeline ── */}
