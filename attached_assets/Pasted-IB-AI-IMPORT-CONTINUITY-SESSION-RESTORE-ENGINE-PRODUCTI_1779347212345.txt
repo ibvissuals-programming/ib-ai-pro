@@ -1,0 +1,126 @@
+IB AI — IMPORT CONTINUITY + SESSION RESTORE ENGINE (PRODUCTION v31)
+
+MISSION:
+Continue IB AI development from the exact current production state with ZERO redundant exploration, ZERO repeated setup loops, and ZERO unnecessary rewrites.
+
+PRIORITY:
+1. Preserve existing working systems
+2. Continue from latest architecture state
+3. Minimize agent token/credit usage
+4. Avoid repeated imports/setup loops
+5. Only extend production-ready systems
+
+CURRENT VERIFIED SYSTEM STATE (DO NOT REBUILD):
+
+MULTIMODAL SYSTEMS:
+✅ Chat system operational
+✅ Image generation operational
+✅ Advanced image editing pipeline operational
+✅ Voice Studio operational
+✅ Video Studio operational
+✅ Gemini Veo 2 pipeline integrated
+✅ Persistent history system operational
+✅ Creator workflow launcher operational
+✅ Creator analytics operational
+✅ CEO observability system operational
+✅ Tool health monitoring operational
+✅ Circuit breaker system operational
+✅ Provider stability monitoring operational
+✅ Import bootstrap system operational
+✅ Startup health system operational
+✅ Creator session system operational
+
+IMPORT/BOOTSTRAP STATUS:
+✅ scripts/import-bootstrap.cjs exists
+✅ scripts/startup-health.cjs exists
+✅ scripts/db-guard.cjs exists
+✅ scripts/health-check.cjs exists
+✅ pnpm run bootstrap exists
+✅ pnpm run startup:health exists
+✅ GEMINI_API_KEY is the ONLY required AI secret
+✅ CEO auto-bootstrap exists
+✅ JWT fallback auto-generation exists
+✅ Groq is optional
+✅ Database auto-validation exists
+✅ Import-ready system already implemented
+
+DO NOT:
+❌ Re-scan the entire codebase
+❌ Rebuild existing systems
+❌ Recreate workflows
+❌ Reinstall already-working infrastructure
+❌ Repeat deep architecture audits
+❌ Rebuild Voice Studio
+❌ Rebuild Video Studio
+❌ Rebuild health systems
+❌ Rebuild analytics systems
+❌ Rebuild observability systems
+❌ Rebuild session systems
+❌ Rebuild import/bootstrap systems
+
+FIRST ACTIONS ONLY:
+1. Run startup validation
+2. Verify workflows running
+3. Verify backend healthy
+4. Verify frontend healthy
+5. Verify Gemini provider active
+6. Continue ONLY from latest unfinished feature state
+
+LATEST DEVELOPMENT STATE:
+The next unfinished production task is:
+
+URL PARAM SESSION RESTORE SYSTEM
+
+GOAL:
+When WorkflowLauncher launches a workflow:
+- destination studio auto-reads URL params
+- auto-prefills prompt
+- auto-prefills edit mode
+- auto-prefills voice
+- auto-prefills workflow metadata
+- auto-restores creator session context
+
+TARGET FILES ONLY:
+- ImageTools.jsx
+- VoiceStudio.jsx
+- VideoStudio.jsx
+- WorkflowLauncher.jsx
+- creatorSessionsApi.js (only if required)
+
+IMPLEMENTATION REQUIREMENTS:
+✅ Read URLSearchParams on mount
+✅ Populate fields automatically
+✅ Preserve existing state logic
+✅ No breaking API changes
+✅ No backend rewrites unless required
+✅ Mobile-safe behavior
+✅ Zero duplicate renders
+✅ Zero layout shifts
+✅ Use existing architecture patterns
+✅ Maintain existing animation standards
+
+AFTER IMPLEMENTATION:
+1. Run typecheck
+2. Restart backend
+3. Validate session restore flow
+4. Validate mobile responsiveness
+5. Validate creator workflows
+6. Validate no regressions
+7. Stop
+
+OUTPUT STYLE:
+- Concise execution logs only
+- No long explanations
+- No repeated architecture summaries
+- No unnecessary exploration narration
+- Focus on implementation and validation only
+
+CREDIT EFFICIENCY RULES:
+- Read only required files
+- Batch edits in parallel
+- Avoid repeated scans
+- Avoid redundant diagnostics
+- Avoid unnecessary rewrites
+- Preserve all stable systems
+
+MAKE, TEST, ITERATE.
