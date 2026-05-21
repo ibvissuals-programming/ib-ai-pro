@@ -2,6 +2,7 @@
  * VideoStudio.jsx — IB AI Assistant
  *
  * Image-to-video studio powered by Gemini Veo.
+ * Includes persistent video history and creator presets.
  *
  * States:
  *   idle            → shows the form (always available)
@@ -17,7 +18,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Video, Upload, X, Sparkles,
   AlertCircle, Sun, Moon, Clock, Zap, Download,
-  RefreshCw, CheckCircle, Film,
+  RefreshCw, CheckCircle, Film, History, Play,
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import {
@@ -25,6 +26,7 @@ import {
   pollVideoStatus,
   getVideoUrl,
 } from '../services/videoApi';
+import { fetchVideoHistory } from '../services/historyApi';
 
 // ── Video mode definitions ─────────────────────────────────────────────────────
 const VIDEO_MODES = [
@@ -66,6 +68,38 @@ const VIDEO_MODES = [
   },
 ];
 
+// ── Creator presets ────────────────────────────────────────────────────────────
+const VIDEO_PRESETS = [
+  {
+    id:     'cinematic',
+    label:  'Cinematic',
+    emoji:  '🎬',
+    prompt: 'Slow cinematic camera pan, depth of field pull, dramatic lighting shift, film grain',
+    mode:   'cinematic_motion',
+  },
+  {
+    id:     'social_zoom',
+    label:  'Social Zoom',
+    emoji:  '📱',
+    prompt: 'Fast dynamic zoom in, vibrant color pop, social media reel energy, punchy motion',
+    mode:   'social_motion',
+  },
+  {
+    id:     'parallax',
+    label:  'Parallax Reel',
+    emoji:  '🌀',
+    prompt: 'Ken Burns effect, parallax depth layers, slow zoom with atmospheric perspective',
+    mode:   'zoom_parallax',
+  },
+  {
+    id:     'luxury',
+    label:  'Luxury Showcase',
+    emoji:  '✨',
+    prompt: 'Gentle ambient light movement, luxury product reveal, subtle shimmer, premium slow motion',
+    mode:   'subtle_animation',
+  },
+];
+
 const PROMPT_EXAMPLES = [
   'Camera slowly pushes in with dramatic lens flare',
   'Gentle parallax with bokeh light drift in background',
@@ -73,8 +107,32 @@ const PROMPT_EXAMPLES = [
   'Subtle breathing motion with warm ambient glow',
 ];
 
-const POLL_INTERVAL_MS = 5_000;
-const MAX_POLL_DURATION_MS = 130_000;  // 2 min 10 s — slightly beyond server timeout
+const POLL_INTERVAL_MS   = 5_000;
+const MAX_POLL_DURATION_MS = 130_000;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function formatRelative(ts) {
+  if (!ts) return '';
+  const diff = Date.now() - ts;
+  if (diff < 60_000) return 'just now';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return new Date(ts).toLocaleDateString();
+}
+
+function statusColor(status) {
+  if (status === 'completed') return 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20';
+  if (status === 'failed')    return 'text-red-400 bg-red-400/10 border-red-400/20';
+  if (status === 'provider_not_configured') return 'text-amber-400 bg-amber-400/10 border-amber-400/20';
+  return 'text-muted-foreground/60 bg-muted/20 border-border/20';
+}
+
+function statusLabel(status) {
+  if (status === 'completed') return 'Ready';
+  if (status === 'failed')    return 'Failed';
+  if (status === 'provider_not_configured') return 'No Access';
+  return status;
+}
 
 // ── Upload zone ────────────────────────────────────────────────────────────────
 function UploadZone({ image, onImage, onClear, disabled }) {
@@ -155,9 +213,7 @@ function UploadZone({ image, onImage, onClear, disabled }) {
 function StatusBanner({ status, message, elapsed }) {
   if (status === 'provider_not_configured') {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: -4 }}
-        animate={{ opacity: 1, y: 0 }}
+      <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
         className="flex items-start gap-3 px-4 py-3.5 rounded-xl bg-amber-500/8 border border-amber-400/25"
       >
         <Clock size={14} className="text-amber-400 shrink-0 mt-0.5" />
@@ -171,13 +227,10 @@ function StatusBanner({ status, message, elapsed }) {
       </motion.div>
     );
   }
-
   if (status === 'polling' || status === 'submitting') {
     const elapsedSec = Math.floor((elapsed ?? 0) / 1000);
     return (
-      <motion.div
-        initial={{ opacity: 0, y: -4 }}
-        animate={{ opacity: 1, y: 0 }}
+      <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
         className="flex items-start gap-3 px-4 py-3.5 rounded-xl bg-primary/8 border border-primary/25"
       >
         <RefreshCw size={14} className="text-primary shrink-0 mt-0.5 animate-spin" />
@@ -192,12 +245,9 @@ function StatusBanner({ status, message, elapsed }) {
       </motion.div>
     );
   }
-
   if (status === 'failed') {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: -4 }}
-        animate={{ opacity: 1, y: 0 }}
+      <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
         className="flex items-start gap-3 px-4 py-3.5 rounded-xl bg-red-500/8 border border-red-400/25"
       >
         <AlertCircle size={14} className="text-red-400 shrink-0 mt-0.5" />
@@ -210,12 +260,9 @@ function StatusBanner({ status, message, elapsed }) {
       </motion.div>
     );
   }
-
   if (status === 'completed') {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: -4 }}
-        animate={{ opacity: 1, y: 0 }}
+      <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
         className="flex items-start gap-3 px-4 py-3.5 rounded-xl bg-emerald-500/8 border border-emerald-400/25"
       >
         <CheckCircle size={14} className="text-emerald-400 shrink-0 mt-0.5" />
@@ -226,30 +273,16 @@ function StatusBanner({ status, message, elapsed }) {
       </motion.div>
     );
   }
-
   return null;
 }
 
 // ── Video player ───────────────────────────────────────────────────────────────
 function VideoPlayer({ jobId, onReset }) {
   const videoUrl = getVideoUrl(jobId);
-
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.97 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="space-y-4"
-    >
+    <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
       <div className="rounded-xl overflow-hidden border border-border/60 bg-black">
-        <video
-          src={videoUrl}
-          controls
-          autoPlay
-          loop
-          muted
-          playsInline
-          className="w-full max-h-72"
-        />
+        <video src={videoUrl} controls autoPlay loop muted playsInline className="w-full max-h-72" />
       </div>
       <div className="flex items-center gap-2">
         <a
@@ -272,36 +305,80 @@ function VideoPlayer({ jobId, onReset }) {
   );
 }
 
+// ── History card ───────────────────────────────────────────────────────────────
+function HistoryCard({ entry }) {
+  const mode = VIDEO_MODES.find(m => m.id === entry.mode) ?? VIDEO_MODES[0];
+  const isReady = entry.status === 'completed';
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex items-start gap-3 px-3 py-3 rounded-xl border border-border/25 bg-secondary/20 hover:bg-secondary/30 transition-colors"
+    >
+      <div className={`w-8 h-8 rounded-lg ${mode.bg.split(' ')[0]} flex items-center justify-center shrink-0`}>
+        <span className="text-sm">{mode.emoji}</span>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-foreground/80 leading-relaxed line-clamp-2">{entry.prompt}</p>
+        <div className="flex items-center gap-2 mt-1 flex-wrap">
+          <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded border ${statusColor(entry.status)}`}>
+            {statusLabel(entry.status)}
+          </span>
+          <span className="text-[10px] text-muted-foreground">{mode.label}</span>
+          {entry.timestamp && (
+            <span className="text-[10px] text-muted-foreground/50">{formatRelative(entry.timestamp)}</span>
+          )}
+        </div>
+      </div>
+      {isReady && (
+        <a
+          href={getVideoUrl(entry.jobId)}
+          download={`ib-video-${entry.jobId}.mp4`}
+          className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+          title="Download"
+        >
+          <Download size={12} />
+        </a>
+      )}
+    </motion.div>
+  );
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function VideoStudio() {
   const { theme, toggleTheme } = useTheme();
 
-  // Form state
   const [image, setImage]         = useState(null);
   const [prompt, setPrompt]       = useState('');
   const [mode, setMode]           = useState('cinematic_motion');
-
-  // Generation state
-  const [genState, setGenState]   = useState('idle');  // idle | submitting | polling | completed | failed | provider_not_configured
+  const [genState, setGenState]   = useState('idle');
   const [jobId, setJobId]         = useState(null);
   const [statusMsg, setStatusMsg] = useState(null);
   const [error, setError]         = useState(null);
   const [startTime, setStartTime] = useState(null);
   const [elapsed, setElapsed]     = useState(0);
+  const [history, setHistory]     = useState([]);
+  const [historyLoading, setHLoad] = useState(true);
 
-  const pollRef     = useRef(null);
-  const elapsedRef  = useRef(null);
+  const pollRef    = useRef(null);
+  const elapsedRef = useRef(null);
 
-  const activeMode  = VIDEO_MODES.find(m => m.id === mode) ?? VIDEO_MODES[0];
-  const isWorking   = genState === 'submitting' || genState === 'polling';
-  const isDone      = genState === 'completed' || genState === 'failed' || genState === 'provider_not_configured';
+  const activeMode = VIDEO_MODES.find(m => m.id === mode) ?? VIDEO_MODES[0];
+  const isWorking  = genState === 'submitting' || genState === 'polling';
+  const isDone     = genState === 'completed' || genState === 'failed' || genState === 'provider_not_configured';
+
+  // ── Load persistent history on mount ─────────────────────────────────────
+  useEffect(() => {
+    fetchVideoHistory()
+      .then(setHistory)
+      .catch(() => {})
+      .finally(() => setHLoad(false));
+  }, []);
 
   // ── Elapsed timer ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (genState === 'polling' && startTime) {
-      elapsedRef.current = setInterval(() => {
-        setElapsed(Date.now() - startTime);
-      }, 1_000);
+      elapsedRef.current = setInterval(() => setElapsed(Date.now() - startTime), 1_000);
     } else {
       if (elapsedRef.current) { clearInterval(elapsedRef.current); elapsedRef.current = null; }
     }
@@ -318,41 +395,38 @@ export default function VideoStudio() {
         setStatusMsg('Generation timed out. The video may still be processing — try refreshing later.');
         return;
       }
-
       try {
         const data = await pollVideoStatus(id);
-        const st = data.status;
-
+        const st   = data.status;
         if (st === 'completed') {
           setGenState('completed');
           setStatusMsg('Video ready');
           if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+          // Refresh history after completion
+          setTimeout(() => fetchVideoHistory().then(setHistory).catch(() => {}), 1_000);
           return;
         }
-
         if (st === 'provider_not_configured') {
           setGenState('provider_not_configured');
           setStatusMsg(data.metadata?.message ?? null);
           if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+          setTimeout(() => fetchVideoHistory().then(setHistory).catch(() => {}), 1_000);
           return;
         }
-
         if (st === 'failed') {
           setGenState('failed');
           setStatusMsg(data.metadata?.message ?? 'Generation failed — please try again.');
           if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+          setTimeout(() => fetchVideoHistory().then(setHistory).catch(() => {}), 1_000);
           return;
         }
-
-        // Still processing
         setStatusMsg(data.metadata?.message ?? null);
       } catch (err) {
-        // Network error during polling — log and keep polling
         console.warn('[VideoStudio] poll error:', err.message);
       }
     };
 
-    poll();  // First check immediately
+    poll();
     pollRef.current = setInterval(poll, POLL_INTERVAL_MS);
   }, []);
 
@@ -367,31 +441,33 @@ export default function VideoStudio() {
   // ── Generate ──────────────────────────────────────────────────────────────
   const handleGenerate = async () => {
     if (!image || !prompt.trim() || isWorking) return;
-
     setGenState('submitting');
     setError(null);
     setJobId(null);
     setStatusMsg(null);
-
     try {
       const data = await startVideoGeneration(image, prompt.trim(), mode);
-      const id = data.jobId ?? data.result?.jobId;
-
-      if (!id) {
-        throw new Error('No job ID returned from server');
-      }
-
+      const id   = data.jobId ?? data.result?.jobId;
+      if (!id) throw new Error('No job ID returned from server');
       const now = Date.now();
       setJobId(id);
       setStartTime(now);
       setElapsed(0);
       setGenState('polling');
-
       startPolling(id, now);
     } catch (err) {
+      const msg = err.message ?? '';
       setGenState('failed');
-      setError(err.message ?? 'Request failed — please try again.');
-      setStatusMsg(err.message ?? null);
+      if (msg.includes('413')) {
+        setError('Image is too large. Please use an image under 10 MB.');
+      } else if (msg.includes('429') || msg.includes('rate')) {
+        setError('Rate limit reached. Please wait a moment before generating again.');
+      } else if (msg.includes('402') || msg.includes('credit')) {
+        setError('Insufficient credits. Video generation costs 2 credits.');
+      } else {
+        setError(msg || 'Request failed — please try again.');
+      }
+      setStatusMsg(error);
     }
   };
 
@@ -405,6 +481,12 @@ export default function VideoStudio() {
     setError(null);
     setStartTime(null);
     setElapsed(0);
+  };
+
+  const applyPreset = (preset) => {
+    if (isWorking) return;
+    setPrompt(preset.prompt);
+    setMode(preset.mode);
   };
 
   const canGenerate = !!image && prompt.trim().length > 0 && !isWorking;
@@ -432,15 +514,13 @@ export default function VideoStudio() {
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={toggleTheme}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-            aria-label="Toggle theme"
-          >
-            {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-          </button>
-        </div>
+        <button
+          onClick={toggleTheme}
+          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+          aria-label="Toggle theme"
+        >
+          {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+        </button>
       </header>
 
       {/* Main content */}
@@ -453,15 +533,31 @@ export default function VideoStudio() {
             </p>
           </div>
 
+          {/* Creator Presets */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-1.5">
+              <Sparkles size={11} className="text-primary" />
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Creator Presets</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {VIDEO_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  onClick={() => applyPreset(preset)}
+                  disabled={isWorking}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border/60 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <span>{preset.emoji}</span>
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Status banner */}
           <AnimatePresence mode="wait">
             {(isWorking || isDone) && (
-              <StatusBanner
-                key={genState}
-                status={genState}
-                message={statusMsg}
-                elapsed={elapsed}
-              />
+              <StatusBanner key={genState} status={genState} message={statusMsg} elapsed={elapsed} />
             )}
           </AnimatePresence>
 
@@ -580,19 +676,11 @@ export default function VideoStudio() {
                         : 'bg-primary/40 text-primary-foreground/60 cursor-not-allowed shadow-none'
                     }`}
                   >
-                    {isWorking ? (
-                      <>
-                        <RefreshCw size={14} className="animate-spin" />
-                        {genState === 'submitting' ? 'Starting…' : 'Generating…'}
-                      </>
-                    ) : (
-                      <>
-                        <Zap size={14} />
-                        Generate Video
-                      </>
-                    )}
+                    {isWorking
+                      ? <><RefreshCw size={14} className="animate-spin" />{genState === 'submitting' ? 'Starting…' : 'Generating…'}</>
+                      : <><Zap size={14} />Generate Video</>
+                    }
                   </button>
-
                   {(genState === 'failed' || genState === 'provider_not_configured') && (
                     <button
                       onClick={handleReset}
@@ -606,21 +694,19 @@ export default function VideoStudio() {
                 <p className="text-[11px] text-muted-foreground">
                   Mode: <span className={`font-medium ${activeMode.color}`}>{activeMode.label}</span>
                   {image ? ' · Image ready' : ' · Upload an image to begin'}
-                  {' · 2 credits per video'}
+                  {' · 2 credits per video · 30–90 seconds'}
                 </p>
               </div>
 
               {/* Specs */}
               <div className="rounded-xl bg-secondary/30 border border-border/30 p-4 space-y-3">
-                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
-                  Video specs
-                </p>
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Video specs</p>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    ['5-second clips',     '720p HD output'],
-                    ['Async job queue',    'Poll until ready'],
-                    ['4 motion styles',    'Download MP4'],
-                    ['2 credits / video',  'CEO = unlimited'],
+                    ['5-second clips', '720p HD output'],
+                    ['Async job queue', 'Poll until ready'],
+                    ['4 motion styles', 'Download MP4'],
+                    ['2 credits / video', 'CEO = unlimited'],
                   ].map(([a, b], i) => (
                     <div key={i} className="space-y-0.5">
                       <p className="text-[11px] font-medium text-foreground/80">{a}</p>
@@ -631,6 +717,50 @@ export default function VideoStudio() {
               </div>
             </div>
           )}
+
+          {/* Persistent video history */}
+          <AnimatePresence>
+            {(historyLoading || history.length > 0) && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="glass-card rounded-2xl overflow-hidden"
+              >
+                <div className="px-5 py-3 border-b border-border/40 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <History size={12} className="text-muted-foreground" />
+                    <h2 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+                      Video History
+                    </h2>
+                  </div>
+                  {historyLoading && <RefreshCw size={10} className="text-muted-foreground animate-spin" />}
+                  {!historyLoading && history.length > 0 && (
+                    <span className="text-[10px] text-muted-foreground/60">{history.length} generations</span>
+                  )}
+                </div>
+
+                {historyLoading ? (
+                  <div className="p-4 space-y-2">
+                    {[1, 2].map(i => (
+                      <div key={i} className="h-14 rounded-xl bg-secondary/30 animate-pulse" />
+                    ))}
+                  </div>
+                ) : history.length === 0 ? (
+                  <div className="flex flex-col items-center gap-2 py-8 px-4">
+                    <Video size={20} className="text-muted-foreground/30" />
+                    <p className="text-xs text-muted-foreground/60">No video generations yet</p>
+                    <p className="text-[11px] text-muted-foreground/40">Completed videos appear here</p>
+                  </div>
+                ) : (
+                  <div className="p-3 space-y-2">
+                    {history.map((entry, i) => (
+                      <HistoryCard key={entry.jobId ?? entry.timestamp ?? i} entry={entry} />
+                    ))}
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <p className="text-center text-xs text-muted-foreground/50">
             Powered by Gemini Veo 2 · Async generation · 2 credits per video

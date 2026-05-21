@@ -24,6 +24,8 @@ import ttsRouter          from "./tts";
 import videoRouter        from "./video";
 import promptExpandRouter from "./promptExpand";
 import aiHealthRouter     from "./aiHealth";
+import presetsRouter      from "./presets";
+import multimodalStatsRouter from "./multimodalStats";
 import { trackActivity }  from "../middleware/trackActivity";
 
 const router: IRouter = Router();
@@ -48,5 +50,7 @@ router.use(ttsRouter);
 router.use(videoRouter);
 router.use(promptExpandRouter);
 router.use(aiHealthRouter);
+router.use(presetsRouter);
+router.use(multimodalStatsRouter);
 
 export default router;

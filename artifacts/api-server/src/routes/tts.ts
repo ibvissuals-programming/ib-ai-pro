@@ -4,6 +4,7 @@
  * POST /api/tts/generate  — text-to-speech via Gemini 2.0 Flash audio
  * GET  /api/tts/serve/:id — stream WAV audio file
  * GET  /api/tts/voices    — list available voice styles
+ * GET  /api/tts/history   — persistent generation history for current user
  *
  * Auth: policyEngine (1 credit per generation, CEO = unlimited)
  * Rate: 20 TTS requests per minute per IP
@@ -26,6 +27,7 @@ import { sanitizeProviderError } from "../lib/providerGuard";
 import { buildStandardResponse, buildErrorResponse } from "../lib/aiOrchestrator";
 import { trackToolExecution }    from "../lib/toolHealthMonitor";
 import { logger }              from "../lib/logger";
+import { saveTtsHistory, getTtsHistory } from "../services/generationHistoryStore";
 
 const router = Router();
 
@@ -35,6 +37,16 @@ const TtsSchema = z.object({
   text:       z.string().min(1, "Text is required").max(1_000, "Text too long (max 1000 chars)"),
   voiceStyle: z.enum(VOICE_STYLES).default("neutral_assistant"),
 });
+
+// ── Voice label lookup ────────────────────────────────────────────────────────
+
+const VOICE_LABELS: Record<string, string> = {
+  cinematic_narration: "Cinematic Narration",
+  female_soft:         "Female Soft",
+  male_deep:           "Male Deep",
+  energetic_social:    "Energetic Social",
+  neutral_assistant:   "Neutral Assistant",
+};
 
 // ── POST /api/tts/generate ────────────────────────────────────────────────────
 
@@ -76,10 +88,11 @@ router.post(
         trackToolExecution("tts", () => generateSpeech(text, voiceStyle, job.jobId)),
       );
 
+      const latencyMs = Date.now() - t0;
       completeJob(job, "gemini-tts" as any);
 
       if (userId) {
-        recordUsage({ userId, type: "generate", latencyMs: Date.now() - t0 });
+        recordUsage({ userId, type: "generate", latencyMs });
       }
 
       deductRequestCredits(req);
@@ -89,6 +102,22 @@ router.post(
         username: req.user?.username,
         ip:       req.ip ?? undefined,
       });
+
+      // Save to persistent history (fire-and-forget)
+      if (userId) {
+        saveTtsHistory({
+          userId,
+          type:       "tts",
+          text:       text.slice(0, 300),
+          voiceStyle,
+          voiceLabel: VOICE_LABELS[voiceStyle] ?? voiceStyle,
+          jobId:      job.jobId,
+          audioUrl:   `/api/tts/serve/${job.jobId}`,
+          durationMs: result.durationEstimateMs,
+          textLength: result.textLength,
+          timestamp:  Date.now(),
+        });
+      }
 
       res.json(buildStandardResponse("tts", {
         jobId:     job.jobId,
@@ -120,8 +149,6 @@ router.post(
 
       logger.error({ err, jobId: job.jobId }, "[tts] generation failed");
 
-      // Detect infrastructure-level model unavailability — return 501 instead of 503
-      // so callers can distinguish "provider down" from "feature not configured here".
       const errStr = String(err instanceof Error ? err.message : err);
       const isModelUnsupported = errStr.includes("UNSUPPORTED_MODEL") || errStr.includes("not supported");
       if (isModelUnsupported) {
@@ -141,14 +168,12 @@ router.post(
 
 // ── GET /api/tts/serve/:id ─────────────────────────────────────────────────────
 // No auth required — job IDs are cryptographically unguessable UUIDs.
-// Streams WAV audio with appropriate cache headers.
 
 router.get(
   "/tts/serve/:id",
   (req: Request, res: Response) => {
     const id = String(req.params["id"] ?? "");
 
-    // Validate id format to prevent path traversal
     if (!/^job_[a-z0-9_]+$/.test(id)) {
       res.status(400).json({ error: "Invalid audio ID" });
       return;
@@ -179,7 +204,6 @@ router.get(
 );
 
 // ── GET /api/tts/voices ───────────────────────────────────────────────────────
-// No auth required. Returns available voice styles.
 
 router.get("/tts/voices", (_req: Request, res: Response) => {
   res.json({
@@ -192,5 +216,28 @@ router.get("/tts/voices", (_req: Request, res: Response) => {
     ],
   });
 });
+
+// ── GET /api/tts/history ──────────────────────────────────────────────────────
+// Returns the current user's persistent TTS generation history.
+
+router.get(
+  "/tts/history",
+  policyEngine({ cost: 0, rateKey: "tts_history", rateMax: 60, rateWindowMs: 60_000, allowRecovery: true }),
+  async (req: Request, res: Response) => {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ error: "Authentication required" });
+      return;
+    }
+
+    try {
+      const history = await getTtsHistory(userId);
+      res.json({ success: true, history, count: history.length });
+    } catch (err) {
+      logger.error({ err, userId }, "[tts] history fetch failed");
+      res.json({ success: true, history: [], count: 0 });
+    }
+  },
+);
 
 export default router;

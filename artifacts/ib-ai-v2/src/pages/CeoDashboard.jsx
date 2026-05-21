@@ -31,6 +31,8 @@ import { AiToolHealthPanel }  from '../components/AiToolHealthPanel';
 import { EventFeedPanel } from '../components/EventFeedPanel';
 import { SystemHealthPanel } from '../components/SystemHealthPanel';
 import { ControlOverviewPanel } from '../components/ControlOverviewPanel';
+import { MultimodalStatsPanel } from '../components/MultimodalStatsPanel';
+import { ProviderStabilityPanel } from '../components/ProviderStabilityPanel';
 import { IbLogo } from '../components/IbLogo';
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
@@ -841,6 +843,20 @@ export default function CeoDashboard() {
                 error={aiToolHealth.error}
                 lastOk={aiToolHealth.lastOk}
               />
+
+              {/* ── Section: Multimodal Observability ── */}
+              <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest flex items-center gap-1.5 mt-6 mb-3">
+                <Radio size={9} /> Multimodal Observability
+              </p>
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4">
+                <MultimodalStatsPanel />
+                <ProviderStabilityPanel
+                  data={aiToolHealth.data}
+                  loading={aiToolHealth.loading}
+                  error={aiToolHealth.error}
+                  lastOk={aiToolHealth.lastOk}
+                />
+              </div>
 
               {/* ── Section: Timeline ── */}
               <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest flex items-center gap-1.5 mt-6 mb-3">

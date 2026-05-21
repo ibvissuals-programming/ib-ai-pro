@@ -1,0 +1,247 @@
+IB AI — MULTIMODAL UX COMPLETION + MEMORY SYSTEM HARDENING (CREDIT-EFFICIENT PASS)
+
+MISSION:
+Complete the user experience layer around the now-functional multimodal AI stack while preserving the hardened backend architecture, deterministic contracts, and stability systems already established.
+
+PRIMARY RULES:
+- DO NOT refactor stable backend systems unnecessarily
+- DO NOT alter working provider isolation logic
+- DO NOT introduce breaking API changes
+- DO NOT create duplicate polling systems
+- Preserve:
+  - toolHealthMonitor
+  - circuitBreaker
+  - aiOrchestrator contracts
+  - health APIs
+  - import guard systems
+  - UI stability rules
+  - Glass Monolith branding system
+
+GOAL:
+Transform IB AI from a technically working multimodal platform into a polished production-grade creator operating system.
+
+---------------------------------------------------
+PHASE 1 — MULTIMODAL HISTORY SYSTEM
+---------------------------------------------------
+
+Implement a unified generation history system for:
+
+- Images
+- Video
+- TTS audio
+- Prompt expansions
+
+Requirements:
+- persistent history store
+- per-user isolation
+- newest-first ordering
+- TTL cleanup support
+- download/replay support
+- no duplicate history logic per tool
+
+Frontend:
+- add session history panels to:
+  - Voice Studio
+  - Video Studio
+  - Image Studio
+
+Each history card should show:
+- preview thumbnail (if available)
+- generation type
+- timestamp
+- status
+- replay/download actions
+
+Video history:
+- show source image thumbnail
+- playable preview
+- generation mode badge
+
+TTS history:
+- inline audio replay
+- voice badge
+- text preview
+
+---------------------------------------------------
+PHASE 2 — MEMORY + PERSONALIZATION LAYER
+---------------------------------------------------
+
+Implement lightweight persistent conversational memory.
+
+GOALS:
+- remember recent user preferences
+- remember creator workflow settings
+- remember preferred AI styles
+- preserve conversational continuity
+
+Rules:
+- memory must NEVER leak into responses explicitly
+- memory acts as invisible behavioral context only
+- no frontend rewrite
+- no vector DB overengineering
+
+Implement:
+- lightweight memory store
+- capped rolling memory window
+- automatic cleanup
+- memory injection layer into orchestrator/system prompt
+
+Support:
+- preferred image style
+- preferred voice
+- preferred editing intensity
+- preferred chat tone
+
+---------------------------------------------------
+PHASE 3 — CREATOR WORKFLOW PRESETS
+---------------------------------------------------
+
+Add reusable presets for creators.
+
+Image presets:
+- cinematic
+- luxury
+- afro-futuristic
+- viral TikTok
+- realistic ad
+- fashion editorial
+
+Video presets:
+- cinematic motion
+- social zoom
+- parallax reel
+- luxury showcase
+
+Voice presets:
+- narration
+- trailer
+- soft storytelling
+- energetic promo
+
+Requirements:
+- reusable preset architecture
+- no duplicated prompt templates
+- frontend quick-select chips/cards
+- backend preset registry
+
+---------------------------------------------------
+PHASE 4 — CREDIT + RESOURCE INTELLIGENCE
+---------------------------------------------------
+
+Implement lightweight runtime resource awareness.
+
+Add:
+- estimated generation duration
+- provider availability indicator
+- queue/processing state messaging
+- file-size safeguards
+- client-side upload validation
+
+Frontend should:
+- explain why tools fail
+- differentiate:
+  - provider unavailable
+  - quota exhausted
+  - transient retry
+  - feature disabled
+
+NO raw provider leakage.
+
+---------------------------------------------------
+PHASE 5 — CEO OBSERVABILITY EXPANSION
+---------------------------------------------------
+
+Extend CEO dashboard with:
+
+1. Multimodal Usage Analytics
+   - image count
+   - video count
+   - TTS count
+   - prompt expansion count
+   - avg latency per tool
+
+2. Provider Stability Panel
+   - Veo readiness
+   - Gemini readiness
+   - Groq readiness
+   - fallback activity
+   - circuit breaker state
+
+3. User Activity Feed
+   - recent generations
+   - recent failures
+   - provider outages
+   - high-latency spikes
+
+Requirements:
+- polling reuse only
+- no websocket system
+- no duplicate API clients
+
+---------------------------------------------------
+PHASE 6 — UI/UX POLISH PASS
+---------------------------------------------------
+
+Audit ALL creator-facing pages for:
+- layout shifts
+- loading flicker
+- unstable async transitions
+- oversized spacing
+- inconsistent card heights
+- animation conflicts
+
+Apply existing hardened animation rules only.
+
+Add:
+- skeleton loading states
+- empty states
+- stable progress indicators
+- deterministic polling cleanup
+
+DO NOT redesign the established visual identity.
+
+---------------------------------------------------
+PHASE 7 — IMPORT/DEPLOYMENT RESILIENCE
+---------------------------------------------------
+
+Ensure all new systems integrate into:
+
+- health-check.cjs
+- import-guard.cjs
+- db-guard.cjs
+- post-merge.sh
+
+New systems must:
+- never trigger repeated setup loops
+- never require manual schema push after import
+- never duplicate workflows
+- never require re-entering existing secrets
+
+All new startup checks must surface through:
+pnpm run health
+
+---------------------------------------------------
+PHASE 8 — FINAL VALIDATION
+---------------------------------------------------
+
+Run live validation for:
+
+- Image generation
+- Image editing
+- Video generation
+- TTS generation
+- Prompt expansion
+- History persistence
+- CEO dashboard metrics
+- Memory continuity
+- Health APIs
+
+Return:
+- success/failure matrix
+- latency table
+- provider readiness matrix
+- production readiness score
+- remaining blockers
+
+FINAL RULE:
+This pass should make IB AI feel like a cohesive premium creator operating system — not a collection of separate AI tools.
