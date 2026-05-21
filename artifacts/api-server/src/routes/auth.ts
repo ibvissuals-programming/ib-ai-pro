@@ -19,6 +19,7 @@ import { z } from "zod";
 import {
   createUser,
   authenticateUser,
+  authenticateUserFromDb,
   getUserById,
   getUserByUsername,
   toPublicUser,
@@ -186,58 +187,33 @@ router.post(
         metadata:  { username, ip: req.ip },
       });
 
-      // ── Safe user resolution ───────────────────────────────────────────────────
-      let existingUser;
+      // ── DB-authoritative authentication (single source of truth: PostgreSQL) ───
+      //    authenticateUserFromDb() fetches a fresh row from PG on every attempt —
+      //    the in-memory cache is NEVER used for password verification.
+      let authResult;
       try {
-        existingUser = getUserByUsername(username);
-      } catch (lookupErr) {
-        logger.error({ err: lookupErr, username }, "[auth] login_crash_prevented — user lookup threw");
-        res.status(500).json({ success: false, code: "internal_error", error: "Login service temporarily unavailable" });
-        return;
-      }
-
-      if (!existingUser) {
-        incLoginFailure();
-        incAuthError();
-        logger.warn({ username, reason: "user_not_found", ip: req.ip }, "[auth] Login failed");
-        addAuditEntry("login_failure", `Login failed: ${username} (user_not_found)`, {
-          username,
-          ip: req.ip ?? undefined,
-        });
-        emit({
-          eventType: "login_failure",
-          source:    "auth_route",
-          action:    "login",
-          status:    "failure",
-          metadata:  { username, ip: req.ip, reason: "user_not_found" },
-          errorCode: "INVALID_CREDENTIALS",
-        });
-        res.status(401).json({ success: false, code: "auth_failed", error: "Invalid username or password" });
-        return;
-      }
-
-      // ── Corrupted record guard ─────────────────────────────────────────────────
-      if (!existingUser.passwordHash || !existingUser.passwordHash.includes(":")) {
-        logger.error({ username }, "[auth] login_crash_prevented — user record has null/invalid passwordHash");
-        res.status(500).json({ success: false, code: "internal_error", error: "Login service temporarily unavailable" });
-        return;
-      }
-
-      // ── Safe password verification ─────────────────────────────────────────────
-      let user;
-      try {
-        user = authenticateUser(username, password);
+        authResult = await authenticateUserFromDb(username, password);
       } catch (authErr) {
-        logger.error({ err: authErr, username }, "[auth] login_crash_prevented — authenticateUser threw");
-        res.status(401).json({ success: false, code: "auth_failed", error: "Invalid username or password" });
+        logger.error({ err: authErr, username }, "[auth] login_crash_prevented — authenticateUserFromDb threw");
+        res.status(500).json({ success: false, code: "internal_error", error: "Login service temporarily unavailable" });
         return;
       }
 
-      if (!user) {
+      if (!authResult.ok) {
+        // Map reason → HTTP status and structured log (client always gets the same generic 401)
+        const reason = authResult.reason;
+
+        if (reason === "invalid_hash" || reason === "db_error") {
+          logger.error({ username, reason, ip: req.ip }, "[auth] login_crash_prevented — auth subsystem error");
+          res.status(500).json({ success: false, code: "internal_error", error: "Login service temporarily unavailable" });
+          return;
+        }
+
+        // reason is "not_found" | "password_mismatch"
         incLoginFailure();
         incAuthError();
-        logger.warn({ username, reason: "password_mismatch", ip: req.ip }, "[auth] Login failed");
-        addAuditEntry("login_failure", `Login failed: ${username} (password_mismatch)`, {
+        logger.warn({ username, reason, ip: req.ip }, "[auth] Login failed");
+        addAuditEntry("login_failure", `Login failed: ${username} (${reason})`, {
           username,
           ip: req.ip ?? undefined,
         });
@@ -246,12 +222,14 @@ router.post(
           source:    "auth_route",
           action:    "login",
           status:    "failure",
-          metadata:  { username, ip: req.ip, reason: "password_mismatch" },
+          metadata:  { username, ip: req.ip, reason },
           errorCode: "INVALID_CREDENTIALS",
         });
         res.status(401).json({ success: false, code: "auth_failed", error: "Invalid username or password" });
         return;
       }
+
+      const user = authResult.user;
 
       // ── Issue session + token ──────────────────────────────────────────────────
       const loginSession = createSession({

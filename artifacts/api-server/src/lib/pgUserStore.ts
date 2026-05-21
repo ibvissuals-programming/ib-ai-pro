@@ -7,6 +7,7 @@
  * Uses the in-memory Map in userStore.ts as the read cache — only the
  * persistence layer (load at boot, save on mutation) goes through PG.
  */
+import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { logger } from "./logger";
 
@@ -72,4 +73,34 @@ export async function pgPersistAllUsers(users: PgUserRecord[]): Promise<void> {
   }
 
   logger.info({ count: users.length }, "[pgUserStore] Users upserted to PostgreSQL");
+}
+
+// ── Single-user fetch by username (fresh DB read — used by auth flow) ─────────
+
+/**
+ * pgGetUserByUsername() — fetch one user row directly from PostgreSQL by username.
+ *
+ * Used by authenticateUserFromDb() to guarantee the password_hash used for
+ * verification is always the live DB value, never a stale in-memory copy.
+ *
+ * Returns null if the user does not exist in the DB.
+ */
+export async function pgGetUserByUsername(username: string): Promise<PgUserRecord | null> {
+  const normalized = username.trim().toLowerCase();
+  const rows = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.username, normalized))
+    .limit(1);
+  if (!rows[0]) return null;
+  const r = rows[0];
+  return {
+    id:           r.id,
+    username:     r.username,
+    passwordHash: r.passwordHash,
+    role:         r.role,
+    credits:      r.credits,
+    lastReset:    r.lastReset,
+    createdAt:    r.createdAt,
+  };
 }

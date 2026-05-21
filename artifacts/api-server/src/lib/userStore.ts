@@ -18,7 +18,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { logger } from "./logger";
 import { isPostgresEnabled } from "./systemConfig";
-import { pgLoadAllUsers, pgPersistAllUsers } from "./pgUserStore";
+import { pgLoadAllUsers, pgPersistAllUsers, pgGetUserByUsername } from "./pgUserStore";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "../../data");
@@ -406,6 +406,121 @@ export function authenticateUser(
   }
 
   return user;
+}
+
+// ── Typed result for DB-authoritative authentication ──────────────────────────
+
+export type DbAuthResult =
+  | { ok: true;  user: User }
+  | { ok: false; reason: "not_found" | "invalid_hash" | "password_mismatch" | "db_error" };
+
+/**
+ * authenticateUserFromDb() — PostgreSQL-authoritative login verification.
+ *
+ * On every login attempt:
+ *   1. Fetch user record FRESH from PostgreSQL (never use cached passwordHash).
+ *   2. CEO consistency check: if DB hash ≠ memory hash → log ceo_auth_inconsistency
+ *      (log only — never auto-correct, never overwrite).
+ *   3. Run scrypt verification against the DB hash.
+ *   4. On success, return the in-memory User object (for session/credits).
+ *      If memory cache is cold (shouldn't happen post-boot), rebuild from DB row.
+ *
+ * Falls back to in-memory authenticateUser() only when PostgreSQL is disabled.
+ *
+ * Returns a DbAuthResult so the caller gets the exact failure reason for
+ * structured logging without ambiguity.
+ */
+export async function authenticateUserFromDb(
+  username: string,
+  password: string,
+): Promise<DbAuthResult> {
+  const normalized = username.trim().toLowerCase();
+
+  // ── PG disabled: fall back to in-memory auth ──────────────────────────────
+  if (!isPostgresEnabled()) {
+    const fallback = authenticateUser(normalized, password);
+    if (!fallback) {
+      const exists = !!getUserByUsername(normalized);
+      return { ok: false, reason: exists ? "password_mismatch" : "not_found" };
+    }
+    return { ok: true, user: fallback };
+  }
+
+  // ── Fetch fresh from PostgreSQL ────────────────────────────────────────────
+  let dbRecord;
+  try {
+    dbRecord = await pgGetUserByUsername(normalized);
+  } catch (dbErr) {
+    logger.error({ err: dbErr, username: normalized }, "[auth] db_error during user lookup");
+    return { ok: false, reason: "db_error" };
+  }
+
+  if (!dbRecord) {
+    logger.info(
+      { username: normalized, ceo_source: "db_verified" },
+      "[auth] login_attempt_result: not_found (DB)",
+    );
+    return { ok: false, reason: "not_found" };
+  }
+
+  // ── Validate DB record integrity ───────────────────────────────────────────
+  if (!dbRecord.passwordHash || !dbRecord.passwordHash.includes(":")) {
+    logger.error(
+      { username: normalized, password_hash_valid: false },
+      "[auth] login_attempt_result: invalid_hash in DB record",
+    );
+    return { ok: false, reason: "invalid_hash" };
+  }
+
+  // ── CEO consistency check: DB vs memory ───────────────────────────────────
+  const memUser = getUserByUsername(normalized);
+  if (memUser && memUser.passwordHash !== dbRecord.passwordHash) {
+    logger.warn(
+      { username: normalized, ceo_source: "db_verified", cache_mismatch: true },
+      "[auth] ceo_auth_inconsistency — DB and memory passwordHash differ (DB is authoritative)",
+    );
+  } else {
+    logger.debug(
+      { username: normalized, ceo_source: "db_verified", cache_mismatch: false },
+      "[auth] password_hash consistency check passed",
+    );
+  }
+
+  // ── Verify password against DB hash (never the memory copy) ───────────────
+  const passwordHashValid = verifyPassword(password, dbRecord.passwordHash);
+  logger.info(
+    { username: normalized, password_hash_valid: passwordHashValid },
+    "[auth] login_attempt_result",
+  );
+
+  if (!passwordHashValid) {
+    return { ok: false, reason: "password_mismatch" };
+  }
+
+  // ── Auth passed — return in-memory user for session/credits continuity ─────
+  if (memUser) {
+    if (isCeoUsername(normalized) && memUser.role !== "ceo") {
+      memUser.role = "ceo";
+      scheduleSave();
+      logger.info({ username: normalized }, "[userStore] CEO role applied");
+    }
+    return { ok: true, user: memUser };
+  }
+
+  // Cold cache (unexpected post-boot) — rebuild in-memory entry from DB row
+  logger.warn({ username: normalized }, "[auth] cache miss post-boot — rebuilding from DB record");
+  const rebuilt: User = {
+    id:           dbRecord.id,
+    username:     dbRecord.username,
+    passwordHash: dbRecord.passwordHash,
+    role:         dbRecord.role,
+    credits:      dbRecord.credits,
+    lastReset:    dbRecord.lastReset,
+    createdAt:    dbRecord.createdAt,
+  };
+  store.set(rebuilt.id, rebuilt);
+  usernameIndex.set(rebuilt.username, rebuilt.id);
+  return { ok: true, user: rebuilt };
 }
 
 /**

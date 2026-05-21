@@ -1,0 +1,106 @@
+You are working in a Node.js + PostgreSQL authentication system.
+
+OBJECTIVE:
+Force CEO authentication consistency across PostgreSQL and in-memory store and guarantee a single source of truth for password verification.
+
+DO NOT:
+- change schema
+- add new auth systems
+- reintroduce recovery login
+- modify frontend UI
+- redesign userStore architecture
+
+------------------------------------------------------------
+1 — AUTHORITATIVE SOURCE OF TRUTH (CRITICAL)
+------------------------------------------------------------
+
+Ensure PostgreSQL is the ONLY source of truth for:
+
+- password_hash
+- CEO identity
+- role="ceo"
+
+RULE:
+On EVERY login attempt:
+→ fetch fresh user from PostgreSQL
+→ DO NOT rely on cached/in-memory userStore for authentication
+
+------------------------------------------------------------
+2 — REMOVE CACHE AUTH RISK (CRITICAL FIX)
+------------------------------------------------------------
+
+If login uses:
+- getUserByUsername from memory
+→ replace with DB query version ONLY for auth flow
+
+Memory store may still exist for:
+- performance
+BUT NEVER for password validation
+
+------------------------------------------------------------
+3 — CEO PASSWORD CONSISTENCY CHECK
+------------------------------------------------------------
+
+Before authentication:
+
+- fetch CEO user from DB
+- verify:
+  - username matches CEO_USERNAME
+  - role === "ceo"
+  - password_hash exists and is valid format
+
+If mismatch detected:
+→ log [ceo_auth_inconsistency]
+→ but DO NOT auto-create user
+→ DO NOT overwrite password silently
+
+------------------------------------------------------------
+4 — LOGIN MUST USE SINGLE VERIFICATION PATH
+------------------------------------------------------------
+
+Ensure:
+
+authenticateUser() ALWAYS uses:
+→ DB password_hash (fresh fetch)
+
+NOT:
+- cached user object
+- stale in-memory store
+- bootstrap repair logic
+
+------------------------------------------------------------
+5 — DIAGNOSTIC OUTPUT (NO CLIENT EXPOSURE)
+------------------------------------------------------------
+
+Log internally only:
+
+- ceo_source=db_verified | cache_mismatch=true/false
+- password_hash_valid=true/false
+- login_attempt_result
+
+DO NOT expose raw diagnostics to frontend
+
+------------------------------------------------------------
+6 — FINAL BEHAVIOR GUARANTEE
+
+After fix:
+
+- ONE CEO record only
+- ONE password source (PostgreSQL)
+- login ALWAYS consistent across restarts
+- no dependency on boot repair logic for auth correctness
+
+------------------------------------------------------------
+FINAL OUTPUT:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CEO AUTH CONSISTENCY REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DB SOURCE:        PASS / FAIL
+CACHE SOURCE:     BYPASSED
+PASSWORD VERIFY:  PASS / FAIL
+CEO UNIQUENESS:   PASS / FAIL
+LOGIN STABILITY:  PASS / FAIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OVERALL:          STABLE / DEGRADED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
