@@ -1,0 +1,121 @@
+You are working inside a full-stack React + Node AI studio (WorkflowLauncher-based creator system).
+
+MISSION:
+Implement ONLY frontend additive improvements to WorkflowLauncher.jsx and related studio UI components.
+
+CRITICAL RULES:
+- NO backend changes
+- NO database changes
+- NO new APIs
+- NO global state libraries
+- NO architecture refactors
+- NO duplication of existing navigation logic
+- NO breaking existing workflow/session restore system
+- ALL persistence must use localStorage only
+- ALL features must be non-blocking and UI-safe
+- Prefer native browser APIs over libraries
+
+CORE SYSTEM CONTEXT:
+WorkflowLauncher already exists and supports:
+- workflow presets (image/voice/video)
+- session restore via URL params
+- handleLaunch(config, name) navigation system
+- existing UI tabs: presets + my workflows
+- AnimatePresence available
+- React hooks already in use
+
+---
+
+PHASE 1 — RECENT WORKFLOWS (LOCAL MEMORY ONLY)
+Implement inside WorkflowLauncher.jsx:
+
+- Create useRecentWorkflows hook (localStorage key: ib_ai_recent_workflows)
+- Store max 3 items
+- Deduplicate by (name + type + mode)
+- Store: name, type, mode, promptPreview (40 chars), timestamp
+- Auto-trim to 3 most recent
+- Render "Recent Workflows" section inside My Workflows tab
+- Add Re-run button that calls existing handleLaunch exactly
+- Must persist after refresh
+- Must not affect session system
+
+---
+
+PHASE 2 — WORKFLOW COUNTS
+- Create useWorkflowCounts hook (localStorage key: ib_ai_workflow_counts)
+- Track number of launches per preset.id
+- Increment ONLY on preset launches (not sessions)
+- Add count badge (×N) on PresetCard when count > 1
+- No UI clutter on first launch
+
+---
+
+PHASE 3 — TOP WORKFLOWS
+- Compute top 2 presets by usage count
+- Render at top of My Workflows tab
+- Show rank (🥇 🥈), name, type chip, ×N badge
+- Only show if at least 1 workflow exists
+- No useMemo, no extra state
+
+---
+
+PHASE 4 — CLEAR MEMORY CONTROL
+- Add clearRecents() and clearCounts()
+- Two-step confirmation UI:
+  Step 1: "Clear History"
+  Step 2: "Yes, clear / Cancel"
+- Auto-cancel after timeout (8s)
+- Must clear both localStorage keys safely
+- No backend involvement
+
+---
+
+PHASE 5 — KEYBOARD SHORTCUT
+- Add useEffect in WorkflowLauncher.jsx
+- Cmd+K (Mac) and Ctrl+K (Windows/Linux)
+- Toggle launcher open/close
+- Ignore when typing in INPUT/TEXTAREA/SELECT/contentEditable
+- Prevent default only when triggered
+
+---
+
+PHASE 6 — UX BADGES
+- Add inline shortcut hint: ⌘K / Ctrl K
+- Use platform detection (navigator.platform)
+- Must be module-level const (no state)
+- Must not affect layout or mobile
+
+---
+
+PHASE 7 — TOOLTIP (OPTIONAL LIGHTWEIGHT)
+- Add only native title attribute:
+  title="Quick-launch AI workflows"
+- No tooltip libraries
+- No custom hover state
+
+---
+
+QUALITY REQUIREMENTS:
+- Zero backend dependency
+- Zero API calls
+- Zero re-architecture
+- No render loops
+- No excessive useEffects
+- Must be mobile-safe
+- Must degrade gracefully if localStorage is unavailable
+- Must not break existing WorkflowLauncher behavior
+
+OUTPUT RULE:
+Only modify WorkflowLauncher.jsx unless explicitly required otherwise.
+Keep all logic additive and isolated.
+Prefer inline computations over new abstractions.
+
+END GOAL:
+A fast, self-contained WorkflowLauncher system with:
+- recent memory (3 items)
+- usage analytics (local)
+- top workflows ranking
+- keyboard shortcut launch
+- clear history control
+- minimal UI enhancement layer
+- zero backend dependency
