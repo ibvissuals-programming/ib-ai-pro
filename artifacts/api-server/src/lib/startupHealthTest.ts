@@ -17,10 +17,13 @@ import {
   createUser,
   authenticateUser,
   getUserByUsername,
+  getAllUsers,
 } from "./userStore";
 import { signToken, verifyToken } from "./token";
 import { createSession, isSessionActive } from "./sessionStore";
 import { isGeminiConfigured } from "./geminiEnv";
+import { isPostgresEnabled } from "./systemConfig";
+import { pgLoadAllUsers } from "./pgUserStore";
 import { emit, recentEvents } from "./eventBus";
 import type { SystemEventType } from "./eventBus";
 
@@ -35,12 +38,13 @@ interface SubsystemResult {
 
 interface HealthReport {
   auth:        SubsystemResult;
+  dbSync:      SubsystemResult;
   image:       SubsystemResult;
   video:       SubsystemResult;
   voice:       SubsystemResult;
   jobPipeline: SubsystemResult;
   eventSystem: SubsystemResult;
-  overall:     "HEALTHY" | "DEGRADED";
+  overall:     "STABLE" | "DEGRADED";
 }
 
 // ── Test helpers ───────────────────────────────────────────────────────────────
@@ -338,6 +342,61 @@ async function testJobPipeline(): Promise<SubsystemResult> {
     : fail([...details, ...failures.map((f) => `✗ ${f}`)]);
 }
 
+// ── DB SYNC TEST ──────────────────────────────────────────────────────────────
+
+async function testDbSync(): Promise<SubsystemResult> {
+  if (!isPostgresEnabled()) {
+    return skip("PostgreSQL not enabled — DB sync check skipped");
+  }
+
+  const details: string[] = [];
+  const failures: string[] = [];
+
+  try {
+    const pgUsers  = await pgLoadAllUsers();
+    const memUsers = getAllUsers();
+
+    const pgIds  = new Map(pgUsers.map((u) => [u.id, u.username]));
+    const memIds = new Map(memUsers.map((u) => [u.id, u.username]));
+
+    // Every DB user must be in memory
+    for (const [id, username] of pgIds) {
+      if (!memIds.has(id)) {
+        failures.push(`DB user "${username}" (${id}) missing from memory store`);
+      }
+    }
+
+    // Every memory user must be in DB
+    for (const [id, username] of memIds) {
+      if (!pgIds.has(id)) {
+        failures.push(`Memory user "${username}" (${id}) missing from DB`);
+      }
+    }
+
+    // No duplicate usernames in DB
+    const pgUsernameCounts = new Map<string, number>();
+    for (const u of pgUsers) {
+      pgUsernameCounts.set(u.username, (pgUsernameCounts.get(u.username) ?? 0) + 1);
+    }
+    for (const [username, count] of pgUsernameCounts) {
+      if (count > 1) {
+        failures.push(`Duplicate username in DB: "${username}" (${count} rows)`);
+      }
+    }
+
+    if (failures.length === 0) {
+      details.push(`✔ DB↔memory in sync (${pgUsers.length} users in DB, ${memUsers.length} in memory)`);
+      details.push("✔ No duplicate usernames in DB");
+    }
+  } catch (err) {
+    failures.push(`DB sync check threw: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  return failures.length === 0
+    ? pass(details)
+    : fail([...details, ...failures.map((f) => `✗ ${f}`)]);
+}
+
 // ── F — EVENT SYSTEM TEST ─────────────────────────────────────────────────────
 
 async function testEventSystem(): Promise<SubsystemResult> {
@@ -382,29 +441,31 @@ async function testEventSystem(): Promise<SubsystemResult> {
 // ── PRINT REPORT ──────────────────────────────────────────────────────────────
 
 function printReport(report: HealthReport): void {
-  const line = "━".repeat(46);
+  const line = "━".repeat(32);
 
   logger.info(line);
-  logger.info("  FINAL SYSTEM STATUS REPORT");
+  logger.info("SYSTEM STABILITY REPORT");
   logger.info(line);
-  logger.info(`  AUTH:         ${report.auth.status}`);
-  logger.info(`  IMAGE:        ${report.image.status}`);
-  logger.info(`  VIDEO:        ${report.video.status}`);
-  logger.info(`  VOICE:        ${report.voice.status}`);
-  logger.info(`  JOB PIPELINE: ${report.jobPipeline.status}`);
-  logger.info(`  EVENT SYSTEM: ${report.eventSystem.status}`);
+  logger.info(`AUTH:         ${report.auth.status}`);
+  logger.info(`DB SYNC:      ${report.dbSync.status}`);
+  logger.info(`IMAGE:        ${report.image.status}`);
+  logger.info(`VIDEO:        ${report.video.status}`);
+  logger.info(`VOICE:        ${report.voice.status}`);
+  logger.info(`JOB PIPELINE: ${report.jobPipeline.status}`);
+  logger.info(`EVENT SYSTEM: ${report.eventSystem.status}`);
   logger.info(line);
-  logger.info(`  OVERALL STATUS: ${report.overall}`);
+  logger.info(`OVERALL STATUS: ${report.overall}`);
   logger.info(line);
 
   // Log details for each subsystem
   const subsystems: [string, SubsystemResult][] = [
-    ["AUTH",        report.auth],
-    ["IMAGE",       report.image],
-    ["VIDEO",       report.video],
-    ["VOICE",       report.voice],
-    ["JOB PIPELINE",report.jobPipeline],
-    ["EVENT SYSTEM",report.eventSystem],
+    ["AUTH",         report.auth],
+    ["DB SYNC",      report.dbSync],
+    ["IMAGE",        report.image],
+    ["VIDEO",        report.video],
+    ["VOICE",        report.voice],
+    ["JOB PIPELINE", report.jobPipeline],
+    ["EVENT SYSTEM", report.eventSystem],
   ];
 
   for (const [name, result] of subsystems) {
@@ -432,26 +493,31 @@ function printReport(report: HealthReport): void {
 export async function runStartupHealthTests(): Promise<void> {
   logger.info("[healthTest] Running startup health test suite...");
 
+  const wrap = (p: Promise<SubsystemResult>): Promise<SubsystemResult> =>
+    p.catch((err): SubsystemResult =>
+      fail([`Uncaught: ${err instanceof Error ? err.message : String(err)}`]));
+
+  // DB SYNC runs first — before any test creates transient users in memory.
+  // All other tests run in parallel after DB SYNC completes.
+  const dbSync = await wrap(testDbSync());
+
   const [auth, image, video, voice, jobPipeline, eventSystem] = await Promise.all([
-    testAuth().catch((err): SubsystemResult =>
-      fail([`Uncaught: ${err instanceof Error ? err.message : String(err)}`])),
-    testImage().catch((err): SubsystemResult =>
-      fail([`Uncaught: ${err instanceof Error ? err.message : String(err)}`])),
-    testVideo().catch((err): SubsystemResult =>
-      fail([`Uncaught: ${err instanceof Error ? err.message : String(err)}`])),
-    testVoice().catch((err): SubsystemResult =>
-      fail([`Uncaught: ${err instanceof Error ? err.message : String(err)}`])),
-    testJobPipeline().catch((err): SubsystemResult =>
-      fail([`Uncaught: ${err instanceof Error ? err.message : String(err)}`])),
-    testEventSystem().catch((err): SubsystemResult =>
-      fail([`Uncaught: ${err instanceof Error ? err.message : String(err)}`])),
+    wrap(testAuth()),
+    wrap(testImage()),
+    wrap(testVideo()),
+    wrap(testVoice()),
+    wrap(testJobPipeline()),
+    wrap(testEventSystem()),
   ]);
 
-  // Overall DEGRADED if critical systems (auth, job pipeline) fail
-  const criticalFailed = auth.status === "FAIL" || jobPipeline.status === "FAIL";
-  const overall: "HEALTHY" | "DEGRADED" = criticalFailed ? "DEGRADED" : "HEALTHY";
+  // DEGRADED if any critical system (auth, db sync, job pipeline) fails
+  const criticalFailed =
+    auth.status === "FAIL" ||
+    dbSync.status === "FAIL" ||
+    jobPipeline.status === "FAIL";
+  const overall: "STABLE" | "DEGRADED" = criticalFailed ? "DEGRADED" : "STABLE";
 
-  const report: HealthReport = { auth, image, video, voice, jobPipeline, eventSystem, overall };
+  const report: HealthReport = { auth, dbSync, image, video, voice, jobPipeline, eventSystem, overall };
 
   printReport(report);
 }

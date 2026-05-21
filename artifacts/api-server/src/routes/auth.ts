@@ -21,6 +21,7 @@ import {
   authenticateUser,
   authenticateCeoByRecoveryKey,
   getUserById,
+  getUserByUsername,
   toPublicUser,
   changeUserPassword,
   checkCurrentPassword,
@@ -252,12 +253,26 @@ router.post(
     });
 
     const { username, password } = parsed.data;
-    const user = authenticateUser(username, password);
+
+    // Distinguish exact failure reason for structured logging.
+    // The generic 401 response is identical in both cases to prevent user enumeration.
+    const existingUser = getUserByUsername(username);
+    const failureReason: string | null = !existingUser
+      ? "user_not_found"
+      : null;
+
+    const user = existingUser ? authenticateUser(username, password) : null;
+
+    const resolvedReason = failureReason ?? (user === null ? "password_mismatch" : null);
 
     if (!user) {
       incLoginFailure();
       incAuthError();
-      addAuditEntry("login_failure", `Login failed: ${username}`, {
+      logger.warn(
+        { username, reason: resolvedReason, ip: req.ip },
+        "[auth] Login failed",
+      );
+      addAuditEntry("login_failure", `Login failed: ${username} (${resolvedReason})`, {
         username,
         ip: req.ip ?? undefined,
       });
@@ -266,7 +281,7 @@ router.post(
         source:    "auth_route",
         action:    "login",
         status:    "failure",
-        metadata:  { username, ip: req.ip },
+        metadata:  { username, ip: req.ip, reason: resolvedReason },
         errorCode: "INVALID_CREDENTIALS",
       });
       res.status(401).json({ error: "Invalid username or password" });

@@ -49,7 +49,14 @@ function validateSecrets(): boolean {
 
   const sessionSecret = process.env["SESSION_SECRET"];
   if (!sessionSecret) {
-    logger.warn("[secrets] SESSION_SECRET is not set — sessions will use an insecure fallback");
+    logger.error("[secrets] SESSION_SECRET is not set — session integrity cannot be guaranteed. Set this secret and restart.");
+    valid = false;
+  }
+
+  const dbUrl = process.env["DATABASE_URL"];
+  if (!dbUrl) {
+    logger.error("[secrets] DATABASE_URL is not set — cannot connect to PostgreSQL. Set this secret and restart.");
+    valid = false;
   }
 
   const ceoUsername = process.env["CEO_USERNAME"];

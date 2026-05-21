@@ -1,0 +1,174 @@
+You are operating inside a production full-stack AI backend system. Your task is to perform a COMPLETE SYSTEM STABILIZATION, AUTH RESTORATION, AND FULL FEATURE VERIFICATION PASS.
+
+DO NOT add new architecture. DO NOT introduce new systems. ONLY FIX, VERIFY, AND LOCK STABILITY.
+
+------------------------------------------------------------
+1 — CRITICAL GOAL: RESTORE CEO LOGIN (HIGHEST PRIORITY)
+------------------------------------------------------------
+
+Ensure CEO login works exactly as a stable production system:
+
+- CEO must authenticate ONLY via:
+  username + password hash comparison against PostgreSQL
+- DO NOT use recovery key for login
+- DO NOT recreate CEO account if it already exists
+- DO NOT overwrite password during boot under any condition
+
+Fix any of the following if present:
+- duplicate CEO records
+- re-seeding logic in boot
+- repairCeoAccount overwriting credentials
+- memory store mismatch with database
+
+Add strict rule:
+→ CEO account is IMMUTABLE unless explicitly modified via admin endpoint
+
+Ensure:
+- password verification uses ONLY stored DB hash (scrypt/bcrypt)
+- no fallback authentication paths exist
+- no silent authentication bypass exists
+
+If CEO login fails:
+- log exact failure reason (user_not_found | password_mismatch | db_error)
+- do NOT auto-repair during login flow
+
+------------------------------------------------------------
+2 — BOOT SYSTEM CONSISTENCY LOCK
+------------------------------------------------------------
+
+Ensure boot sequence is strictly:
+
+STEP 1: Load environment variables
+STEP 2: Connect PostgreSQL
+STEP 3: Load users into memory store
+STEP 4: Sync indexes (usernameIndex, idIndex)
+STEP 5: Initialize session system
+STEP 6: Initialize auth system fully
+STEP 7: Initialize AI providers (Gemini etc.)
+STEP 8: Run safe mode evaluation
+STEP 9: Start server
+STEP 10: Run health tests
+
+IMPORTANT RULES:
+- AI provider failures MUST NEVER block auth or DB load
+- Auth must ALWAYS initialize before any AI systems
+- No system can depend on Gemini being available
+
+------------------------------------------------------------
+3 — ENVIRONMENT VALIDATION (STRICT)
+------------------------------------------------------------
+
+At startup validate:
+
+REQUIRED (FAIL BOOT IF MISSING):
+- JWT_SECRET
+- SESSION_SECRET
+- DATABASE CONNECTION
+
+OPTIONAL (DO NOT BLOCK SYSTEM):
+- GEMINI_API_KEY
+- VIDEO_API_KEYS
+- TTS providers
+
+CEO_RECOVERY_KEY:
+- optional only
+- log WARN if missing
+- never block boot
+
+------------------------------------------------------------
+4 — MEMORY ↔ DATABASE INTEGRITY CHECK
+------------------------------------------------------------
+
+After loading users:
+
+Ensure:
+- every DB user exists in memory store
+- every memory user exists in DB
+- usernameIndex matches DB exactly
+- no duplicate usernames exist
+
+If mismatch exists:
+- auto-repair index ONLY (not DB overwrite)
+- log SYSTEM_INTEGRITY_REPAIR event
+
+DO NOT recreate users.
+
+------------------------------------------------------------
+5 — FULL SYSTEM HEALTH TEST SUITE (MANDATORY AFTER BOOT)
+------------------------------------------------------------
+
+Run automatic verification after server startup:
+
+A) AUTH TEST
+- CEO login with correct password → MUST PASS
+- wrong password → MUST FAIL
+- JWT generation → MUST PASS
+- session creation → MUST PASS
+
+B) IMAGE SYSTEM
+- image generate endpoint responds correctly
+- image edit endpoint works
+- invalid request handled safely
+- no fake success responses
+
+C) VIDEO SYSTEM
+- video job creation works
+- job state transitions valid:
+  created → queued → processing → completed OR failed
+- provider failure must produce FAILED state
+
+D) VOICE / TTS SYSTEM
+- TTS request executes OR fails gracefully
+- no unhandled SDK crashes
+
+E) JOB PIPELINE INTEGRITY
+- no skipped states allowed
+- no direct jump to completed
+- no fake completion without artifact
+
+F) EVENT SYSTEM (if enabled)
+- auth events emitted
+- job lifecycle events emitted
+- failures logged with errorCode
+
+------------------------------------------------------------
+6 — FAIL-SAFE RULES (NON-NEGOTIABLE)
+------------------------------------------------------------
+
+- NEVER auto-create CEO during login attempts
+- NEVER overwrite passwords during boot
+- NEVER mark failed jobs as successful
+- NEVER bypass authentication due to provider errors
+- NEVER silently ignore mismatched DB vs memory state
+
+------------------------------------------------------------
+7 — FINAL OUTPUT REQUIREMENT
+
+After completing all steps, print a structured report:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SYSTEM STABILITY REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+AUTH: PASS / FAIL
+DB SYNC: PASS / FAIL
+IMAGE: PASS / FAIL
+VIDEO: PASS / FAIL
+VOICE: PASS / FAIL
+JOB PIPELINE: PASS / FAIL
+EVENT SYSTEM: PASS / FAIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OVERALL STATUS: STABLE / DEGRADED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Include exact failure reasons if any system is not PASS.
+
+------------------------------------------------------------
+FINAL OBJECTIVE
+
+System must be returned to a deterministic production-ready state where:
+
+- CEO login works consistently across deployments
+- no credential drift occurs between boots
+- no AI dependency can break authentication
+- all subsystems are verifiable and observable
+- system behavior is stable, predictable, and reproducible

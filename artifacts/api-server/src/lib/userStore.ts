@@ -648,26 +648,13 @@ export async function repairCeoAccount(): Promise<void> {
     return;
   }
 
-  // CEO account exists — apply targeted repairs only
-  let changed = false;
-
+  // CEO account exists — role correction ONLY.
+  // Credentials are IMMUTABLE once set — password is NEVER overwritten during boot.
+  // To change the CEO password use the /api/auth/change-password endpoint.
   if (existing.role !== "ceo") {
     existing.role = "ceo";
-    changed = true;
-    logger.info({ username: ceoUsername }, "[ceoRepair] CEO role corrected");
-  }
-
-  if (ceoPassword) {
-    existing.passwordHash = hashPassword(ceoPassword);
-    changed = true;
-    logger.info(
-      { username: ceoUsername },
-      "[ceoRepair] CEO password hash updated (remove CEO_PASSWORD env var after successful login)",
-    );
-  }
-
-  if (changed) {
     await persistStore();
+    logger.info({ username: ceoUsername }, "[ceoRepair] CEO role corrected");
   }
 
   _ceoBootstrapState = { ready: true, autoCreated: false, tempPassword: null };
