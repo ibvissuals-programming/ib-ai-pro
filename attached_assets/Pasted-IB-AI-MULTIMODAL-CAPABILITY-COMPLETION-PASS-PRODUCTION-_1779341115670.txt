@@ -1,0 +1,256 @@
+IB AI — MULTIMODAL CAPABILITY COMPLETION PASS (PRODUCTION-READY, CREDIT-EFFICIENT)
+
+MISSION:
+Complete the remaining multimodal AI capability layer and convert all partially-working AI tools into stable production-grade systems.
+
+PRIMARY GOAL:
+Finish and stabilize:
+- image editing
+- TTS
+- image-to-video
+- async job execution
+- multimodal orchestration
+- creator workflow usability
+
+DO NOT:
+- re-audit the entire codebase
+- rebuild infrastructure already completed
+- touch working auth systems
+- modify stable telemetry/circuit breaker systems
+- rewrite provider architecture
+
+ASSUME ALREADY COMPLETE:
+- toolHealthMonitor
+- circuitBreaker
+- aiOrchestrator
+- providerGuard
+- deterministic import/bootstrap system
+- health APIs
+- telemetry persistence layer
+- standardized AI contracts
+- Groq/Gemini routing isolation
+
+ONLY TARGET:
+- multimodal execution layer
+- creator workflows
+- tool reliability
+- UX completion
+- async processing stability
+
+---------------------------------------------------
+PHASE 1 — MULTIMODAL TOOL AUDIT (TARGETED ONLY)
+---------------------------------------------------
+
+Audit ONLY these systems:
+
+1. image editing pipeline
+2. TTS pipeline
+3. video generation pipeline
+4. async job handling
+5. provider/model compatibility
+6. frontend UX around long-running jobs
+
+DO NOT scan unrelated systems.
+
+Output:
+- exact blockers
+- exact failing providers/models
+- exact timeout/failure points
+- exact frontend instability points
+
+---------------------------------------------------
+PHASE 2 — IMAGE EDITING STABILIZATION
+---------------------------------------------------
+
+GOAL:
+Make image editing production-usable.
+
+Requirements:
+- deterministic edit execution
+- stable async lifecycle
+- retry-safe jobs
+- no silent failures
+- progress-safe frontend updates
+- preserve identity consistency during edits
+
+Implement:
+- queued edit jobs
+- edit status polling
+- structured edit stages
+- stage-specific failure reporting
+- standardized edit result object
+
+REQUIRED RESPONSE CONTRACT:
+{
+  success,
+  mode: "image",
+  stage,
+  provider,
+  latency,
+  result,
+  error
+}
+
+Add:
+- timeout protection
+- retry protection
+- provider sanitization
+- abort safety
+
+---------------------------------------------------
+PHASE 3 — TTS PRODUCTION PASS
+---------------------------------------------------
+
+GOAL:
+Convert TTS into stable downloadable audio generation.
+
+Requirements:
+- async-safe audio generation
+- wav/mp3 output support
+- progress tracking
+- cleanup of expired temp files
+- provider fallback handling
+
+Implement:
+- stable file output path
+- signed download response
+- voice validation layer
+- max-length protection
+- queue-safe execution
+
+Frontend:
+- loading state
+- playback preview
+- download button
+- retry button
+
+---------------------------------------------------
+PHASE 4 — IMAGE-TO-VIDEO ACTIVATION
+---------------------------------------------------
+
+GOAL:
+Replace current video stub with real async video pipeline.
+
+Requirements:
+- job-based execution
+- progress-safe architecture
+- polling endpoint
+- queued execution
+- standardized video contracts
+
+Implement:
+POST /api/video/generate
+GET /api/video/status/:id
+
+Response shape:
+{
+  success,
+  mode: "video",
+  jobId,
+  status,
+  progress,
+  eta,
+  result,
+  error
+}
+
+Rules:
+- never block request thread
+- provider failures must not crash queue
+- support future provider swapping
+
+---------------------------------------------------
+PHASE 5 — CREATOR WORKFLOW UX
+---------------------------------------------------
+
+GOAL:
+Turn multimodal tools into usable creator workflows.
+
+Implement:
+- unified generation history
+- downloadable outputs
+- retry failed jobs
+- recent generations panel
+- job progress UI
+- persistent session history
+
+Image Studio should feel:
+- premium
+- stable
+- async-aware
+- creator-focused
+
+---------------------------------------------------
+PHASE 6 — MULTIMODAL ORCHESTRATION
+---------------------------------------------------
+
+Upgrade aiOrchestrator into unified multimodal execution coordinator.
+
+Requirements:
+- all tools share same lifecycle
+- same timeout architecture
+- same error normalization
+- same telemetry hooks
+- same circuit breaker integration
+
+Modes:
+- chat
+- image
+- vision
+- tts
+- video
+- prompt
+
+---------------------------------------------------
+PHASE 7 — PROVIDER RELIABILITY PASS
+---------------------------------------------------
+
+Audit ALL Gemini model names currently used.
+
+Fix:
+- invalid model identifiers
+- wrong API version routing
+- unsupported modalities
+- provider-specific 404 patterns
+
+Rules:
+- no raw provider errors exposed
+- all provider failures sanitized
+- all timeouts standardized
+
+---------------------------------------------------
+PHASE 8 — FINAL VALIDATION
+---------------------------------------------------
+
+Run live validation for:
+- image editing
+- TTS
+- video generation
+- prompt expansion
+- image analysis
+
+Return:
+- latency table
+- provider matrix
+- success/failure matrix
+- production readiness score
+
+---------------------------------------------------
+FINAL RULES
+---------------------------------------------------
+
+DO:
+- make surgical edits only
+- reuse existing infrastructure
+- preserve standardized contracts
+- preserve current architecture
+
+DO NOT:
+- rebuild systems already completed
+- introduce duplicate orchestration layers
+- add experimental frameworks
+- create redundant monitoring systems
+
+FINAL GOAL:
+IB AI should behave like a real multimodal creator operating system:
+stable, async-safe, production-grade, creator-friendly, and monetization-ready.

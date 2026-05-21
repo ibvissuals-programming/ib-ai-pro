@@ -6,6 +6,8 @@ import Signup from "@/pages/Signup";
 import ChatApp from "@/pages/ChatApp";
 import Landing from "@/pages/Landing";
 import ImageTools from "@/pages/ImageTools";
+import VoiceStudio from "@/pages/VoiceStudio";
+import VideoStudio from "@/pages/VideoStudio";
 import CeoDashboard from "@/pages/CeoDashboard";
 import NotFound from "@/pages/not-found";
 import { ProtectedRoute } from "@/auth/ProtectedRoute";
@@ -29,6 +31,16 @@ function Router() {
       <Route path="/image-tools">
         <ProtectedRoute>
           <ImageTools />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/voice">
+        <ProtectedRoute>
+          <VoiceStudio />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/video">
+        <ProtectedRoute>
+          <VideoStudio />
         </ProtectedRoute>
       </Route>
       <Route path="/ceo/dashboard">
