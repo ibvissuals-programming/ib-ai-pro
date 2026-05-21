@@ -68,13 +68,13 @@ export function logProviderHealth(): void {
   }
 
   if (!s.ceoRecovery) {
-    logger.warn("[system] CEO_RECOVERY_KEY not set — CEO emergency recovery login disabled");
+    logger.debug("[system] CEO_RECOVERY_KEY not set (optional — emergency recovery disabled)");
   } else {
     logger.info("[system] CEO recovery key OK");
   }
 
   if (!s.ceoConfigured) {
-    logger.warn("[system] CEO_USERNAME not set — no CEO account will be auto-created");
+    logger.debug("[system] CEO_USERNAME not set (optional — no CEO auto-bootstrap)");
   } else {
     logger.info(`[system] CEO account target configured`);
   }

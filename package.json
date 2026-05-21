@@ -10,7 +10,10 @@
     "health": "node scripts/health-check.cjs",
     "guard": "node scripts/import-guard.cjs",
     "guard:fix": "node scripts/import-guard.cjs --fix",
-    "db:guard": "node scripts/db-guard.cjs"
+    "db:guard": "node scripts/db-guard.cjs",
+    "bootstrap": "node scripts/import-bootstrap.cjs",
+    "bootstrap:dry": "node scripts/import-bootstrap.cjs --dry-run",
+    "startup:health": "node scripts/startup-health.cjs"
   },
   "private": true,
   "devDependencies": {

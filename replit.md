@@ -51,12 +51,17 @@ These rules make every import/restart deterministic. ONE PASS only: **scan → v
 ### PHASE 4 — Secrets Guard
 - **NEVER** request the same secret more than once per session
 - Collect ALL missing secrets → request in ONE single batch
-- Required secrets: `GEMINI_API_KEY` (critical), `DATABASE_URL` (critical), `JWT_SECRET`, `CEO_RECOVERY_KEY`, `CEO_USERNAME`
+- **Critical secrets** (block startup if missing): `GEMINI_API_KEY`, `DATABASE_URL`
+- **Auto-generated secrets** (never request, never block startup): `JWT_SECRET`, `CEO_RECOVERY_KEY` — server generates safe fallbacks automatically
+- **Optional secrets** (gracefully disabled if missing, never block): `GROQ_API_KEY`, `VIDEO_ENABLED`, `VEO_MODEL`, `REDIS_URL`
+- `CEO_PASSWORD` — if missing, CEO account is auto-bootstrapped with a temp password logged once at startup
 - If a secret is already set → mark resolved → skip
 
 ### PHASE 5 — AI Provider Guard
+- **Gemini-primary mode**: all systems work with ONLY `GEMINI_API_KEY` — no Groq required
 - If `GEMINI_API_KEY` exists → **do not** reinitialize or reinstall the Gemini blueprint
-- Gemini is the primary AI provider; do not overwrite provider routing
+- If `GROQ_API_KEY` is missing → chat routes silently use Gemini fallback, no warnings, no degraded state
+- **NEVER** log startup warnings for missing optional providers (Groq, Veo, Redis)
 
 ### PHASE 6 — Startup Order
 1. Quick system scan (NOT full codebase re-exploration)

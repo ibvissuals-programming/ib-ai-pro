@@ -28,6 +28,7 @@ import { getAllCircuitStatuses } from "../lib/circuitBreaker";
 import { getAllLastNCalls }      from "../lib/toolTelemetryStore";
 import { isGeminiConfigured }   from "../lib/geminiEnv";
 import { isVideoEnabled }       from "../services/videoService";
+import { getCeoBootstrapState } from "../lib/userStore";
 
 const TOOL_NAMES = ["groq", "gemini", "tts", "image", "video", "prompt"] as const;
 
@@ -147,13 +148,35 @@ router.get("/ai/system-health", (req: Request, res: Response) => {
     };
   }
 
+  // ── Import / bootstrap readiness fields (Phase 6) ────────────────────────
+  const geminiOk  = isGeminiConfigured();
+  const dbOk      = !!process.env["DATABASE_URL"];
+  const ceoState  = getCeoBootstrapState();
+
+  const missingOptionalServices: string[] = [];
+  if (!process.env["GROQ_API_KEY"])  missingOptionalServices.push("groq");
+  if (!isVideoEnabled())             missingOptionalServices.push("veo");
+  if (!process.env["REDIS_URL"])     missingOptionalServices.push("redis");
+
+  const setupWarnings: string[] = [];
+  if (!process.env["CEO_RECOVERY_KEY"]) setupWarnings.push("CEO_RECOVERY_KEY not set — emergency recovery disabled");
+  if (!ceoState.ready)                  setupWarnings.push("CEO account not yet bootstrapped");
+  if (ceoState.tempPassword)            setupWarnings.push("CEO using auto-generated temp password — set CEO_PASSWORD to change it");
+
   const payload: Record<string, unknown> = {
+    status:          (geminiOk && dbOk) ? "healthy" : "degraded",
+    providerMode:    geminiOk ? "gemini-primary" : "offline",
+    importReady:     geminiOk && dbOk,
+    bootstrapComplete: ceoState.ready,
+    missingOptionalServices,
+    setupWarnings,
     tools,
-    capabilities,   // also available as flat object for quick capability checks
+    capabilities,
     systemScore: score,
     timestamp:   new Date().toISOString(),
     providers: {
-      gemini: { configured: isGeminiConfigured() },
+      gemini: { configured: geminiOk },
+      groq:   { configured: !!process.env["GROQ_API_KEY"], note: "optional — system works without it" },
       veo:    { configured: isVideoEnabled(), note: "Veo access gated by API key permissions" },
     },
   };
