@@ -27,6 +27,8 @@ export type AuditEventType =
   | "tts_success"
   | "tts_failure"
   | "video_request"
+  | "video_success"
+  | "video_failure"
   | "auth_error"
   | "system_error";
 

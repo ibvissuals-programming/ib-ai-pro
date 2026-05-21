@@ -10,6 +10,7 @@
  *   checks.queue          — image job queue metrics (in-memory, synchronous)
  *   checks.provider       — AI provider status (in-memory, synchronous)
  *   checks.storage        — storage mode summary (in-memory, synchronous)
+ *   checks.systems        — per-tool capability + readiness matrix
  *
  * Rules:
  *   - Never throws — always returns JSON
@@ -24,6 +25,8 @@ import { checkObjectStorageHealth, isObjectStorageEnabled } from "../services/ob
 import { imageQueue }                         from "../services/imageQueue";
 import { getJobMetrics }                      from "../services/imageJobManager";
 import { getAiStatus }                        from "../lib/aiMetrics";
+import { isGeminiConfigured }                 from "../lib/geminiEnv";
+import { isVideoEnabled }                     from "../services/videoService";
 
 const router: IRouter = Router();
 
@@ -112,18 +115,52 @@ router.get(["/health", "/healthz"], async (_req, res) => {
     objectStorageEnabled: isObjectStorageEnabled(),
   };
 
-  // ── AI Systems (synchronous — in-memory, non-blocking) ────────────────────
+  // ── Multimodal Systems (synchronous — in-memory, non-blocking) ────────────
   // Reports readiness of each AI subsystem without making any external calls.
+  // featureEnabled: the provider key is configured
+  // providerReady:  the feature can accept requests right now
+  // veoNote: Veo access requires specific API key permissions beyond GEMINI_API_KEY
   let systemsDegraded = false;
   try {
     const aiSt     = getAiStatus();
     const geminiOk = aiSt.geminiAvailable;
+    const videoOk  = isVideoEnabled();
+
     if (!geminiOk) systemsDegraded = true;
+
     checks["systems"] = {
-      image:  { ok: geminiOk, description: "Image generation & editing pipeline" },
-      tts:    { ok: geminiOk, description: "Text-to-Speech — Gemini 2.0 Flash" },
-      video:  { ok: true,      description: "Image-to-Video — provider-ready infrastructure" },
-      prompt: { ok: geminiOk, description: "Smart Prompt Expansion — Gemini 2.5 Flash" },
+      image: {
+        ok:             true,   // FLUX (generate) is always available
+        featureEnabled: true,
+        providerReady:  true,
+        provider:       "pollinations/gemini",
+        description:    "Image generation (FLUX) + editing (Gemini)",
+      },
+      tts: {
+        ok:             geminiOk,
+        featureEnabled: geminiOk,
+        providerReady:  geminiOk,
+        provider:       "gemini-2.0-flash",
+        description:    "Text-to-speech — WAV output, 5 voice styles",
+      },
+      video: {
+        ok:             videoOk,
+        featureEnabled: videoOk,
+        providerReady:  videoOk,
+        provider:       "gemini-veo-002",
+        veoAccessNote:  videoOk
+          ? "GEMINI_API_KEY set — Veo access depends on API key permissions"
+          : "GEMINI_API_KEY not configured",
+        asyncJob:       true,
+        description:    "Image-to-video (Gemini Veo 2) — async polling job",
+      },
+      prompt: {
+        ok:             geminiOk,
+        featureEnabled: geminiOk,
+        providerReady:  geminiOk,
+        provider:       "gemini-2.5-flash",
+        description:    "Smart prompt expansion",
+      },
     };
   } catch {
     systemsDegraded = true;

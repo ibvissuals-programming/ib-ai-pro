@@ -1,0 +1,183 @@
+IB AI — VIDEO ACTIVATION + MULTIMODAL COMPLETION PASS (CREDIT-EFFICIENT PRODUCTION PHASE)
+
+MISSION:
+Complete the remaining multimodal AI stack and stabilize all user-facing generation systems into a production-capable AI platform.
+
+PRIMARY RULES:
+- Preserve all existing API contracts
+- Preserve all frontend stability rules already established
+- Do NOT refactor unrelated systems
+- Do NOT touch working Groq isolation logic
+- Do NOT introduce new animation systems
+- Maintain deterministic error handling using:
+  - buildStandardResponse()
+  - buildErrorResponse()
+  - sanitizeProviderError()
+  - withProviderTimeout()
+
+GOAL:
+Activate real image-to-video generation, harden TTS, improve editing reliability, and complete multimodal production readiness with minimal credit usage.
+
+---------------------------------------------------
+PHASE 1 — VIDEO PIPELINE ACTIVATION AUDIT
+---------------------------------------------------
+
+Audit:
+- routes/video.ts
+- services/videoService.ts
+- frontend Video Studio page
+- provider/env detection flow
+- job lifecycle handling
+- polling + status flow
+
+Output:
+- exact blockers preventing real video generation
+- provider compatibility map
+- required env vars
+- current stub execution path
+
+DO NOT WRITE YET.
+
+---------------------------------------------------
+PHASE 2 — REAL VIDEO GENERATION IMPLEMENTATION
+---------------------------------------------------
+
+Implement ONE provider path only.
+
+PRIORITY ORDER:
+1. Gemini Veo
+2. Compatible image-to-video provider already partially scaffolded
+3. Stable fallback abstraction
+
+Requirements:
+- image upload → video generation flow
+- async job lifecycle
+- polling-safe execution
+- provider timeout protection
+- sanitized failures
+- deterministic response contracts
+- stable temporary file handling
+- cleanup after completion/failure
+
+MANDATORY:
+- NO fake success responses
+- If provider unavailable:
+  - return FEATURE_DISABLED
+  - never pretend generation succeeded
+
+Video generation must support:
+- cinematic motion
+- zoom/parallax
+- subtle motion
+- social motion
+
+---------------------------------------------------
+PHASE 3 — IMAGE EDITING RELIABILITY HARDENING
+---------------------------------------------------
+
+Audit:
+- image edit route
+- Gemini image editing provider calls
+- timeout handling
+- payload sizing
+- retry logic
+- prompt expansion interaction
+
+Fix:
+- transient failure retries ONLY
+- provider timeout enforcement
+- payload validation before provider call
+- image size safeguards
+- deterministic fallback messages
+- remove all raw provider leakage
+
+Goal:
+Editing tool should behave like a stable production utility.
+
+---------------------------------------------------
+PHASE 4 — TTS PRODUCTION HARDENING
+---------------------------------------------------
+
+Audit:
+- ttsService.ts
+- voice pipeline
+- PCM/WAV conversion
+- cleanup lifecycle
+- frontend playback handling
+
+Implement:
+- deterministic cleanup
+- generation duration metrics
+- retry handling for transient provider failures
+- safer file lifecycle handling
+- download stability improvements
+- frontend loading-state resilience
+
+DO NOT redesign UI.
+
+---------------------------------------------------
+PHASE 5 — MULTIMODAL SYSTEM HEALTH EXPANSION
+---------------------------------------------------
+
+Extend existing:
+- toolHealthMonitor
+- circuitBreaker
+- system-health APIs
+
+Add:
+- video provider readiness
+- TTS provider readiness
+- editing provider readiness
+- provider capability matrix
+
+System health should now expose:
+- provider availability
+- circuit state
+- avg latency
+- recent failures
+- fallback usage
+- feature-enabled state
+
+Maintain existing API shapes.
+
+---------------------------------------------------
+PHASE 6 — IMPORT/RESTART RESILIENCE
+---------------------------------------------------
+
+Ensure ALL new systems obey existing deterministic startup rules:
+
+- no duplicate workflow spawning
+- no repeated schema pushes
+- no secret re-prompts if already stored
+- no startup loops
+- no provider checks before env validation
+
+Integrate with:
+- guard scripts
+- db-guard
+- health-check
+- import-guard
+
+All new provider requirements must surface through:
+pnpm run health
+
+---------------------------------------------------
+PHASE 7 — FINAL VALIDATION
+---------------------------------------------------
+
+Run live validation against:
+- TTS
+- Image Editing
+- Prompt Expansion
+- Video
+- Health APIs
+
+Return:
+- success/failure matrix
+- exact latency data
+- provider readiness report
+- remaining blockers
+- production readiness score
+
+FINAL RULE:
+This pass must move IB AI from “advanced prototype” to “stable multimodal production platform” while preserving the hardened architecture already established.

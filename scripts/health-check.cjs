@@ -7,13 +7,15 @@
  * Checks (in order, stops early on fatal failures):
  *   1. Required environment secrets
  *   2. PostgreSQL connectivity + table existence
- *   3. API /health endpoint
+ *   3. API /health endpoint (infrastructure)
+ *   4. Multimodal capabilities (/health systems section)
  *
  * Output format (PHASE 7):
  *   ✔/✗ Workflows    (inferred from port availability)
  *   ✔/✗ Database     (connectivity + schema)
  *   ✔/✗ API          (/health endpoint)
  *   ✔/✗ Secrets      (required env vars)
+ *   ✔/✗ Multimodal   (image, tts, video, prompt)
  *   System ready / NOT READY
  *
  * Usage:
@@ -139,11 +141,12 @@ async function checkApi(backendPort) {
   try {
     const { status, data } = await fetchJson(`http://127.0.0.1:${backendPort}/health`);
     return {
-      ok:      status === 200 && data?.status !== undefined,
-      status:  data?.status,
-      gemini:  data?.checks?.provider?.geminiConfigured,
-      uptime:  data?.uptime,
-      httpCode: status,
+      ok:        status === 200 && data?.status !== undefined,
+      status:    data?.status,
+      gemini:    data?.checks?.provider?.geminiConfigured,
+      uptime:    data?.uptime,
+      httpCode:  status,
+      systems:   data?.systems ?? null,
     };
   } catch (err) {
     return { ok: false, error: err.message };
@@ -164,6 +167,25 @@ async function main() {
 
   const apiResult = await checkApi(workflowResult.backend?.port);
 
+  // ── Multimodal readiness (derived from /health systems section) ───────────
+  const systems     = apiResult.systems ?? {};
+  const geminiOk    = !!secretsResult.results.find(r => r.key === "GEMINI_API_KEY")?.present;
+
+  const multimodal = {
+    image:  { ok: true,     label: "Image Gen/Edit",  note: "FLUX (gen) + Gemini (edit)" },
+    tts:    { ok: geminiOk, label: "TTS",             note: geminiOk ? "Gemini 2.0 Flash audio" : "needs GEMINI_API_KEY" },
+    video:  { ok: geminiOk, label: "Video (Veo 2)",   note: geminiOk ? "Gemini key set (Veo access gated by permissions)" : "needs GEMINI_API_KEY" },
+    prompt: { ok: geminiOk, label: "Prompt Expand",   note: geminiOk ? "Gemini 2.5 Flash" : "needs GEMINI_API_KEY" },
+  };
+
+  // Prefer live data from the API if available
+  if (systems.image)  multimodal.image.ok  = systems.image.ok  ?? multimodal.image.ok;
+  if (systems.tts)    multimodal.tts.ok    = systems.tts.ok    ?? multimodal.tts.ok;
+  if (systems.video)  multimodal.video.ok  = systems.video.ok  ?? multimodal.video.ok;
+  if (systems.prompt) multimodal.prompt.ok = systems.prompt.ok ?? multimodal.prompt.ok;
+
+  const multimodalOk = Object.values(multimodal).every(m => m.ok);
+
   const allOk =
     secretsResult.ok &&
     dbResult.ok &&
@@ -173,10 +195,11 @@ async function main() {
   if (JSON_MODE) {
     console.log(JSON.stringify({
       ok: allOk,
-      secrets:   secretsResult,
-      database:  dbResult,
-      workflows: workflowResult,
-      api:       apiResult,
+      secrets:    secretsResult,
+      database:   dbResult,
+      workflows:  workflowResult,
+      api:        apiResult,
+      multimodal,
       durationMs: Date.now() - t0,
     }, null, 2));
     process.exit(allOk ? 0 : 1);
@@ -226,6 +249,22 @@ async function main() {
         console.log(`       ✗ ${r.key}${tag} — ${r.label}`);
       }
     }
+  }
+
+  // Multimodal capabilities
+  const mmIcon = icon(multimodalOk);
+  const mmParts = Object.entries(multimodal).map(([, m]) => `${icon(m.ok)} ${m.label}`);
+  console.log(`  ${mmIcon} Multimodal   ${mmParts.join(" · ")}`);
+
+  // Detail row for non-OK multimodal systems
+  const mmFailing = Object.entries(multimodal).filter(([, m]) => !m.ok);
+  for (const [, m] of mmFailing) {
+    console.log(`       ✗ ${m.label}: ${m.note}`);
+  }
+
+  // Veo access note (always show if GEMINI_API_KEY is present)
+  if (geminiOk) {
+    console.log(`       ℹ Video (Veo 2): Gemini key present — Veo access gated by API key permissions`);
   }
 
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");

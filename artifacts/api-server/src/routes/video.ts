@@ -1,33 +1,37 @@
 /**
  * video.ts — IB AI Assistant
  *
- * POST /api/video/generate  — image-to-video generation pipeline
+ * POST /api/video/generate  — image-to-video via Gemini Veo (async fire-and-forget)
  * GET  /api/video/status/:jobId — job status polling
+ * GET  /api/video/serve/:jobId  — stream mp4 video file
  * GET  /api/video/modes     — list available video modes
  *
  * Auth: policyEngine (2 credits per generation, CEO = unlimited)
  * Rate: 5 video requests per minute per IP
- * Queue: routed through imageQueue for concurrency control
- * Storage: Object Storage or local filesystem (when provider connected)
- * Recovery: DB-backed jobs survive server restarts
+ *
+ * Async pattern:
+ *   POST responds immediately with { jobId, status: "processing" }
+ *   Background process runs Veo generation and updates job state
+ *   Client polls GET /api/video/status/:jobId every 5 seconds
+ *   On completion: GET /api/video/serve/:jobId streams the mp4 file
  *
  * Response: standardized job response
  *   { jobId, status, type, resultUrl, metadata, createdAt }
- *
- * NOTE: Video generation is infrastructure-ready.
- * Set VIDEO_ENABLED=true + VIDEO_PROVIDER_URL + VIDEO_PROVIDER_KEY to activate.
  */
+import * as fs                 from "fs";
 import { Router, type Request, type Response } from "express";
 import { z }                   from "zod";
 import { imageQueue }          from "../services/imageQueue";
-import { generateVideo, VIDEO_MODES, getVideoModeDescriptions } from "../services/videoService";
+import {
+  generateVideo, VIDEO_MODES, getVideoModeDescriptions, isVideoEnabled,
+  getVideoResult, videoFileExists, getVideoFilePath,
+} from "../services/videoService";
 import { createJob, advanceJob, completeJob, failJob, getJob, jobSummary } from "../services/imageJobManager";
 import { policyEngine, deductRequestCredits, appendCreditHeaders } from "../middleware/policyEngine";
 import { addAuditEntry }       from "../lib/auditLog";
 import { recordUsage }         from "../lib/usageAnalytics";
-import { sanitizeProviderError } from "../lib/providerGuard";
 import { buildStandardResponse, buildErrorResponse } from "../lib/aiOrchestrator";
-import { trackToolExecution }    from "../lib/toolHealthMonitor";
+import { trackToolExecution }  from "../lib/toolHealthMonitor";
 import { logger }              from "../lib/logger";
 
 const router = Router();
@@ -43,6 +47,7 @@ const VideoSchema = z.object({
 });
 
 // ── POST /api/video/generate ──────────────────────────────────────────────────
+// Returns immediately with status: "processing". Generation runs in background.
 
 router.post(
   "/video/generate",
@@ -55,7 +60,7 @@ router.post(
     next();
   },
   policyEngine({ cost: 2, rateKey: "video_generate", rateMax: 5, rateWindowMs: 60_000, allowRecovery: true }),
-  async (req: Request, res: Response) => {
+  (req: Request, res: Response) => {
     const parsed = VideoSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ ...buildErrorResponse("video", "Invalid request"), details: parsed.error.flatten() });
@@ -65,11 +70,9 @@ router.post(
     const { image, prompt, mode } = parsed.data;
     const userId = req.user?.userId;
 
-    logger.info(
-      { userId, promptLength: prompt.length, mode },
-      "[video] generate request",
-    );
+    logger.info({ userId, promptLength: prompt.length, mode }, "[video] generate request");
 
+    // Create tracked job
     const job = createJob({
       jobType:        "VIDEO_JOB",
       complexity:     "HEAVY",
@@ -80,62 +83,60 @@ router.post(
       source:         "video",
     });
 
-    advanceJob(job, "processing", `Video job started — mode: ${mode}`);
+    advanceJob(job, "processing", `Video job queued — mode: ${mode}`);
 
-    try {
+    // ── Respond immediately ───────────────────────────────────────────────────
+    res.json(buildStandardResponse("video", {
+      jobId:     job.jobId,
+      status:    "processing",
+      type:      "video",
+      resultUrl: null,
+      metadata: {
+        videoMode: mode,
+        message:   "Video generation started. Poll /api/video/status/:jobId for updates.",
+      },
+      createdAt: job.timestamp,
+      job:       jobSummary(job),
+    }, job.jobId));
+
+    // ── Fire-and-forget background generation ─────────────────────────────────
+    void (async () => {
       const t0 = Date.now();
+      try {
+        const result = await imageQueue.run(() =>
+          trackToolExecution("video", () =>
+            generateVideo({ imageBase64: image, prompt, mode, jobId: job.jobId, userId }),
+          ),
+        );
 
-      const result = await imageQueue.run(() =>
-        trackToolExecution("video", () =>
-          generateVideo({ imageBase64: image, prompt, mode, jobId: job.jobId, userId }),
-        ),
-      );
-
-      if (result.status === "completed") {
-        completeJob(job, "video-provider" as any);
-      } else {
-        // provider_not_configured — not a failure, just a configuration gap
-        completeJob(job, "video-stub" as any);
+        if (result.status === "completed") {
+          completeJob(job, "gemini-veo" as never);
+          if (userId) recordUsage({ userId, type: "generate", latencyMs: Date.now() - t0 });
+          deductRequestCredits(req);
+          addAuditEntry("video_success", `Video completed — mode: ${mode}`, {
+            username: req.user?.username,
+            ip:       req.ip ?? undefined,
+          });
+          logger.info({ jobId: job.jobId, latencyMs: Date.now() - t0 }, "[video] background generation completed");
+        } else {
+          // provider_not_configured — infrastructure ready but Veo not enabled
+          completeJob(job, "video-stub" as never);
+          addAuditEntry("video_request", `Video: ${result.status}`, {
+            username: req.user?.username,
+            ip:       req.ip ?? undefined,
+          });
+        }
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        failJob(job, errMsg);
+        if (userId) recordUsage({ userId, type: "failure" });
+        addAuditEntry("video_failure", `Video failed: ${errMsg.slice(0, 120)}`, {
+          username: req.user?.username,
+          ip:       req.ip ?? undefined,
+        });
+        logger.error({ err, jobId: job.jobId }, "[video] background generation failed");
       }
-
-      if (userId) {
-        recordUsage({ userId, type: "generate", latencyMs: Date.now() - t0 });
-      }
-
-      if (result.status === "completed") {
-        deductRequestCredits(req);
-        appendCreditHeaders(req, res);
-      }
-
-      addAuditEntry("video_request", `Video job ${result.status}`, {
-        username: req.user?.username,
-        ip:       req.ip ?? undefined,
-      });
-
-      res.json(buildStandardResponse("video", {
-        jobId:     job.jobId,
-        status:    result.status,
-        type:      "video",
-        resultUrl: result.videoUrl ?? null,
-        metadata: {
-          videoMode:       mode,
-          durationSeconds: result.durationSeconds ?? null,
-          resolution:      result.resolution      ?? null,
-          message:         result.message,
-        },
-        createdAt: job.timestamp,
-        job:       jobSummary(job),
-      }, job.jobId));
-    } catch (err: unknown) {
-      failJob(job, err instanceof Error ? err.message : String(err));
-
-      if (userId) {
-        recordUsage({ userId, type: "failure" });
-      }
-
-      logger.error({ err, jobId: job.jobId }, "[video] generation failed");
-      res.status(503).json(buildErrorResponse("video", err, "video-provider"));
-    }
+    })();
   },
 );
 
@@ -143,7 +144,7 @@ router.post(
 
 router.get(
   "/video/status/:jobId",
-  policyEngine({ cost: 0, rateKey: "video_status", rateMax: 60, rateWindowMs: 60_000, allowRecovery: true }),
+  policyEngine({ cost: 0, rateKey: "video_status", rateMax: 120, rateWindowMs: 60_000, allowRecovery: true }),
   (req: Request, res: Response) => {
     const jobId = String(req.params["jobId"] ?? "");
     const job = getJob(jobId);
@@ -153,32 +154,104 @@ router.get(
       return;
     }
 
-    // Only the job owner or CEO can view
     if (job.userId && job.userId !== req.user?.userId && req.user?.role !== "ceo") {
       res.status(403).json({ error: "Access denied" });
       return;
     }
 
+    // Pull enriched result from videoService result store
+    const videoResult = getVideoResult(jobId);
+
+    const responseStatus =
+      videoResult?.status === "completed"           ? "completed"            :
+      videoResult?.status === "provider_not_configured" ? "provider_not_configured" :
+      videoResult?.status === "failed"              ? "failed"               :
+      job.status === "failed"                       ? "failed"               :
+      "processing";
+
     res.json(buildStandardResponse("video", {
-      jobId:     job.jobId,
-      status:    job.status,
+      jobId,
+      status:    responseStatus,
       type:      "video",
+      resultUrl: videoResult?.url ?? null,
+      metadata: {
+        videoMode:       videoResult?.mode,
+        durationSeconds: videoResult?.durationSeconds ?? null,
+        message:
+          responseStatus === "completed"              ? "Video ready"                                    :
+          responseStatus === "provider_not_configured" ? "Veo not enabled for this API key"              :
+          responseStatus === "failed"                 ? "Generation failed — please try again"           :
+          "Processing… check back in a few seconds",
+      },
       createdAt: job.timestamp,
       job:       jobSummary(job),
-    }, job.jobId));
+    }, jobId));
+  },
+);
+
+// ── GET /api/video/serve/:jobId ───────────────────────────────────────────────
+// Stream the mp4 video file. No auth required (job IDs are cryptographically unguessable).
+
+router.get(
+  "/video/serve/:jobId",
+  (req: Request, res: Response) => {
+    const id = String(req.params["jobId"] ?? "");
+
+    if (!/^job_[a-z0-9_]+$/.test(id)) {
+      res.status(400).json({ error: "Invalid video ID" });
+      return;
+    }
+
+    if (!videoFileExists(id)) {
+      res.status(404).json({ error: "Video not found or expired" });
+      return;
+    }
+
+    const filePath = getVideoFilePath(id);
+
+    try {
+      const stat = fs.statSync(filePath);
+      res.setHeader("Content-Type",   "video/mp4");
+      res.setHeader("Content-Length", stat.size);
+      res.setHeader("Content-Disposition", `inline; filename="${id}.mp4"`);
+      res.setHeader("Cache-Control", "private, max-age=86400");
+      res.setHeader("Accept-Ranges", "bytes");
+
+      const stream = fs.createReadStream(filePath);
+      stream.pipe(res);
+    } catch (err) {
+      logger.error({ err, id }, "[video] serve failed");
+      res.status(500).json({ error: "Failed to serve video" });
+    }
   },
 );
 
 // ── GET /api/video/modes ──────────────────────────────────────────────────────
-// No auth required.
 
 router.get("/video/modes", (_req: Request, res: Response) => {
   const descriptions = getVideoModeDescriptions();
   res.json({
-    modes: VIDEO_MODES.map((id) => ({
-      id,
-      description: descriptions[id],
-    })),
+    modes:          VIDEO_MODES.map((id) => ({ id, description: descriptions[id] })),
+    providerReady:  isVideoEnabled(),
+    model:          "veo-002",
+  });
+});
+
+// ── GET /api/video/capability ─────────────────────────────────────────────────
+
+router.get("/video/capability", (_req: Request, res: Response) => {
+  res.json({
+    featureEnabled:  isVideoEnabled(),
+    provider:        "gemini-veo",
+    model:           "veo-002",
+    veoAccessNote:   isVideoEnabled()
+      ? "GEMINI_API_KEY is set. Veo access depends on API key permissions."
+      : "GEMINI_API_KEY not configured.",
+    durationSeconds: 5,
+    resolution:      "1280x720",
+    asyncJob:        true,
+    pollEndpoint:    "/api/video/status/:jobId",
+    serveEndpoint:   "/api/video/serve/:jobId",
   });
 });
 
