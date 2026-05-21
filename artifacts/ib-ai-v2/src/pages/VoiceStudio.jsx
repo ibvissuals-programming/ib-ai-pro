@@ -19,6 +19,7 @@ import { generateSpeech, getAudioUrl } from '../services/ttsApi';
 import { fetchTtsHistory } from '../services/historyApi';
 import { useTheme } from '../contexts/ThemeContext';
 import { WorkflowLauncher } from '../components/WorkflowLauncher';
+import { WorkflowBanner } from '../components/WorkflowBanner';
 
 // ── Voice definitions ─────────────────────────────────────────────────────────
 const VOICES = [
@@ -257,6 +258,15 @@ function HistoryEntry({ entry, onReplay }) {
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function VoiceStudio() {
   const { theme, toggleTheme } = useTheme();
+
+  // ── Capture URL params once for banner display ────────────────────────────
+  const [urlParams] = useState(() => new URLSearchParams(window.location.search));
+  const hasWorkflow       = !!(urlParams.get('prompt') || urlParams.get('voice'));
+  const urlVoiceId        = urlParams.get('voice');
+  const workflowVoiceLabel = urlVoiceId
+    ? (VOICES.find(v => v.id === urlVoiceId)?.label ?? urlVoiceId.replace(/_/g, ' '))
+    : null;
+
   const [text, setText]               = useState('');
   const [selectedVoice, setVoice]     = useState('neutral_assistant');
   const [loading, setLoading]         = useState(false);
@@ -401,6 +411,13 @@ export default function VoiceStudio() {
               Type any text, choose a voice style, and generate studio-quality speech.
             </p>
           </div>
+
+          {hasWorkflow && (
+            <WorkflowBanner
+              label="Workflow Applied ✓"
+              sublabel={workflowVoiceLabel ? `Voice: ${workflowVoiceLabel}` : undefined}
+            />
+          )}
 
           {/* Creator Presets */}
           <div className="space-y-2">

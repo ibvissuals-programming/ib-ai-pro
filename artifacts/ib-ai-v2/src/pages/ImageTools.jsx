@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { generateImage, editImage, fetchImageHistory, deleteHistoryEntry, generateCinematicPrompt } from '../services/imageToolsApi';
 import { useTheme } from '../contexts/ThemeContext';
+import { WorkflowBanner } from '../components/WorkflowBanner';
 
 // ── Rate limit guard (client-side) ────────────────────────────────────────────
 const RATE_LIMIT_MS = 11_000;
@@ -1084,10 +1085,15 @@ export default function ImageTools() {
 
   // ── Read URL params once on mount (session restore from WorkflowLauncher) ──
   const [urlParams] = useState(() => new URLSearchParams(window.location.search));
-  const urlPrompt   = urlParams.get('prompt')    ?? '';
-  const urlMode     = urlParams.get('mode')       ?? '';
+  const urlPrompt    = urlParams.get('prompt')    ?? '';
+  const urlMode      = urlParams.get('mode')       ?? '';
   const urlIntensity = urlParams.get('intensity') ?? '';
-  const initialTab  = (urlMode || urlPrompt) ? 'edit' : 'generate';
+  const initialTab   = (urlMode || urlPrompt) ? 'edit' : 'generate';
+
+  const hasWorkflow       = !!(urlMode || urlPrompt);
+  const workflowSublabel  = urlMode
+    ? `${urlMode.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}${urlIntensity ? ` · ${urlIntensity}` : ''}`
+    : null;
 
   const [tab, setTab] = useState(initialTab);
 
@@ -1131,6 +1137,13 @@ export default function ImageTools() {
               Generate new images from text, transform existing ones, or browse your history.
             </p>
           </div>
+
+          {hasWorkflow && (
+            <WorkflowBanner
+              label="Workflow Applied ✓"
+              sublabel={workflowSublabel ?? undefined}
+            />
+          )}
 
           {/* Mode tabs */}
           <div className="flex gap-1 p-1 rounded-xl bg-secondary/40 border border-border/40 w-fit">

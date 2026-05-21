@@ -28,6 +28,7 @@ import {
 } from '../services/videoApi';
 import { fetchVideoHistory } from '../services/historyApi';
 import { WorkflowLauncher } from '../components/WorkflowLauncher';
+import { WorkflowBanner } from '../components/WorkflowBanner';
 
 // ── Video mode definitions ─────────────────────────────────────────────────────
 const VIDEO_MODES = [
@@ -349,6 +350,14 @@ function HistoryCard({ entry }) {
 export default function VideoStudio() {
   const { theme, toggleTheme } = useTheme();
 
+  // ── Capture URL params once for banner display ────────────────────────────
+  const [urlParams] = useState(() => new URLSearchParams(window.location.search));
+  const hasWorkflow      = !!(urlParams.get('prompt') || urlParams.get('vmode'));
+  const urlVModeId       = urlParams.get('vmode');
+  const workflowModeLabel = urlVModeId
+    ? (VIDEO_MODES.find(m => m.id === urlVModeId)?.label ?? urlVModeId.replace(/_/g, ' '))
+    : null;
+
   const [image, setImage]         = useState(null);
   const [prompt, setPrompt]       = useState('');
   const [mode, setMode]           = useState('cinematic_motion');
@@ -552,6 +561,13 @@ export default function VideoStudio() {
               Transform your images into cinematic video sequences powered by Gemini Veo 2.
             </p>
           </div>
+
+          {hasWorkflow && (
+            <WorkflowBanner
+              label="Workflow Applied ✓"
+              sublabel={workflowModeLabel ? `Mode: ${workflowModeLabel}` : undefined}
+            />
+          )}
 
           {/* Creator Presets */}
           <div className="space-y-2">
