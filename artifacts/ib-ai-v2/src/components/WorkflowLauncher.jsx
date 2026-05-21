@@ -480,6 +480,20 @@ export function WorkflowLauncher({ trigger }) {
     setClearConfirm(false);
   }, [clearRecents, clearCounts]);
 
+  // ── Global Cmd/Ctrl+K shortcut ────────────────────────────────────────────
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key !== 'k') return;
+      const tag = document.activeElement?.tagName ?? '';
+      const editable = document.activeElement?.isContentEditable;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || editable) return;
+      e.preventDefault();
+      setOpen(prev => !prev);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   const loadSessions = useCallback(async () => {
     setLoadingSessions(true);
     try {
