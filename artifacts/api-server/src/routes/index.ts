@@ -23,6 +23,7 @@ import memoryRouter       from "./memory";
 import ttsRouter          from "./tts";
 import videoRouter        from "./video";
 import promptExpandRouter from "./promptExpand";
+import aiHealthRouter     from "./aiHealth";
 import { trackActivity }  from "../middleware/trackActivity";
 
 const router: IRouter = Router();
@@ -46,5 +47,6 @@ router.use(memoryRouter);
 router.use(ttsRouter);
 router.use(videoRouter);
 router.use(promptExpandRouter);
+router.use(aiHealthRouter);
 
 export default router;

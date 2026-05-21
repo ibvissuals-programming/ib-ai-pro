@@ -35,6 +35,7 @@ import { imageQueue }  from "../services/imageQueue";
 import { recordUsage }  from "../lib/usageAnalytics";
 import { expandPrompt as expandPromptFn, PROMPT_CATEGORIES } from "../lib/promptExpander";
 import { buildStandardResponse, buildErrorResponse } from "../lib/aiOrchestrator";
+import { trackToolExecution } from "../lib/toolHealthMonitor";
 
 const router = Router();
 
@@ -167,7 +168,7 @@ router.post(
 
       const _t0 = Date.now();
       const b64Image = await imageQueue.run(() =>
-        generateImage(_genPrompt, req.user?.userId),
+        trackToolExecution("image", () => generateImage(_genPrompt, req.user?.userId)),
       );
       if (req.user?.userId) {
         recordUsage({ userId: req.user.userId, type: "generate", latencyMs: Date.now() - _t0 });
@@ -324,12 +325,14 @@ router.post(
     try {
       const _t0 = Date.now();
       const result: EditResult = await imageQueue.run(() =>
-        editImage(
-          parsed.data.image,
-          effectivePrompt,
-          req.user?.userId,
-          resolvedEditMode,
-          parsed.data.intensity,
+        trackToolExecution("image", () =>
+          editImage(
+            parsed.data.image,
+            effectivePrompt,
+            req.user?.userId,
+            resolvedEditMode,
+            parsed.data.intensity,
+          ),
         ),
       );
       if (req.user?.userId) {
@@ -411,7 +414,9 @@ router.post(
     );
 
     try {
-      const insight = await generateCinematicInsight(parsed.data.imageBase64, parsed.data.mimeType);
+      const insight = await trackToolExecution("image", () =>
+        generateCinematicInsight(parsed.data.imageBase64, parsed.data.mimeType),
+      );
       deductRequestCredits(req);
       appendCreditHeaders(req, res);
       res.json(buildStandardResponse("image", insight as unknown as Record<string, unknown>));

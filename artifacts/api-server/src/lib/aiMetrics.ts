@@ -1,4 +1,5 @@
 import { isGeminiConfigured } from "./geminiEnv";
+import { recordToolCall }    from "./toolHealthMonitor";
 
 /**
  * AI Routing Metrics — IB AI Assistant
@@ -76,6 +77,9 @@ export function recordCompletion(
     fallbackCount++;
     lastFallbackAt = Date.now();
   }
+
+  // Forward to unified tool health monitor (Groq + Gemini LLM paths)
+  recordToolCall(provider, latencyMs, success, { fallback: fallbackTriggered });
 }
 
 // ── Read paths ────────────────────────────────────────────────────────────────

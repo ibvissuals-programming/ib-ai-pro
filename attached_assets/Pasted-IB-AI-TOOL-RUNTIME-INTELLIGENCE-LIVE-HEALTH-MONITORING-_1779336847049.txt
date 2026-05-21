@@ -1,0 +1,141 @@
+IB AI — TOOL RUNTIME INTELLIGENCE + LIVE HEALTH MONITORING LAYER (SINGLE PASS)
+
+MISSION:
+Build a real-time intelligence layer that monitors, scores, and reports the health of all AI tools (Groq, Gemini, TTS, Image, Video) without changing UI behavior or existing tool logic.
+
+DO NOT:
+- Modify UI or frontend components
+- Refactor provider logic
+- Change existing tool outputs
+- Redesign architecture
+
+ONLY ADD:
+- Observability
+- Health tracking
+- Diagnostics
+- Runtime visibility
+
+---------------------------------------------------
+PHASE 1 — TOOL HEALTH PROFILING LAYER
+---------------------------------------------------
+
+Create a unified runtime profiler that tracks:
+
+For every tool call:
+- provider name (Groq / Gemini / TTS / Image / Video)
+- latency (ms)
+- success/failure
+- error code (if any)
+- retry count
+- fallback usage
+
+Store in an in-memory lightweight registry:
+
+ToolHealthState:
+- successRate
+- avgLatency
+- failureRate
+- lastError
+- lastSuccessTimestamp
+
+---------------------------------------------------
+PHASE 2 — LIVE HEALTH MATRIX ENGINE
+---------------------------------------------------
+
+Create a single internal service:
+
+/aiHealthMonitor
+
+It must expose:
+
+GET /api/ai/health
+
+Response:
+{
+  groq: { status, latency, successRate, lastError },
+  gemini: { status, latency, successRate, lastError },
+  tts: { status, latency, successRate, lastError },
+  image: { status, latency, successRate, lastError },
+  video: { status, latency, successRate, lastError }
+}
+
+Status rules:
+- healthy (successRate > 90%)
+- degraded (50–90%)
+- failing (< 50%)
+- offline (no response / repeated failures)
+
+---------------------------------------------------
+PHASE 3 — INSTRUMENTATION WRAPPER
+---------------------------------------------------
+
+Wrap ALL tool executions with a single function:
+
+trackToolExecution(toolName, provider, fn)
+
+It must:
+- start timer before execution
+- capture success/failure
+- record latency
+- update ToolHealthState
+- forward result unchanged
+
+NO modification to tool output structure.
+
+---------------------------------------------------
+PHASE 4 — FALLBACK VISIBILITY TRACKING
+---------------------------------------------------
+
+Track and log:
+- when Groq fails and Gemini is used
+- when Gemini fails and tool returns error
+- when retry logic triggers
+- when timeout occurs
+
+Expose metrics:
+- fallbackCount per provider
+- retryCount per tool
+- total failed calls per provider
+
+---------------------------------------------------
+PHASE 5 — SYSTEM STABILITY SCORE ENGINE
+---------------------------------------------------
+
+Compute a live system score:
+
+SystemScore = weighted average of:
+- success rate (40%)
+- latency stability (30%)
+- fallback rate (20%)
+- error frequency (10%)
+
+Output:
+- global score (0–100)
+- per-provider score
+
+---------------------------------------------------
+PHASE 6 — DEBUG MODE OUTPUT (NO UI CHANGE)
+---------------------------------------------------
+
+Add optional header:
+
+x-ai-debug: true
+
+If enabled, return extra metadata:
+- execution time breakdown
+- provider routing path
+- fallback decisions
+- retry logs
+
+---------------------------------------------------
+FINAL OUTPUT
+
+Return:
+- full implementation summary
+- health endpoint response example
+- instrumentation map (what was wrapped)
+- system score explanation
+- confirmation that no UI or API contract changes were broken
+
+FINAL RULE:
+This system must NOT change functionality — only expose intelligence about it.

@@ -21,6 +21,7 @@ import { expandPrompt, getCategoryMeta, PROMPT_CATEGORIES } from "../lib/promptE
 import { policyEngine }    from "../middleware/policyEngine";
 import { sanitizeProviderError } from "../lib/providerGuard";
 import { buildStandardResponse, buildErrorResponse } from "../lib/aiOrchestrator";
+import { trackToolExecution }    from "../lib/toolHealthMonitor";
 import { logger }          from "../lib/logger";
 
 const router = Router();
@@ -52,7 +53,7 @@ router.post(
     );
 
     try {
-      const result = await expandPrompt(prompt, category);
+      const result = await trackToolExecution("prompt", () => expandPrompt(prompt, category));
 
       res.json(buildStandardResponse("prompt", {
         original:       result.original,

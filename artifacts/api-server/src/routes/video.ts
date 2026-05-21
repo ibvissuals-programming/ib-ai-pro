@@ -27,6 +27,7 @@ import { addAuditEntry }       from "../lib/auditLog";
 import { recordUsage }         from "../lib/usageAnalytics";
 import { sanitizeProviderError } from "../lib/providerGuard";
 import { buildStandardResponse, buildErrorResponse } from "../lib/aiOrchestrator";
+import { trackToolExecution }    from "../lib/toolHealthMonitor";
 import { logger }              from "../lib/logger";
 
 const router = Router();
@@ -85,7 +86,9 @@ router.post(
       const t0 = Date.now();
 
       const result = await imageQueue.run(() =>
-        generateVideo({ imageBase64: image, prompt, mode, jobId: job.jobId, userId }),
+        trackToolExecution("video", () =>
+          generateVideo({ imageBase64: image, prompt, mode, jobId: job.jobId, userId }),
+        ),
       );
 
       if (result.status === "completed") {
