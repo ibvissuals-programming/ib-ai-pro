@@ -414,14 +414,12 @@ router.post(
       const insight = await generateCinematicInsight(parsed.data.imageBase64, parsed.data.mimeType);
       deductRequestCredits(req);
       appendCreditHeaders(req, res);
-      res.json(insight);
+      res.json(buildStandardResponse("image", insight as unknown as Record<string, unknown>));
     } catch (err: unknown) {
       logger.error({ err }, "[cinematicPrompt] analysis failed");
-      const message = err instanceof Error ? err.message : "Unknown error";
-      const isTimeout = message.includes("timed out");
-      res.status(isTimeout ? 504 : 500).json({
-        error: isTimeout ? "Cinematic analysis timed out — please try again" : "Cinematic analysis failed",
-      });
+      const errResponse = buildErrorResponse("image", err, "gemini-cinematic");
+      const status = errResponse.code === "timeout" ? 504 : 503;
+      res.status(status).json(errResponse);
     }
   },
 );

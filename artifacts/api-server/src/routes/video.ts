@@ -92,12 +92,7 @@ router.post(
         completeJob(job, "video-provider" as any);
       } else {
         // provider_not_configured — not a failure, just a configuration gap
-        job.status = "success"; // job ran successfully, provider just not wired
-        job.statusHistory.push({
-          status:  "success",
-          message: "Job completed — video provider not configured",
-          ts:      Date.now(),
-        });
+        completeJob(job, "video-stub" as any);
       }
 
       if (userId) {
@@ -136,8 +131,7 @@ router.post(
       }
 
       logger.error({ err, jobId: job.jobId }, "[video] generation failed");
-      const message = sanitizeProviderError(err, "Video generation");
-      res.status(503).json({ success: false, mode: "video", error: message });
+      res.status(503).json(buildErrorResponse("video", err, "video-provider"));
     }
   },
 );
@@ -162,13 +156,13 @@ router.get(
       return;
     }
 
-    res.json({
+    res.json(buildStandardResponse("video", {
       jobId:     job.jobId,
       status:    job.status,
       type:      "video",
       createdAt: job.timestamp,
       job:       jobSummary(job),
-    });
+    }, job.jobId));
   },
 );
 

@@ -1,0 +1,109 @@
+IB AI — UNIFIED TOOL CONTRACT ENFORCEMENT LAYER (CRITICAL STABILITY PASS)
+
+MISSION:
+Enforce a single deterministic execution contract across ALL AI tools (TTS, image, image-edit, video, prompt expansion, image analysis) to eliminate inconsistent failure modes, partial outputs, and provider leakage.
+
+PRIMARY RULE:
+Do NOT add new features. Do NOT modify UI. Do NOT expand product functionality. Focus ONLY on execution consistency and tool contract enforcement.
+
+---------------------------------------------------
+PHASE 1 — TOOL EXECUTION FLOW AUDIT (LIGHTWEIGHT)
+
+Inspect each tool ONLY for:
+- entry point consistency (router usage)
+- error handling consistency
+- response shape compliance
+- timeout + retry behavior
+- partial execution risks
+
+Tools in scope:
+- ttsService
+- imageGenService
+- promptExpander
+- image analysis pipeline
+- videoService (stub)
+- aiOrchestrator
+
+---------------------------------------------------
+PHASE 2 — ENFORCE SINGLE TOOL CONTRACT
+
+All tools MUST return EXACT schema:
+
+{
+  success: boolean,
+  mode: string,
+  data: any | null,
+  error: string | null,
+  code: "PROVIDER_UNAVAILABLE" | "FEATURE_DISABLED" | "RUNTIME_ERROR" | null,
+  meta?: {
+    latencyMs?: number,
+    provider?: string,
+    cached?: boolean
+  }
+}
+
+Rules:
+- NO raw provider responses
+- NO HTTP-specific errors leaking into payload
+- NO inconsistent status handling between tools
+- ALL tools must pass through aiOrchestrator wrapper
+
+---------------------------------------------------
+PHASE 3 — CENTRALIZE FAILURE HANDLING
+
+Ensure ALL tools use shared utilities:
+- buildSuccessResponse()
+- buildErrorResponse()
+- sanitizeProviderError()
+- classifyTransientError()
+
+If any tool bypasses these → fix by routing through orchestrator ONLY.
+
+---------------------------------------------------
+PHASE 4 — ELIMINATE PARTIAL OUTPUT RISK
+
+Fix ONLY these failure types:
+
+TTS:
+- prevent half-generated audio output returns
+
+Image editing:
+- enforce atomic pipeline execution (fail entire job on stage failure)
+
+Image-to-video:
+- ensure full completion gating before response release
+
+Prompt expansion:
+- ensure deterministic wrapper even on timeout
+
+Image analysis:
+- sanitize ALL internal errors before response return
+
+---------------------------------------------------
+PHASE 5 — VIDEO SERVICE SAFETY CHECK
+
+videoService is currently a stub:
+- confirm it never returns partial or misleading success
+- ensure FEATURE_DISABLED or safe fallback response only
+
+---------------------------------------------------
+PHASE 6 — FINAL VALIDATION
+
+Simulate one request per tool:
+- verify schema compliance
+- verify no raw provider leaks
+- verify no 500-style uncaught errors
+- verify consistent error formatting
+
+---------------------------------------------------
+PHASE 7 — FINAL OUTPUT
+
+Return:
+- contract compliance status per tool
+- list of violations fixed
+- tools still non-production-ready
+- system stability score (0–10)
+- production readiness verdict
+
+FINAL RULE:
+This pass must make the AI tool layer behave like a single deterministic execution system, not independent services.

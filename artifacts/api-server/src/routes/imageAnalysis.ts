@@ -1,6 +1,19 @@
-// Image analysis route — uses Gemini vision to extract structured data from uploaded images.
-// This route is NOT subject to the /api/chat immutability rule because it is a
-// separate vision-analysis feature, not a streaming chat replacement.
+/**
+ * imageAnalysis.ts — IB AI Assistant
+ *
+ * POST /api/analyze-image — Gemini vision analysis of uploaded images.
+ *
+ * Auth: policyEngine (CREDIT_COSTS.image_analysis per request, CEO = unlimited)
+ * Rate: 10 requests per minute per IP
+ * Timeout: 55s via withProviderTimeout (providerGuard)
+ * Model: gemini-2.5-flash
+ *
+ * Contract compliance:
+ *   - Success: buildStandardResponse("image", analysisData)
+ *   - Error:   buildErrorResponse("image", err, "gemini-vision") — no raw provider leakage
+ *   - Timeout: uses withProviderTimeout — consistent with all other AI tools
+ *   - JSON parse failure: buildErrorResponse — no ad-hoc shapes
+ */
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { ai } from "@workspace/integrations-gemini-ai";
@@ -8,6 +21,8 @@ import { assertGeminiProvider } from "../lib/aiGuard";
 import { logger } from "../lib/logger";
 import { policyEngine, deductRequestCredits, appendCreditHeaders } from "../middleware/policyEngine";
 import { CREDIT_COSTS } from "../lib/credits";
+import { buildStandardResponse, buildErrorResponse } from "../lib/aiOrchestrator";
+import { withProviderTimeout } from "../lib/providerGuard";
 
 const router = Router();
 
@@ -70,7 +85,7 @@ router.post(
 
     if (!parsed.success) {
       res.status(400).json({
-        error: "Invalid request",
+        ...buildErrorResponse("image", "Invalid request"),
         details: parsed.error.flatten(),
       });
       return;
@@ -81,36 +96,26 @@ router.post(
     try {
       assertGeminiProvider(VISION_MODEL);
 
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(
-          () =>
-            reject(
-              new Error(
-                `Image analysis timed out after ${ANALYSIS_TIMEOUT_MS / 1000}s`,
-              ),
-            ),
-          ANALYSIS_TIMEOUT_MS,
-        ),
-      );
-
-      const analysisPromise = ai.models.generateContent({
-        model: VISION_MODEL,
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { inlineData: { mimeType, data: imageBase64 } },
-              { text: ANALYSIS_PROMPT },
-            ],
+      const result = await withProviderTimeout(
+        () => ai.models.generateContent({
+          model: VISION_MODEL,
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { inlineData: { mimeType, data: imageBase64 } },
+                { text: ANALYSIS_PROMPT },
+              ],
+            },
+          ],
+          config: {
+            temperature: 0.3,
+            maxOutputTokens: 4096,
           },
-        ],
-        config: {
-          temperature: 0.3,
-          maxOutputTokens: 4096,
-        },
-      });
-
-      const result = await Promise.race([analysisPromise, timeoutPromise]);
+        }),
+        ANALYSIS_TIMEOUT_MS,
+        "gemini-vision",
+      ) as Awaited<ReturnType<typeof ai.models.generateContent>>;
 
       const rawText = (result.text ?? "").trim();
 
@@ -119,27 +124,24 @@ router.post(
         .replace(/\s*```$/, "")
         .trim();
 
-      let analysisData: unknown;
+      let analysisData: Record<string, unknown>;
       try {
-        analysisData = JSON.parse(jsonText);
+        analysisData = JSON.parse(jsonText) as Record<string, unknown>;
       } catch {
-        logger.error({ rawText }, "Gemini image analysis returned non-JSON");
-        res.status(502).json({ error: "Analysis parsing failed" });
+        logger.error({ rawText }, "[imageAnalysis] Gemini returned non-JSON");
+        res.status(502).json(buildErrorResponse("image", new Error("Analysis response could not be parsed"), "gemini-vision"));
         return;
       }
 
       deductRequestCredits(req);
       appendCreditHeaders(req, res);
 
-      res.json(analysisData);
+      res.json(buildStandardResponse("image", analysisData));
     } catch (err: unknown) {
-      logger.error({ err }, "Image analysis error");
-      const message = err instanceof Error ? err.message : "Unknown error";
-      const isTimeout = message.includes("timed out");
-      res.status(isTimeout ? 504 : 500).json({
-        error: isTimeout ? "Image analysis timed out" : "Image analysis failed",
-        message,
-      });
+      logger.error({ err }, "[imageAnalysis] analysis error");
+      const errResponse = buildErrorResponse("image", err, "gemini-vision");
+      const status = errResponse.code === "timeout" ? 504 : 503;
+      res.status(status).json(errResponse);
     }
   },
 );

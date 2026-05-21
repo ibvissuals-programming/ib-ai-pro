@@ -65,8 +65,7 @@ router.post(
       }));
     } catch (err: unknown) {
       logger.error({ err }, "[promptExpand] expansion failed");
-      const message = sanitizeProviderError(err, "Prompt expansion");
-      res.status(503).json({ success: false, mode: "prompt", error: message });
+      res.status(503).json(buildErrorResponse("prompt", err, "gemini-prompt-expander"));
     }
   },
 );

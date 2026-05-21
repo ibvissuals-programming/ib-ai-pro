@@ -120,21 +120,20 @@ router.post(
       logger.error({ err, jobId: job.jobId }, "[tts] generation failed");
 
       // Detect infrastructure-level model unavailability — return 501 instead of 503
-      // so callers can distinguish "provider down" from "feature not supported here".
+      // so callers can distinguish "provider down" from "feature not configured here".
       const errStr = String(err instanceof Error ? err.message : err);
       const isModelUnsupported = errStr.includes("UNSUPPORTED_MODEL") || errStr.includes("not supported");
       if (isModelUnsupported) {
         res.status(501).json({
-          success: false,
-          mode: "tts",
-          error: "Text-to-speech is not available in this environment.",
-          code: "TTS_MODEL_UNSUPPORTED",
+          success:  false,
+          mode:     "tts",
+          error:    "Text-to-speech is not available in this environment.",
+          code:     "FEATURE_DISABLED",
         });
         return;
       }
 
-      const message = sanitizeProviderError(err, "Text-to-speech");
-      res.status(503).json({ success: false, mode: "tts", error: message });
+      res.status(503).json(buildErrorResponse("tts", err, "gemini-tts"));
     }
   },
 );
