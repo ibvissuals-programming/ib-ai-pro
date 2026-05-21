@@ -28,6 +28,7 @@ import { buildStandardResponse, buildErrorResponse } from "../lib/aiOrchestrator
 import { trackToolExecution }    from "../lib/toolHealthMonitor";
 import { logger }              from "../lib/logger";
 import { saveTtsHistory, getTtsHistory } from "../services/generationHistoryStore";
+import { trackVoiceUsage, trackFunnel } from "../lib/creatorAnalytics";
 
 const router = Router();
 
@@ -90,6 +91,8 @@ router.post(
 
       const latencyMs = Date.now() - t0;
       completeJob(job, "gemini-tts" as any);
+      trackVoiceUsage(voiceStyle);
+      trackFunnel("voice");
 
       if (userId) {
         recordUsage({ userId, type: "generate", latencyMs });

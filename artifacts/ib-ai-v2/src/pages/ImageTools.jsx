@@ -396,7 +396,7 @@ function AiDirectorPanel({ sourceImage, onApplyPrompt }) {
                   className="space-y-2.5"
                 >
                   {/* Scene + Mood row */}
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div className="rounded-lg bg-background/60 border border-border/40 px-3 py-2 space-y-1">
                       <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                         <Eye size={9} />
@@ -427,7 +427,7 @@ function AiDirectorPanel({ sourceImage, onApplyPrompt }) {
                   </div>
 
                   {/* Color grade + Exposure row */}
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div className="rounded-lg bg-background/60 border border-border/40 px-3 py-2 space-y-1">
                       <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                         <Palette size={9} />
@@ -848,7 +848,7 @@ function EditTab() {
             })()}
 
             {/* Side-by-side comparison */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Before</p>
                 <div className="rounded-xl overflow-hidden border border-border/50 bg-black/10 relative">

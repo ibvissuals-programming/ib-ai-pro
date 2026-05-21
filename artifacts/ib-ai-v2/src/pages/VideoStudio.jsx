@@ -18,7 +18,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Video, Upload, X, Sparkles,
   AlertCircle, Sun, Moon, Clock, Zap, Download,
-  RefreshCw, CheckCircle, Film, History, Play,
+  RefreshCw, CheckCircle, Film, History, Play, Layers,
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import {
@@ -27,6 +27,7 @@ import {
   getVideoUrl,
 } from '../services/videoApi';
 import { fetchVideoHistory } from '../services/historyApi';
+import { WorkflowLauncher } from '../components/WorkflowLauncher';
 
 // ── Video mode definitions ─────────────────────────────────────────────────────
 const VIDEO_MODES = [
@@ -514,13 +515,23 @@ export default function VideoStudio() {
             </span>
           </div>
         </div>
-        <button
-          onClick={toggleTheme}
-          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-          aria-label="Toggle theme"
-        >
-          {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-        </button>
+        <div className="flex items-center gap-2">
+          <WorkflowLauncher
+            trigger={
+              <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border/60 text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-secondary/40 transition-all">
+                <Layers size={12} />
+                <span className="hidden sm:block">Workflows</span>
+              </button>
+            }
+          />
+          <button
+            onClick={toggleTheme}
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            aria-label="Toggle theme"
+          >
+            {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
+        </div>
       </header>
 
       {/* Main content */}

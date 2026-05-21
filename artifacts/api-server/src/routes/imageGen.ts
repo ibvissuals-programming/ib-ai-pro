@@ -43,6 +43,7 @@ import {
   recordEditRetry,
   getEditMetrics,
 } from "../lib/editMetrics";
+import { trackEditMode, trackFunnel } from "../lib/creatorAnalytics";
 
 const router = Router();
 
@@ -350,6 +351,8 @@ router.post(
       appendCreditHeaders(req, res);
       incImageEdited();
       recordEditSuccess(Date.now() - _t0);
+      trackEditMode(result.mode ?? "auto");
+      trackFunnel("upload");
       if ((result.job as Record<string, unknown>)?.retryCount) {
         recordEditRetry("stage_failure");
       }

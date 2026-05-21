@@ -13,11 +13,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Mic, Play, Pause, Download, Loader2,
   AlertCircle, Volume2, Square, Sun, Moon, RefreshCw,
-  Sparkles, History, Clock,
+  Sparkles, History, Clock, Layers,
 } from 'lucide-react';
 import { generateSpeech, getAudioUrl } from '../services/ttsApi';
 import { fetchTtsHistory } from '../services/historyApi';
 import { useTheme } from '../contexts/ThemeContext';
+import { WorkflowLauncher } from '../components/WorkflowLauncher';
 
 // ── Voice definitions ─────────────────────────────────────────────────────────
 const VOICES = [
@@ -364,6 +365,14 @@ export default function VoiceStudio() {
           <span className="text-[11px] px-2.5 py-1 rounded-full border border-border/50 text-muted-foreground hidden sm:block">
             Powered by Gemini
           </span>
+          <WorkflowLauncher
+            trigger={
+              <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border/60 text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-secondary/40 transition-all">
+                <Layers size={12} />
+                <span className="hidden sm:block">Workflows</span>
+              </button>
+            }
+          />
           <button
             onClick={toggleTheme}
             className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"

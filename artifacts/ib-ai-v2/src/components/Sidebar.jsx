@@ -310,7 +310,7 @@ export function MobileSidebar({ open, onClose, children }) {
             animate={{ x: 0 }}
             exit={{ x: -260 }}
             transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-            className="fixed inset-y-0 left-0 z-50 md:hidden"
+            className="fixed inset-y-0 left-0 z-50 md:hidden w-[260px]"
           >
             {children}
           </motion.div>

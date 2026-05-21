@@ -26,6 +26,7 @@ import promptExpandRouter from "./promptExpand";
 import aiHealthRouter     from "./aiHealth";
 import presetsRouter      from "./presets";
 import multimodalStatsRouter from "./multimodalStats";
+import creatorSessionsRouter from "./creatorSessions";
 import { trackActivity }  from "../middleware/trackActivity";
 
 const router: IRouter = Router();
@@ -52,5 +53,6 @@ router.use(promptExpandRouter);
 router.use(aiHealthRouter);
 router.use(presetsRouter);
 router.use(multimodalStatsRouter);
+router.use(creatorSessionsRouter);
 
 export default router;

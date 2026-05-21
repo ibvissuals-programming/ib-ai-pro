@@ -34,6 +34,7 @@ import { ControlOverviewPanel } from '../components/ControlOverviewPanel';
 import { MultimodalStatsPanel } from '../components/MultimodalStatsPanel';
 import { ProviderStabilityPanel } from '../components/ProviderStabilityPanel';
 import { EditQualityPanel } from '../components/EditQualityPanel';
+import { CreatorAnalyticsPanel } from '../components/CreatorAnalyticsPanel';
 import { IbLogo } from '../components/IbLogo';
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
@@ -859,6 +860,7 @@ export default function CeoDashboard() {
                     lastOk={aiToolHealth.lastOk}
                   />
                   <EditQualityPanel />
+                  <CreatorAnalyticsPanel />
                 </div>
               </div>
 

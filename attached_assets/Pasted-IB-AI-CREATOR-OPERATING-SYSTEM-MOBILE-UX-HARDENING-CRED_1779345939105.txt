@@ -1,0 +1,316 @@
+IB AI — CREATOR OPERATING SYSTEM + MOBILE UX HARDENING (CREDIT-EFFICIENT PRODUCTION PASS)
+
+MISSION:
+Transform IB AI from a strong multimodal tool into a creator-focused AI operating system with fast mobile UX, reusable workflows, creator automation foundations, and production-grade session continuity.
+
+CRITICAL RULES:
+- DO NOT rebuild stable systems
+- DO NOT rewrite multimodal infrastructure
+- DO NOT touch import/bootstrap architecture
+- DO NOT rescan unrelated backend services
+- ONLY extend creator workflow capability + mobile usability
+
+PRIMARY GOAL:
+Make IB AI feel like a premium creator productivity platform rather than isolated AI tools.
+
+---------------------------------------------------
+PHASE 1 — MOBILE UX AUDIT
+---------------------------------------------------
+
+Audit ONLY:
+- Image Studio
+- Voice Studio
+- Video Studio
+- Chat interface
+- Sidebar navigation
+
+Identify:
+- mobile overflow issues
+- touch-target problems
+- layout compression
+- input crowding
+- unstable spacing
+- scroll traps
+- modal usability issues
+- mobile animation instability
+
+Output:
+- exact files
+- exact responsive problems
+- exact fixes
+
+DO NOT audit unrelated systems.
+
+---------------------------------------------------
+PHASE 2 — CREATOR SESSION SYSTEM
+---------------------------------------------------
+
+Create reusable creator sessions.
+
+FEATURE:
+Users can save entire creative workflows.
+
+Examples:
+- “Luxury Portrait Pipeline”
+- “TikTok Voiceover Setup”
+- “Cinematic Product Ads”
+- “Afro Futuristic Reel”
+
+Session stores:
+- prompts
+- selected modes
+- intensity
+- uploaded references
+- voice settings
+- video settings
+- history references
+
+Implement:
+creatorSessionStore.ts
+
+Add:
+- save session
+- rename session
+- duplicate session
+- load session
+- delete session
+
+RULES:
+- lightweight JSON persistence
+- per-user isolation
+- max session limit
+- no DB migration required
+
+---------------------------------------------------
+PHASE 3 — QUICK WORKFLOW LAUNCHER
+---------------------------------------------------
+
+Add:
+WorkflowLauncher component.
+
+Features:
+- recent workflows
+- pinned workflows
+- one-click launch
+- categorized presets
+
+Categories:
+- Creator
+- Business
+- Luxury
+- Social
+- Voiceover
+- Product Ads
+
+RULES:
+- no layout shift
+- mobile-first spacing
+- fast open/close
+- AnimatePresence compliant
+
+---------------------------------------------------
+PHASE 4 — MOBILE PERFORMANCE HARDENING
+---------------------------------------------------
+
+Optimize frontend runtime.
+
+Implement:
+- lazy-load heavy panels
+- image preview virtualization
+- deferred compare slider mounting
+- reduced mobile animation intensity
+- responsive polling intervals
+- memoization of large history lists
+
+RULES:
+- preserve existing UI stability law
+- no visual flicker
+- no layout snap
+- no aggressive rerenders
+
+---------------------------------------------------
+PHASE 5 — SMART CREATOR MEMORY
+---------------------------------------------------
+
+Extend existing memory system.
+
+Track:
+- frequently used edit modes
+- preferred voices
+- preferred styles
+- creator workflow frequency
+- favorite presets
+
+Use memory silently to:
+- reorder presets
+- suggest workflows
+- preselect likely modes
+
+RULE:
+NO creepy behavior.
+NO explicit “we remembered…” messaging.
+
+---------------------------------------------------
+PHASE 6 — AI WORKFLOW ASSISTANT
+---------------------------------------------------
+
+Create:
+WorkflowAssistant layer.
+
+Behavior:
+When users start a project:
+- detect likely creator goal
+- suggest workflow preset
+- suggest optimal mode
+- suggest video/voice pairing
+- suggest cinematic enhancement chain
+
+Examples:
+Portrait upload
+→ “Suggested: Luxury + Cinematic Voiceover”
+
+Product image
+→ “Suggested: Social Ad Workflow”
+
+RULES:
+- lightweight
+- non-intrusive
+- dismissible
+- zero provider calls required
+
+---------------------------------------------------
+PHASE 7 — STORAGE + HISTORY HARDENING
+---------------------------------------------------
+
+Improve persistent history handling.
+
+Add:
+- history pagination
+- history search
+- storage cleanup protection
+- corruption recovery
+- stale file pruning
+- safe concurrent writes
+
+Prevent:
+- giant JSON history growth
+- duplicate history entries
+- broken history references
+
+---------------------------------------------------
+PHASE 8 — CEO CREATOR ANALYTICS
+---------------------------------------------------
+
+Expand observability.
+
+Add:
+CreatorAnalyticsPanel.jsx
+
+Track:
+- top workflow types
+- creator retention signals
+- most-used edit modes
+- most-used presets
+- voice usage trends
+- workflow completion rates
+- mobile vs desktop usage
+
+Add:
+workflow funnel metrics:
+upload
+→ edit
+→ voice
+→ video
+→ export
+
+---------------------------------------------------
+PHASE 9 — EXPORT + SHARE SYSTEM
+---------------------------------------------------
+
+Create lightweight export system.
+
+Add:
+- export workflow summary
+- export generated assets bundle
+- copy workflow config
+- share workflow preset
+
+Formats:
+- JSON
+- sharable preset string
+
+RULES:
+- no cloud dependency
+- local-first
+- lightweight only
+
+---------------------------------------------------
+PHASE 10 — HEALTH + PERFORMANCE INTEGRATION
+---------------------------------------------------
+
+Expand:
+GET /api/ai/system-health
+
+Add:
+{
+  "creatorSystem": {
+    "status": "healthy",
+    "sessionStore": true,
+    "workflowLauncher": true,
+    "memoryLayer": true,
+    "mobileOptimized": true
+  }
+}
+
+Track:
+- mobile render latency
+- workflow load latency
+- history corruption recovery count
+- session restore success rate
+
+---------------------------------------------------
+PHASE 11 — VALIDATION
+---------------------------------------------------
+
+Run controlled validation:
+
+1. Mobile portrait editing flow
+2. Voice workflow save/load
+3. Video workflow persistence
+4. Large history stress test
+5. Mobile sidebar navigation
+6. Workflow export/import
+7. Creator memory recommendations
+
+Verify:
+✔ mobile stable
+✔ no layout shift
+✔ workflow persistence works
+✔ memory suggestions work
+✔ no history corruption
+✔ health endpoint updated
+✔ CEO analytics functional
+✔ low rerender count
+
+---------------------------------------------------
+FINAL RULES
+---------------------------------------------------
+
+- Preserve existing architecture
+- Preserve Glass Monolith branding
+- Preserve multimodal systems
+- Preserve edit quality systems
+- Preserve import bootstrap systems
+- Reuse existing telemetry infrastructure
+- Avoid broad scans
+- Minimize credit usage aggressively
+- Focus ONLY on creator workflow UX + mobile optimization
+
+OUTPUT:
+- files modified
+- mobile UX improvements
+- creator workflow systems added
+- memory enhancements
+- performance optimizations
+- validation results
+- final creator-system readiness score
