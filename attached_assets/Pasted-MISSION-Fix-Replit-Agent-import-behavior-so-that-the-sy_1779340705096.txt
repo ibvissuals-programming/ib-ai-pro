@@ -1,0 +1,162 @@
+MISSION:
+Fix Replit Agent import behavior so that the system boots deterministically WITHOUT:
+- repeated secret prompts
+- duplicate workflow creation
+- unnecessary codebase re-exploration
+- repeated schema migrations
+- redundant logs or verification loops
+
+GOAL:
+A Replit import should complete in ONE PASS and result in a fully running system.
+
+DO NOT CHANGE:
+- business logic
+- AI routing (Groq / Gemini)
+- frontend UI
+- API contracts
+
+ONLY FIX:
+- import/bootstrap flow
+- environment handling
+- workflow initialization logic
+- database migration safety
+- secret handling logic
+
+---------------------------------------------------
+PHASE 1 — IMPORT BEHAVIOR LOCK (CRITICAL)
+---------------------------------------------------
+
+Modify agent bootstrap behavior:
+
+RULES:
+1. DO NOT re-explore full codebase if package.json + workflows already exist
+2. DO NOT re-read unchanged core files multiple times
+3. DO NOT reinstall dependencies if node_modules already valid
+4. DO NOT recreate workflows if they already exist and are running
+
+Add a deterministic guard:
+
+IF:
+- workflows exist AND are running
+- database exists
+- package-lock exists
+
+THEN:
+→ skip setup phase
+→ move directly to health check phase
+
+---------------------------------------------------
+PHASE 2 — SECRETS HANDLING FIX (CRITICAL)
+---------------------------------------------------
+
+Fix repeated secret prompting issue:
+
+RULES:
+1. NEVER request secrets more than once per import session
+2. Store missing secrets state in-memory:
+   missingSecretsCache[]
+
+3. If secrets are missing:
+   → request ALL missing secrets in ONE single prompt batch
+   → do NOT ask again later in same session
+
+Required secrets:
+- GEMINI_API_KEY
+- GROQ_API_KEY (optional fallback)
+- JWT_SECRET
+- CEO_PASSWORD
+- CEO_RECOVERY_KEY
+
+If user provides any secret:
+→ mark as resolved
+→ DO NOT re-request it
+
+---------------------------------------------------
+PHASE 3 — DATABASE MIGRATION SAFETY
+---------------------------------------------------
+
+RULE:
+- Only run schema migration IF tables DO NOT exist
+
+Add check:
+IF database tables exist:
+→ SKIP drizzle push entirely
+
+IF schema mismatch:
+→ run minimal patch migration ONLY
+
+NEVER:
+- re-run full schema push on every import
+
+---------------------------------------------------
+PHASE 4 — WORKFLOW DEDUPLICATION
+---------------------------------------------------
+
+Before starting workflows:
+
+Check existing running workflows:
+- IB AI Backend
+- IB AI Frontend
+- artifact-managed workflows
+
+RULE:
+IF workflow already running:
+→ DO NOT start duplicate instance
+→ DO NOT restart unless crashed
+
+---------------------------------------------------
+PHASE 5 — GEMINI / GROC AI INTEGRATION SAFETY
+---------------------------------------------------
+
+RULES:
+- If GEMINI_API_KEY exists:
+  → do NOT reinitialize integration blueprint
+  → do NOT reinstall Gemini integration
+
+- If Groq exists:
+  → treat as primary chat engine
+  → do NOT overwrite provider routing
+
+---------------------------------------------------
+PHASE 6 — STARTUP FLOW (NEW ORDER)
+
+Replace current agent flow with:
+
+1. Quick system scan (NOT full codebase scan)
+2. Validate workflows
+3. Validate database
+4. Validate env secrets
+5. Start server if not running
+6. Run single health check endpoint
+7. STOP
+
+NO:
+- screenshots loops
+- repeated logs parsing
+- repeated “checking again”
+- repeated migrations
+- repeated secret prompts
+
+---------------------------------------------------
+PHASE 7 — OUTPUT FORMAT (STRICT)
+
+At end of import, output ONLY:
+
+✔ Workflows status
+✔ Database status
+✔ API status
+✔ Missing secrets (if any)
+✔ System ready / not ready
+
+NO extra commentary loops.
+
+---------------------------------------------------
+FINAL GOAL:
+
+A Replit import should behave like:
+
+"boot → verify → run"
+
+NOT:
+
+"boot → explore → re-explore → reconfigure → re-request secrets → restart → repeat"
