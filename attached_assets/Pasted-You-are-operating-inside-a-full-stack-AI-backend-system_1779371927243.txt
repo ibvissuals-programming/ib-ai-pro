@@ -1,0 +1,125 @@
+You are operating inside a full-stack AI backend system. Your task is to fully restore system stability after migration, fix CEO authentication, ensure password login works correctly, repair boot dependency issues, and verify all AI subsystems (image, video, voice/TTS) are fully operational.
+
+DO NOT introduce new architecture. DO NOT duplicate existing systems. ONLY repair, align, and validate.
+
+--------------------------------------------
+1 — AUTH RESTORE (CRITICAL PRIORITY)
+--------------------------------------------
+
+Fix CEO authentication so it works exactly as previously functional state:
+
+- Ensure CEO user exists in PostgreSQL
+- Ensure username is correctly mapped to stored hashed password
+- Ensure login uses correct password verification against stored hash ONLY
+- DO NOT rely on recovery key for normal login
+- Recovery key is ONLY for emergency bootstrap, not standard auth flow
+
+If CEO recovery key is missing from environment:
+- DO NOT block system boot
+- DO NOT block login system
+- Log warning only: "CEO recovery key missing - recovery mode disabled"
+
+Fix password login flow:
+- Verify bcrypt/scrypt comparison against DB hash
+- Ensure no fallback password logic exists
+- Ensure no duplicate CEO repair logic runs on every boot
+
+Remove any behavior that creates or reinitializes CEO account if it already exists.
+
+--------------------------------------------
+2 — BOOT ORDER FIX (CRITICAL)
+--------------------------------------------
+
+Reorder system initialization so that:
+
+STEP 1: Auth system + DB load
+STEP 2: User store + index sync
+STEP 3: Session system initialization
+STEP 4: AI provider checks (Gemini / safe mode)
+STEP 5: AI routes activation
+
+IMPORTANT RULE:
+AI provider failures must NEVER block auth boot.
+
+--------------------------------------------
+3 — SECRETS & ENV VALIDATION
+--------------------------------------------
+
+At startup:
+
+Check:
+- GEMINI_API_KEY (optional for AI only)
+- SESSION_SECRET (required)
+- JWT_SECRET (required)
+- CEO_USERNAME (required)
+
+Rules:
+- Missing Gemini key → safe mode ON for AI only
+- Missing auth secrets → fail boot
+- Missing CEO recovery key → warning only, no blocking
+
+--------------------------------------------
+4 — SYSTEM HEALTH TEST SUITE (AUTO RUN AFTER BOOT)
+--------------------------------------------
+
+After server starts, run full system verification tests:
+
+A) AUTH TESTS
+- CEO login with correct password MUST succeed
+- Wrong password MUST fail
+- JWT token generation MUST succeed
+- Session creation MUST succeed
+
+B) IMAGE SYSTEM TEST
+- image generation route responds
+- image edit route responds
+- provider check enforced correctly
+
+C) VIDEO SYSTEM TEST
+- video job creation works
+- job state transitions valid
+- provider failure handled safely
+
+D) VOICE / TTS TEST
+- TTS request executes or fails gracefully
+- no unhandled SDK errors
+
+E) JOB PIPELINE TEST
+- created → validated → queued → processing → completed/failed works correctly
+- no skipped states allowed
+- no fake completion without artifact
+
+F) EVENT SYSTEM TEST (if exists)
+- events are emitted for auth, jobs, and failures
+- event bus is writing correctly
+
+RESULT:
+Print a FINAL SYSTEM STATUS REPORT:
+
+- AUTH: PASS/FAIL
+- IMAGE: PASS/FAIL
+- VIDEO: PASS/FAIL
+- VOICE: PASS/FAIL
+- JOB PIPELINE: PASS/FAIL
+- OVERALL STATUS: HEALTHY / DEGRADED
+
+--------------------------------------------
+5 — SAFETY RULES
+--------------------------------------------
+
+- Do NOT recreate CEO if already exists
+- Do NOT overwrite passwords unless explicitly changed
+- Do NOT block auth due to AI provider issues
+- Do NOT silently ignore failures
+- Do NOT fake success responses
+
+--------------------------------------------
+FINAL GOAL
+
+System must return to a stable state where:
+
+- CEO login works with correct password as before migration
+- No recovery key is required for normal login
+- AI systems initialize independently of auth
+- All subsystems (image, video, voice) are verified working
+- Boot process is stable, ordered, and deterministic

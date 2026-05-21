@@ -68,7 +68,7 @@ export function logProviderHealth(): void {
   }
 
   if (!s.ceoRecovery) {
-    logger.debug("[system] CEO_RECOVERY_KEY not set (optional — emergency recovery disabled)");
+    logger.warn("[system] CEO_RECOVERY_KEY missing — recovery mode disabled");
   } else {
     logger.info("[system] CEO recovery key OK");
   }
