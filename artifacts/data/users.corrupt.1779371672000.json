@@ -7,5 +7,14 @@
     "credits": 7,
     "lastReset": 1779362997710,
     "createdAt": 1779362997710
+  },
+  {
+    "id": "9e48f6a0-116e-4755-b052-ab25495156a8",
+    "username": "ibaiceo",
+    "passwordHash": "88370622230edc23e61b9d5a20267a76:f6dd368b75a6cf0600b19386135232aaa9f4f14fbff0450262669aa29f6d654797b7b6083982ed272e4442dd55af63756fdffdadf7f3a0d6bfbd55e8798cbf66",
+    "role": "ceo",
+    "credits": 7,
+    "lastReset": 1779363790575,
+    "createdAt": 1779363790575
   }
 ]
