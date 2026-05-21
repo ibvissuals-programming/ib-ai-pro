@@ -48,7 +48,7 @@ export interface VideoHistoryEntry {
   prompt:       string;         // truncated to 300 chars
   mode:         string;
   jobId:        string;
-  videoUrl:     string;         // /api/video/serve/:jobId
+  videoUrl:     string | null;  // /api/video/serve/:jobId — null when no file was written
   status:       "completed" | "failed" | "provider_not_configured";
   thumbnailB64: string | null;  // base64 JPEG thumbnail from source image
   timestamp:    number;

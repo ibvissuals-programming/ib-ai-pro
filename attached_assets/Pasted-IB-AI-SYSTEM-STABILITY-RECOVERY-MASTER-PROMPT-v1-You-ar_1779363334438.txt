@@ -1,0 +1,137 @@
+IB AI — SYSTEM STABILITY RECOVERY MASTER PROMPT (v1)
+
+You are working on an existing full-stack application: IB AI Studio.
+
+MISSION:
+Fix system reliability issues ONLY. Do not add features or redesign UI.
+
+Focus areas:
+1. Authentication (login, signup, CEO access)
+2. AI provider routing (Gemini / fallback logic)
+3. Video generation (Veo 2 pipeline)
+4. Voice generation (TTS pipeline)
+5. Image editing pipeline
+6. Global error handling consistency
+
+PRIORITY 1 — AUTH SYSTEM (CRITICAL)
+Fix:
+- CEO login inconsistency (previously working, now broken)
+- Incorrect username/password despite valid credentials
+- Session persistence issues after refresh
+- Duplicate account behavior allowing inconsistent login states
+
+Ensure:
+- Login returns stable JWT/session
+- /api/auth/me is reliable and deterministic
+- CEO access is consistent and never randomly fails
+- No duplicate user creation bypass issues
+
+PRIORITY 2 — PROVIDER ROUTING (CRITICAL)
+Fix:
+- Gemini provider detection mismatch across services
+- Video/voice/image incorrectly showing "API required" or "No Access"
+- Inconsistent provider_not_configured states
+
+Ensure:
+- Single unified provider check logic
+- If GEMINI_API_KEY exists → provider active
+- If missing permissions → explicit controlled failure state
+- No fake "ready" UI states
+
+PRIORITY 3 — VIDEO PIPELINE (VEO 2)
+Fix:
+- Generation runs but returns "No Access / Provider Access Pending"
+- UI incorrectly shows system is ready when it is not
+
+Ensure:
+- If Veo permission missing → hard fail with clear message
+- If enabled → return job + polling flow
+- Never show success state without real job creation
+
+PRIORITY 4 — VOICE PIPELINE (TTS)
+Fix:
+- "Request could not be processed" generic failures
+- Silent backend failures
+
+Ensure:
+- Structured JSON error responses
+- Clear error mapping:
+  - invalid input
+  - missing API key
+  - provider failure
+- Always return predictable response format
+
+PRIORITY 5 — IMAGE EDIT PIPELINE
+Fix:
+- "Image editing failed. Please try again."
+- No diagnostic clarity
+
+Ensure:
+- Unified error handling with video system
+- Validate provider responses properly
+- Ensure request payload correctness per mode
+
+PRIORITY 6 — GLOBAL ERROR STANDARDIZATION
+ALL APIs must return:
+
+SUCCESS:
+{
+  "success": true,
+  "data": {}
+}
+
+FAILURE:
+{
+  "success": false,
+  "error": {
+    "code": "",
+    "message": ""
+  }
+}
+
+NO:
+- HTML responses
+- raw provider errors
+- inconsistent formats
+
+PRIORITY 7 — FRONTEND SAFETY STATES
+Fix:
+- "Provider Access Pending" must reflect backend truth only
+- "No Access" must never be misleading
+- Only chat is fully trusted; other tools must degrade safely
+
+PRIORITY 8 — AUTH REGRESSION ROOT CAUSE
+Investigate why:
+- CEO login broke again after previously working
+- newly created accounts behave inconsistently
+
+Likely causes:
+- token/session mismatch
+- password hashing inconsistency
+- user creation duplication bug
+- auth middleware inconsistency
+
+Fix deterministically.
+
+ENGINEERING RULES:
+- NO new features
+- NO UI redesign
+- NO new libraries
+- ONLY fix existing broken flows
+- Prefer minimal patching
+
+VALIDATION REQUIREMENTS:
+- CEO login works consistently
+- Normal login works consistently
+- Chat remains fully working
+- Video either succeeds OR fails clearly (no fake success)
+- Voice returns structured success or structured error
+- Image edit behaves consistently
+- No HTML API responses anywhere
+- No silent failures
+
+FINAL OUTPUT:
+Return:
+1. Root causes found
+2. Fixes applied
+3. Remaining risks

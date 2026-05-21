@@ -66,6 +66,12 @@ router.post(
 
     logger.info({ userId, promptLength: prompt.length, mode }, "[video] generate request");
 
+    // Sync provider check — fail fast before creating a job or consuming credits
+    if (!isVideoEnabled()) {
+      res.status(503).json(buildErrorResponse("video", "provider_not_configured: Gemini API key is required for video generation", "gemini-veo"));
+      return;
+    }
+
     const job = createJob({
       jobType:        "VIDEO_JOB",
       complexity:     "HEAVY",
@@ -124,8 +130,8 @@ router.post(
             });
           }
         } else {
-          // provider_not_configured — infrastructure ready but Veo not enabled
-          completeJob(job, "video-stub" as never);
+          // provider_not_configured — Gemini key present but Veo access not granted
+          failJob(job, "provider_not_configured");
           addAuditEntry("video_request", `Video: ${result.status}`, { username, ip: req.ip ?? undefined });
 
           if (userId) {
@@ -156,7 +162,7 @@ router.post(
             prompt:       prompt.slice(0, 300),
             mode,
             jobId:        job.jobId,
-            videoUrl:     `/api/video/serve/${job.jobId}`,
+            videoUrl:     null,
             status:       "failed",
             thumbnailB64: null,
             timestamp:    Date.now(),

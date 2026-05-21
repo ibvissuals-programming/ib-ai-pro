@@ -36,6 +36,7 @@ export type AIMode =
 
 export type AIErrorCode =
   | "provider_unavailable"
+  | "provider_not_configured"
   | "rate_limit"
   | "feature_disabled"
   | "timeout"
@@ -179,12 +180,13 @@ export function buildStandardResponse<T extends Record<string, unknown>>(
 // Returns a user-safe message (no stack traces, no internal details).
 
 const USER_MESSAGES: Record<AIErrorCode, string> = {
-  provider_unavailable: "The AI provider is temporarily unavailable. Please try again shortly.",
-  rate_limit:           "Too many requests. Please wait a moment and try again.",
-  feature_disabled:     "This feature is not available in the current environment.",
-  timeout:              "The request timed out. Please try again.",
-  invalid_request:      "The request could not be processed. Please check your input.",
-  internal_error:       "An unexpected error occurred. Please try again.",
+  provider_unavailable:    "The AI provider is temporarily unavailable. Please try again shortly.",
+  provider_not_configured: "This feature requires AI provider access that is not yet enabled for this API key.",
+  rate_limit:              "Too many requests. Please wait a moment and try again.",
+  feature_disabled:        "This feature is not available in the current environment.",
+  timeout:                 "The request timed out. Please try again.",
+  invalid_request:         "The request could not be processed. Please check your input.",
+  internal_error:          "An unexpected error occurred. Please try again.",
 };
 
 export function normalizeAIError(err: unknown, system = "unknown"): NormalizedAIError {
@@ -196,6 +198,14 @@ export function normalizeAIError(err: unknown, system = "unknown"): NormalizedAI
     code = "timeout";
   else if (lower.includes("rate") || lower.includes("429") || lower.includes("quota"))
     code = "rate_limit";
+  else if (
+    lower.includes("provider_not_configured") ||
+    lower.includes("api key not valid") || lower.includes("invalid api key") ||
+    lower.includes("permission_denied") || lower.includes("api key invalid") ||
+    (lower.includes("403") && lower.includes("api")) ||
+    (lower.includes("401") && lower.includes("api"))
+  )
+    code = "provider_not_configured";
   else if (lower.includes("feature_disabled") || lower.includes("not available") || lower.includes("unsupported_model") || lower.includes("not supported"))
     code = "feature_disabled";
   else if (lower.includes("invalid") || lower.includes("bad request") || lower.includes("malformed"))

@@ -36,6 +36,7 @@ import { recordUsage }  from "../lib/usageAnalytics";
 import { expandPrompt as expandPromptFn, PROMPT_CATEGORIES } from "../lib/promptExpander";
 import { buildStandardResponse, buildErrorResponse } from "../lib/aiOrchestrator";
 import { trackToolExecution } from "../lib/toolHealthMonitor";
+import { isGeminiConfigured } from "../lib/geminiEnv";
 import {
   recordEditAttempt,
   recordEditSuccess,
@@ -204,8 +205,7 @@ router.post(
         ip: req.ip ?? undefined,
       });
       logger.error({ err }, "[imageGen] generate failed");
-      const message = toRouteError(err, "generate");
-      res.status(503).json({ success: false, mode: "image", error: message });
+      res.status(503).json(buildErrorResponse("image", err, "gemini-image"));
     }
   },
 );
@@ -229,6 +229,11 @@ router.post(
   },
   policyEngine({ cost: CREDIT_COSTS.image_edit, rateKey: "image_edit", rateMax: 10, rateWindowMs: 60_000, allowRecovery: true }),
   async (req: Request, res: Response) => {
+    if (!isGeminiConfigured()) {
+      res.status(503).json(buildErrorResponse("image", "provider_not_configured: Gemini API key is required for image editing", "gemini-image"));
+      return;
+    }
+
     const parsed = EditSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ ...buildErrorResponse("image", "Invalid request"), details: parsed.error.flatten() });
@@ -399,12 +404,11 @@ router.post(
         ip: req.ip ?? undefined,
       });
       logger.error({ err }, "[imageGen] edit failed");
-      const message = toRouteError(err, "edit");
       const status =
         err instanceof Error && (err as Error & { statusCode?: number }).statusCode === 413
           ? 413
           : 503;
-      res.status(status).json({ success: false, mode: "image", error: message });
+      res.status(status).json(buildErrorResponse("image", err, "gemini-image"));
     }
   },
 );
