@@ -147,7 +147,12 @@ function useRecentWorkflows() {
     });
   }, []);
 
-  return [recents, addRecent, removeRecent];
+  const clearRecents = useCallback(() => {
+    setRecents([]);
+    try { localStorage.removeItem(RECENT_KEY); } catch { /* ignore */ }
+  }, []);
+
+  return [recents, addRecent, removeRecent, clearRecents];
 }
 
 // ── Workflow run counter (localStorage) ───────────────────────────────────────
@@ -168,7 +173,12 @@ function useWorkflowCounts() {
     });
   }, []);
 
-  return [counts, increment];
+  const clearCounts = useCallback(() => {
+    setCounts({});
+    try { localStorage.removeItem(COUNTS_KEY); } catch { /* ignore */ }
+  }, []);
+
+  return [counts, increment, clearCounts];
 }
 
 // ── URL param builder ─────────────────────────────────────────────────────────
@@ -453,8 +463,22 @@ export function WorkflowLauncher({ trigger }) {
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [saveTarget, setSaveTarget] = useState(null);
   const [error, setError] = useState(null);
-  const [recents, addRecent, removeRecent] = useRecentWorkflows();
-  const [workflowCounts, incrementCount]   = useWorkflowCounts();
+  const [recents, addRecent, removeRecent, clearRecents] = useRecentWorkflows();
+  const [workflowCounts, incrementCount, clearCounts]   = useWorkflowCounts();
+  const [clearConfirm, setClearConfirm] = useState(false);
+
+  // Auto-cancel confirmation after 8 s
+  useEffect(() => {
+    if (!clearConfirm) return;
+    const t = setTimeout(() => setClearConfirm(false), 8000);
+    return () => clearTimeout(t);
+  }, [clearConfirm]);
+
+  const handleClearMemory = useCallback(() => {
+    clearRecents();
+    clearCounts();
+    setClearConfirm(false);
+  }, [clearRecents, clearCounts]);
 
   const loadSessions = useCallback(async () => {
     setLoadingSessions(true);
@@ -609,6 +633,50 @@ export function WorkflowLauncher({ trigger }) {
 
               {tab === 'mine' && (
                 <>
+                  {/* ── Clear history control ── only shown when there is local memory */}
+                  {(recents.length > 0 || Object.keys(workflowCounts).length > 0) && (
+                    <div className="flex items-center justify-end min-h-[24px]">
+                      <AnimatePresence mode="wait">
+                        {clearConfirm ? (
+                          <motion.div
+                            key="confirm"
+                            initial={{ opacity: 0, x: 6 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 6 }}
+                            transition={{ duration: 0.15 }}
+                            className="flex items-center gap-2"
+                          >
+                            <span className="text-[10px] text-muted-foreground">Clear local history?</span>
+                            <button
+                              onClick={handleClearMemory}
+                              className="text-[10px] font-semibold text-destructive hover:text-destructive/80 px-2 py-0.5 rounded-md hover:bg-destructive/8 transition-colors"
+                            >
+                              Yes, clear
+                            </button>
+                            <button
+                              onClick={() => setClearConfirm(false)}
+                              className="text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </motion.div>
+                        ) : (
+                          <motion.button
+                            key="idle"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.12 }}
+                            onClick={() => setClearConfirm(true)}
+                            className="text-[9px] text-muted-foreground/40 hover:text-destructive/60 transition-colors px-2 py-1 rounded-lg hover:bg-destructive/5 border border-transparent hover:border-destructive/15"
+                          >
+                            Clear History
+                          </motion.button>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )}
+
                   {/* ── Top Workflows ── derived from localStorage counts, no effect */}
                   {(() => {
                     const topPresets = WORKFLOW_PRESETS
