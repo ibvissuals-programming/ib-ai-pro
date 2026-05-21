@@ -46,15 +46,39 @@ const TRANSIENT_PATTERNS: RegExp[] = [
   /UNAVAILABLE/,
   /503/,
   /timeout/i,
+  /timed out/i,
   /ECONNRESET/,
   /ETIMEDOUT/,
   /ECONNREFUSED/,
   /socket hang up/i,
   /temporarily/i,
+  // Fetch / Web API network errors
+  /network error/i,
+  /failed to fetch/i,
+  /fetch failed/i,
+  /AbortError/,
+  /load failed/i,
 ];
 
 export function isTransientError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
+  // ProviderError with a transient type is always transient
+  if (err instanceof ProviderError) {
+    return (
+      err.errorType === "timeout" ||
+      err.errorType === "rate_limit" ||
+      err.errorType === "unavailable" ||
+      err.errorType === "quota"
+    );
+  }
+  // DOMException / AbortError from fetch abort
+  if (
+    typeof DOMException !== "undefined" &&
+    err instanceof DOMException &&
+    err.name === "AbortError"
+  ) {
+    return true;
+  }
+  const msg = err instanceof Error ? `${err.name} ${err.message}` : String(err);
   return TRANSIENT_PATTERNS.some((p) => p.test(msg));
 }
 

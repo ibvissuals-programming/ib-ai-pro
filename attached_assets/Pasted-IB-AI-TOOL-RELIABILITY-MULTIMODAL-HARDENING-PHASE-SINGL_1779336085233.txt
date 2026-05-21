@@ -1,0 +1,114 @@
+IB AI — TOOL RELIABILITY + MULTIMODAL HARDENING PHASE (SINGLE PASS)
+
+MISSION:
+Stabilize all AI tool providers (Groq, Gemini, TTS, Image, Video) into a unified, production-grade system with consistent failure handling, correct routing, and verified runtime behavior.
+
+RULES:
+- Do NOT touch UI / frontend / branding
+- Do NOT redesign components or animations
+- Do NOT refactor unrelated systems
+- Focus ONLY on backend AI tool layer + provider reliability
+- No feature expansion beyond stabilization
+
+PHASE 1 — PROVIDER HEALTH MAPPING
+Scan all AI providers:
+- Groq chat streaming
+- Gemini text / vision / image / audio
+- TTS system
+- Image generation pipeline
+- Image-to-image editing
+- Video pipeline
+
+For each:
+- entry file
+- required env vars
+- failure modes (404 / 500 / timeout / unsupported model)
+- response shape
+
+OUTPUT:
+- Provider dependency graph
+- Missing env var matrix
+- Broken model endpoints list
+- Latency + timeout behavior per tool
+
+PHASE 2 — UNIFIED TOOL CONTRACT ENFORCEMENT
+Standard response shape:
+
+{
+  success: boolean,
+  mode: "chat" | "image" | "tts" | "video" | "prompt" | "vision",
+  data?: any,
+  error?: {
+    code: string,
+    message: string
+  }
+}
+
+RULES:
+- No raw provider responses exposed
+- All errors go through:
+  sanitizeProviderError()
+  normalizeAIError()
+  buildErrorResponse()
+
+PHASE 3 — PROVIDER FAILURE ISOLATION LAYER
+- Groq failures must NOT trigger Gemini unless explicitly allowed
+- Gemini failures must NOT cascade to other tools
+- All tools are independent execution lanes
+
+Add:
+- timeout wrapper enforcement
+- max 1 retry for transient errors
+- deterministic fallback routing
+
+PHASE 4 — FIX ALL TOOL PATHS
+Standardize:
+- prompt expansion (Gemini)
+- vision analysis
+- cinematic prompt
+- image editing
+- TTS generation
+
+Fix:
+- model names
+- API versions
+- initialization safety (no lazy crash loops)
+
+PHASE 5 — FAILURE MODE STANDARDIZATION
+
+VALIDATION ERROR:
+{ success:false, mode:"x", error:{code:"invalid_request", message:"..." } }
+
+PROVIDER FAILURE:
+{ success:false, mode:"x", error:{code:"provider_unavailable", message:"..." } }
+
+FEATURE DISABLED:
+{ success:false, mode:"x", error:{code:"feature_disabled", message:"..." } }
+
+NO EXCEPTIONS.
+
+PHASE 6 — LIVE STABILITY SIMULATION
+Test:
+- Groq streaming
+- Gemini vision
+- TTS generation
+- image generation
+- image editing
+
+Verify:
+- response consistency
+- timeout handling
+- isolation between tools
+- no crash propagation
+
+PHASE 7 — FINAL OUTPUT
+Return:
+- provider health report
+- fixed tool map
+- contract verification
+- external dependency issues
+- stability score (0–10)
+- production readiness verdict
+
+FINAL RULE:
+System must behave as a unified AI runtime engine, not separate APIs.

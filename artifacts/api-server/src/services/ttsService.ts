@@ -18,6 +18,7 @@
  */
 import * as fs   from "fs";
 import * as path from "path";
+import type { GenerateContentConfig } from "@google/genai";
 import { ai }                  from "@workspace/integrations-gemini-ai";
 import { withProviderTimeout } from "../lib/providerGuard";
 import { logger }              from "../lib/logger";
@@ -113,6 +114,19 @@ function buildWavBuffer(
 const TTS_TIMEOUT_MS = 45_000;
 const SAMPLE_RATE    = 24_000;
 
+// TTS requires responseModalities: ["AUDIO"] which is a valid Gemini config
+// option but may not be reflected in older GenerateContentConfig type
+// definitions. We assert only on the config object — the rest of the call
+// is fully typed — rather than casting the entire function to `Function`.
+type TtsConfig = Omit<GenerateContentConfig, "responseModalities"> & {
+  responseModalities: string[];
+  speechConfig: {
+    voiceConfig: {
+      prebuiltVoiceConfig: { voiceName: string };
+    };
+  };
+};
+
 export async function generateSpeech(
   text:       string,
   voiceStyle: VoiceStyle,
@@ -127,26 +141,28 @@ export async function generateSpeech(
     "[tts] generating speech",
   );
 
+  const ttsConfig: TtsConfig = {
+    responseModalities: ["AUDIO"],
+    speechConfig: {
+      voiceConfig: {
+        prebuiltVoiceConfig: { voiceName },
+      },
+    },
+  };
+
   const response = await withProviderTimeout(
-    () => (ai.models.generateContent as Function)({
+    () => ai.models.generateContent({
       model:    "gemini-2.0-flash",
       contents: [{ role: "user", parts: [{ text }] }],
-      config: {
-        responseModalities: ["AUDIO"],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName },
-          },
-        },
-      },
+      config:   ttsConfig as unknown as GenerateContentConfig,
     }),
     TTS_TIMEOUT_MS,
     "gemini-tts",
-  ) as Awaited<ReturnType<typeof ai.models.generateContent>>;
+  );
 
-  const candidates = (response as any).candidates ?? [];
+  const candidates = (response as { candidates?: unknown[] }).candidates ?? [];
   const parts: Array<{ inlineData?: { mimeType?: string; data?: string } }> =
-    candidates[0]?.content?.parts ?? [];
+    (candidates[0] as { content?: { parts?: unknown[] } } | undefined)?.content?.parts as Array<{ inlineData?: { mimeType?: string; data?: string } }> ?? [];
 
   const audioPart = parts.find(
     (p) => typeof p.inlineData?.mimeType === "string" &&

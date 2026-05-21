@@ -1,6 +1,7 @@
 import { logger } from "../lib/logger";
 import { ai } from "@workspace/integrations-gemini-ai";
 import { recordCompletion, type AiProvider } from "../lib/aiMetrics";
+import { isTransientError, withProviderTimeout, sanitizeProviderError } from "../lib/providerGuard";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -33,16 +34,18 @@ export function getLastProviderResult(): LastProviderResult | null {
 export const CHAT_MODEL = "llama-3.1-8b-instant";
 const GEMINI_FALLBACK_MODEL = "gemini-2.5-flash";
 
-const MAX_RETRIES = 3;
+// Max additional retries after the first attempt (1 = two total attempts).
+// Applies only to transient errors (429, 503, network). Non-transient errors
+// throw immediately without retry.
+const MAX_RETRIES = 1;
 const RETRY_DELAY_MS = 600;
+
+// Hard deadline for the initial Groq HTTP connection + response headers.
+// Does not cover stream reading time (each chunk is independently read).
+const GROQ_TIMEOUT_MS = 30_000;
 
 function delay(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
-}
-
-function isRetryable(err: any): boolean {
-  const msg = String(err?.message || err).toLowerCase();
-  return msg.includes("429") || msg.includes("rate") || msg.includes("overloaded");
 }
 
 // ── Metrics wrapper ────────────────────────────────────────────────────────────
@@ -91,24 +94,30 @@ async function createGroqStream(messages: ChatMessage[]): Promise<AsyncIterable<
 
   let attempt = 0;
 
-  while (attempt < MAX_RETRIES) {
+  while (attempt <= MAX_RETRIES) {
     try {
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: CHAT_MODEL,
-          messages: [
-            ...(systemMessage ? [systemMessage] : []),
-            ...cleaned,
-          ],
-          temperature: 0.7,
-          stream: true,
+      // Hard deadline on the HTTP connection + response phase.
+      // Prevents the Groq fetch from hanging indefinitely on network issues.
+      const response = await withProviderTimeout(
+        () => fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: CHAT_MODEL,
+            messages: [
+              ...(systemMessage ? [systemMessage] : []),
+              ...cleaned,
+            ],
+            temperature: 0.7,
+            stream: true,
+          }),
         }),
-      });
+        GROQ_TIMEOUT_MS,
+        "groq",
+      );
 
       if (!response.ok || !response.body) {
         const errBody = await response.text().catch(() => "(unreadable)");
@@ -150,14 +159,21 @@ async function createGroqStream(messages: ChatMessage[]): Promise<AsyncIterable<
         }
       })();
     } catch (err) {
-      attempt++;
-
-      if (!isRetryable(err) || attempt >= MAX_RETRIES) {
-        logger.error({ err, attempt }, "[groq] failed — not retrying");
+      // Non-transient errors (401, 400, 404, invalid model) must NOT be retried
+      // and must NOT trigger Gemini fallback — they indicate misconfiguration.
+      if (!isTransientError(err)) {
+        logger.error({ err, attempt }, "[groq] non-transient error — not retrying");
         throw err;
       }
 
-      logger.warn({ attempt }, "[groq] retryable error — retrying");
+      attempt++;
+
+      if (attempt > MAX_RETRIES) {
+        logger.error({ err, attempt }, "[groq] transient error — max retries exhausted");
+        throw err;
+      }
+
+      logger.warn({ attempt, maxRetries: MAX_RETRIES }, "[groq] transient error — retrying");
       await delay(RETRY_DELAY_MS * attempt);
     }
   }
@@ -193,26 +209,25 @@ async function createGeminiStream(messages: ChatMessage[]): Promise<AsyncIterabl
   })();
 }
 
-// ── Public API — Groq with Gemini fallback ────────────────────────────────────
+// ── Public API — Groq with conditional Gemini fallback ────────────────────────
+//
+// Routing logic:
+//   1. If GROQ_API_KEY is absent → route directly to Gemini.
+//   2. If GROQ_API_KEY is present → try Groq first.
+//      - Transient errors (429, 503, timeout, network reset) → Gemini fallback.
+//      - Non-transient errors (401, 400, 404, invalid model) → throw immediately.
+//        Non-transient failures indicate misconfiguration and must NOT be masked
+//        by silently routing to Gemini.
+//
+// Instrumentation:
+//   - Every routing path records provider, fallback flag, latency, and
+//     success/error to aiMetrics via wrapTracked().
+//   - Per-request routing selection logs are DEBUG (not INFO).
+//   - Errors, warnings, and fallback events remain at WARN/INFO.
+//   - API keys and message content are never logged.
+//
+// Throws only when the active provider(s) genuinely fail — never silently.
 
-/**
- * createChatStream()
- *
- * Routing logic:
- *   1. If GROQ_API_KEY is present → try Groq (llama-3.1-8b-instant) first,
- *      fall back to Gemini (gemini-2.5-flash) only on real failure.
- *   2. If GROQ_API_KEY is absent → route directly to Gemini with a clear log.
- *      No spurious "Groq started → Groq failed" noise.
- *
- * Instrumentation:
- *   - Every routing path records provider, fallback flag, latency, and
- *     success/error to aiMetrics via wrapTracked().
- *   - Per-request routing selection logs are DEBUG (not INFO).
- *   - Errors, warnings, and fallback events remain at WARN/INFO.
- *   - API keys and message content are never logged.
- *
- * Throws only when the active provider(s) genuinely fail — never silently.
- */
 export async function createChatStream(messages: ChatMessage[]): Promise<AsyncIterable<string>> {
   const hasGroqKey = !!process.env.GROQ_API_KEY;
   const requestStartMs = Date.now();
@@ -231,12 +246,13 @@ export async function createChatStream(messages: ChatMessage[]): Promise<AsyncIt
       const msg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
       recordCompletion("gemini", false, Date.now() - requestStartMs, false);
       logger.error({ err: msg, model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini failed — no fallback available");
-      throw new Error(`AI provider failed: ${msg}`);
+      throw new Error(`AI provider failed: ${sanitizeProviderError(geminiErr, "chat")}`);
     }
   }
 
   // ── Groq key present — try Groq first ────────────────────────────────────────
   let groqErrMsg = "";
+  let groqErrIsTransient = false;
   const groqStartMs = Date.now();
   logger.debug({ model: CHAT_MODEL, provider: "groq" }, "[llm] routing to Groq (primary)");
 
@@ -246,16 +262,27 @@ export async function createChatStream(messages: ChatMessage[]): Promise<AsyncIt
     return wrapTracked(stream, "groq", false, requestStartMs);
   } catch (groqErr) {
     groqErrMsg = groqErr instanceof Error ? groqErr.message : String(groqErr);
+    groqErrIsTransient = isTransientError(groqErr);
     recordCompletion("groq", false, Date.now() - groqStartMs, false);
+
+    if (!groqErrIsTransient) {
+      // Non-transient: misconfiguration or bad request — do not mask with fallback.
+      logger.error(
+        { err: groqErrMsg, model: CHAT_MODEL, reason: "non_transient" },
+        "[llm] Groq non-transient error — not falling back to Gemini",
+      );
+      throw new Error(`Chat provider error: ${sanitizeProviderError(groqErr, "chat")}`);
+    }
+
     logger.warn(
       { err: groqErrMsg, model: CHAT_MODEL, fallback: GEMINI_FALLBACK_MODEL },
-      "[llm] Groq failed — activating Gemini fallback",
+      "[llm] Groq transient failure — activating Gemini fallback",
     );
   }
 
-  // ── Gemini fallback (triggered by Groq failure) ───────────────────────────────
+  // ── Gemini fallback (triggered only by transient Groq failure) ─────────────
   logger.info(
-    { model: GEMINI_FALLBACK_MODEL, trigger: "groq_failure" },
+    { model: GEMINI_FALLBACK_MODEL, trigger: "groq_transient_failure" },
     "[llm] Gemini fallback activated",
   );
 
@@ -271,7 +298,7 @@ export async function createChatStream(messages: ChatMessage[]): Promise<AsyncIt
       "[llm] Both providers failed — no AI response possible",
     );
     throw new Error(
-      `Both AI providers failed. Groq: ${groqErrMsg}. Gemini: ${geminiErrMsg}.`,
+      `Both AI providers failed. Groq: ${sanitizeProviderError(new Error(groqErrMsg), "chat")}. Gemini: ${sanitizeProviderError(geminiErr, "chat")}.`,
     );
   }
 }

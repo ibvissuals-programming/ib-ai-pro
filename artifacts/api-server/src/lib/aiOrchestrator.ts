@@ -26,10 +26,18 @@ import type { AISource }                     from "./aiJobStates";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type AIMode = "image" | "tts" | "video" | "prompt";
+export type AIMode =
+  | "chat"
+  | "vision"
+  | "image"
+  | "tts"
+  | "video"
+  | "prompt";
 
 export type AIErrorCode =
   | "provider_unavailable"
+  | "rate_limit"
+  | "feature_disabled"
   | "timeout"
   | "invalid_request"
   | "internal_error";
@@ -172,6 +180,8 @@ export function buildStandardResponse<T extends Record<string, unknown>>(
 
 const USER_MESSAGES: Record<AIErrorCode, string> = {
   provider_unavailable: "The AI provider is temporarily unavailable. Please try again shortly.",
+  rate_limit:           "Too many requests. Please wait a moment and try again.",
+  feature_disabled:     "This feature is not available in the current environment.",
   timeout:              "The request timed out. Please try again.",
   invalid_request:      "The request could not be processed. Please check your input.",
   internal_error:       "An unexpected error occurred. Please try again.",
@@ -184,6 +194,10 @@ export function normalizeAIError(err: unknown, system = "unknown"): NormalizedAI
   let code: AIErrorCode;
   if (lower.includes("timeout") || lower.includes("timed out") || lower.includes("deadline"))
     code = "timeout";
+  else if (lower.includes("rate") || lower.includes("429") || lower.includes("quota"))
+    code = "rate_limit";
+  else if (lower.includes("feature_disabled") || lower.includes("not available") || lower.includes("unsupported_model") || lower.includes("not supported"))
+    code = "feature_disabled";
   else if (lower.includes("invalid") || lower.includes("bad request") || lower.includes("malformed"))
     code = "invalid_request";
   else if (
