@@ -93,6 +93,10 @@ const WORKFLOW_PRESETS = [
 
 const CATEGORY_ORDER = ['Creator', 'Business', 'Luxury', 'Social', 'Voiceover', 'Product Ads'];
 
+// Computed once at module load — navigator.platform is stable for the session
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+const KBD_HINT = IS_MAC ? '⌘K' : 'Ctrl K';
+
 const TOOL_ICONS = {
   image: <ImageIcon size={11} />,
   voice: <Mic size={11} />,
@@ -560,6 +564,9 @@ export function WorkflowLauncher({ trigger }) {
           <button className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border/60 text-sm text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-secondary/40 transition-all">
             <Layers size={14} />
             Workflows
+            <span className="hidden sm:inline-flex items-center text-[9px] px-1.5 py-0.5 rounded border border-border/40 text-muted-foreground/35 font-mono leading-none ml-0.5 select-none">
+              {KBD_HINT}
+            </span>
           </button>
         )}
       </div>
