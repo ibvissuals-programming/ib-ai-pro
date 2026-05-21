@@ -1,7 +1,7 @@
 /**
  * IbLogo — IB AI Studio Lab brand logo system.
  *
- * Glass Monolith Mark — Concept B
+ * Glass Monolith Mark
  *   A rounded glass slab with frosted highlight, gradient border (simulates
  *   light refraction), inner blue radial glow, and "IB / AI" embedded
  *   typography. No images — pure SVG gradients.
