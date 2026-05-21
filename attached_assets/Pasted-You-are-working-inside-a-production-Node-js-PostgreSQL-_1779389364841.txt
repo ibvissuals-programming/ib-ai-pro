@@ -1,0 +1,119 @@
+You are working inside a production Node.js + PostgreSQL authentication system.
+
+IMPORTANT:
+The auth system is currently STABLE.
+DO NOT refactor architecture.
+DO NOT modify login flow.
+DO NOT alter JWT/session systems.
+DO NOT change DB schema.
+DO NOT modify hashing algorithm.
+
+OBJECTIVE:
+Add a deterministic, production-safe CEO password recovery/reset capability WITHOUT destabilizing existing auth behavior.
+
+------------------------------------------------------------
+1 — CREATE CONTROLLED CEO PASSWORD RESET ENDPOINT
+------------------------------------------------------------
+
+Create:
+
+POST /api/auth/reset-password
+
+Requirements:
+
+- requires authenticated JWT session
+- requires normal (non-recovery) session
+- requires currentPassword verification
+- requires newPassword
+- only authenticated user may reset their own password
+- CEO role must remain unchanged
+- NEVER create or overwrite accounts
+
+Request body:
+{
+  "currentPassword": string,
+  "newPassword": string
+}
+
+------------------------------------------------------------
+2 — PASSWORD VALIDATION RULES
+------------------------------------------------------------
+
+Reject:
+- empty passwords
+- passwords shorter than 8 chars
+- identical old/new passwords
+
+Use existing verify-compatible hashing method only.
+
+Update ONLY:
+- password_hash
+
+Never modify:
+- id
+- role
+- username
+- createdAt
+- sessions
+
+------------------------------------------------------------
+3 — SECURITY RULES
+------------------------------------------------------------
+
+NEVER:
+- reset passwords during boot
+- auto-repair passwords
+- expose hashes in logs
+- allow unauthenticated resets
+- allow CEO recreation
+- allow recovery sessions to bypass validation
+
+------------------------------------------------------------
+4 — EVENT LOGGING
+------------------------------------------------------------
+
+Emit ONLY:
+- password_reset_attempt
+- password_reset_success
+- password_reset_failure
+
+No debug spam.
+
+------------------------------------------------------------
+5 — VALIDATION TESTS
+------------------------------------------------------------
+
+After implementation:
+
+A) Login with old password → PASS
+B) Reset password endpoint → PASS
+C) Login with new password → PASS
+D) Login with old password → FAIL
+E) Restart backend
+F) Login with new password again → PASS
+
+Verify:
+- CEO_COUNT = 1
+- username_count = 1
+- no duplicate users created
+- password hash persists across restart
+
+------------------------------------------------------------
+6 — FINAL REPORT FORMAT
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CEO PASSWORD RESET REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LOGIN_OLD:        PASS/FAIL
+RESET_ENDPOINT:   PASS/FAIL
+LOGIN_NEW:        PASS/FAIL
+RESTART_TEST:     PASS/FAIL
+CEO_COUNT:        number
+DUPLICATES:       YES/NO
+OVERALL:          STABLE/FAILED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FINAL GOAL:
+
+Enable deterministic password recovery/reset
+WITHOUT modifying stable auth architecture.

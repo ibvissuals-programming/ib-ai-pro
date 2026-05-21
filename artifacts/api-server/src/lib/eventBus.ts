@@ -24,6 +24,9 @@ export type SystemEventType =
   | "password_change_attempt"
   | "password_change_success"
   | "password_change_failure"
+  | "password_reset_attempt"
+  | "password_reset_success"
+  | "password_reset_failure"
   // AI System
   | "job_creation_attempt"
   | "job_blocked_by_policy"

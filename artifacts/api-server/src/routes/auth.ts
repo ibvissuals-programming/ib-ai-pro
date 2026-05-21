@@ -459,6 +459,118 @@ router.post(
   },
 );
 
+// ── POST /api/auth/reset-password ─────────────────────────────────────────────
+//
+// Deterministic, self-service password reset for any authenticated user.
+// Stricter than change-password: normal sessions only, currentPassword always
+// required, newPassword min 8 chars.
+//
+// Security guarantees:
+//   - requireNormalAuth blocks recovery sessions entirely
+//   - currentPassword verified before any mutation
+//   - Identical old/new passwords rejected
+//   - Only password_hash is updated — id, role, username, createdAt untouched
+//   - No hash values appear in logs at any point
+
+const ResetPasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required").max(128),
+  newPassword:     z.string()
+    .min(8, "Password must be at least 8 characters")
+    .max(128),
+});
+
+router.post(
+  "/auth/reset-password",
+  requireNormalAuth,
+  rateLimit(5, 60_000, "reset_password"),
+  async (req: Request, res: Response) => {
+    const parsed = ResetPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        error:   "Invalid request",
+        details: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    const { currentPassword, newPassword } = parsed.data;
+    const userId   = req.user!.userId;
+    const username = req.user!.username;
+
+    emit({
+      eventType: "password_reset_attempt",
+      source:    "auth_route",
+      userId,
+      action:    "reset_password",
+      status:    "info",
+      metadata:  { username },
+    });
+
+    // Identical password guard
+    if (currentPassword === newPassword) {
+      res.status(400).json({
+        error: "New password must be different from the current password",
+      });
+      return;
+    }
+
+    // Current password verification — must match stored hash
+    if (!checkCurrentPassword(userId, currentPassword)) {
+      addAuditEntry("password_reset_failure", `Incorrect current password: ${username}`, {
+        username,
+        ip: req.ip ?? undefined,
+      });
+      emit({
+        eventType: "password_reset_failure",
+        source:    "auth_route",
+        userId,
+        action:    "reset_password",
+        status:    "failure",
+        metadata:  { username, reason: "incorrect_current_password" },
+        errorCode: "INVALID_CREDENTIALS",
+      });
+      res.status(401).json({ error: "Current password is incorrect" });
+      return;
+    }
+
+    // Update password_hash only — all other fields are immutable
+    const ok = await changeUserPassword(userId, newPassword);
+    if (!ok) {
+      emit({
+        eventType: "password_reset_failure",
+        source:    "auth_route",
+        userId,
+        action:    "reset_password",
+        status:    "failure",
+        metadata:  { username, reason: "user_not_found" },
+        errorCode: "USER_NOT_FOUND",
+      });
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    addAuditEntry("password_reset_success", `Password reset: ${username}`, {
+      username,
+      ip: req.ip ?? undefined,
+    });
+    emit({
+      eventType: "password_reset_success",
+      source:    "auth_route",
+      userId,
+      action:    "reset_password",
+      status:    "success",
+      metadata:  { username, role: req.user!.role },
+    });
+
+    logger.info({ userId, username }, "[auth] password reset completed");
+
+    res.json({
+      success: true,
+      message: "Password reset successfully.",
+    });
+  },
+);
+
 // ── GET /api/auth/me ──────────────────────────────────────────────────────────
 // requireNormalAuth blocks recovery sessions — they must change password first.
 
