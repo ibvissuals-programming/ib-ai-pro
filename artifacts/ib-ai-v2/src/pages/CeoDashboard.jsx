@@ -20,6 +20,7 @@ import {
   ChevronRight, ChevronDown, Cpu, Shield,
   LayoutDashboard, UsersRound, Zap,
   MessageSquare, ChevronUp, User, Radio,
+  CheckCircle2, Server,
 } from 'lucide-react';
 import { logout, getAuthHeaders } from '../auth/authService';
 import { useAdminPolling } from '../hooks/useAdminPolling';
@@ -56,6 +57,59 @@ function formatRelative(ms) {
   if (diff < 60_000)  return `${Math.floor(diff / 1_000)}s ago`;
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
   return `${Math.floor(diff / 3_600_000)}h ago`;
+}
+
+// ── Bootstrap Diagnostics Panel ───────────────────────────────────────────────
+
+function DiagCell({ label, value, ok }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[9px] uppercase tracking-widest text-muted-foreground/50">{label}</span>
+      <span className={`text-[11px] font-medium ${ok !== false ? 'text-foreground' : 'text-muted-foreground/60'}`}>
+        {value ?? '—'}
+      </span>
+    </div>
+  );
+}
+
+function BootstrapDiagPanel({ data, loading }) {
+  if (loading && !data) return null;
+  if (!data) return null;
+  const ready = !!data.importReady && !!data.bootstrapComplete;
+  const caps  = data.capabilities ?? {};
+  const CAP_LIST = ['chat', 'image', 'tts', 'video', 'prompt'];
+  return (
+    <div className="rounded-xl border border-border/30 bg-card/50 px-4 py-3.5 mb-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Server size={11} className="text-muted-foreground/60" />
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">Bootstrap Diagnostics</span>
+        <span className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-full border font-medium inline-flex items-center gap-1 ${
+          ready
+            ? 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20'
+            : 'text-red-400 bg-red-400/10 border-red-400/20'
+        }`}>
+          {ready ? <CheckCircle2 size={8}/> : <AlertCircle size={8}/>}
+          {ready ? 'System Ready' : 'Degraded'}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <DiagCell label="Provider Mode"    value={data.providerMode ?? '—'}        ok={!!data.providerMode} />
+        <DiagCell label="Import Ready"     value={data.importReady     ? 'Yes' : 'No'}  ok={!!data.importReady} />
+        <DiagCell label="Bootstrap"        value={data.bootstrapComplete ? 'Complete' : 'Pending'} ok={!!data.bootstrapComplete} />
+        <DiagCell label="Uptime"           value={data.uptime != null ? `${data.uptime}s` : '—'} ok />
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[9px] text-muted-foreground/40 uppercase tracking-widest mr-1">Capabilities</span>
+        {CAP_LIST.map((k) => (
+          <span key={k} className={`text-[9px] px-1.5 py-0.5 rounded border font-medium capitalize ${
+            caps[k]
+              ? 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20'
+              : 'text-muted-foreground/40 bg-muted/20 border-border/20'
+          }`}>{k}</span>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function formatTime(ms) {
@@ -772,6 +826,9 @@ export default function CeoDashboard() {
               exit={{ opacity: 0, y: -4 }}
               transition={{ duration: 0.16 }}
             >
+              {/* ── Section: Bootstrap Diagnostics ── */}
+              <BootstrapDiagPanel data={health.data} loading={health.loading} />
+
               {/* ── Section: Control Overview ── */}
               <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest flex items-center gap-1.5 mb-3">
                 <LayoutDashboard size={9} /> Control Overview

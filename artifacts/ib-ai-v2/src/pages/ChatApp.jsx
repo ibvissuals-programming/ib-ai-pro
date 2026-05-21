@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback, useMemo } from 'react';
-import { Clock } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Clock, WifiOff } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { useAuth } from '../hooks/useAuth';
 import { useChat } from '../hooks/useChat';
@@ -81,6 +81,19 @@ export default function ChatApp() {
     refreshCredits();
   };
 
+  // ── Offline detection ──────────────────────────────────────────────────────
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  useEffect(() => {
+    const goOnline  = () => setIsOffline(false);
+    const goOffline = () => setIsOffline(true);
+    window.addEventListener('online',  goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online',  goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
+
   // ── Swipe-from-left-edge gesture (mobile sidebar) ─────────────────────────
   const swipeTouchStartX = useRef(null);
   const swipeTouchStartY = useRef(null);
@@ -149,6 +162,13 @@ export default function ChatApp() {
           activeTitle={activeChatId ? chats[activeChatId]?.title : undefined}
           messages={messages}
         />
+
+        {isOffline && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-yellow-500/10 border-b border-yellow-400/15 text-[11px] text-yellow-400 shrink-0">
+            <WifiOff size={10} />
+            Connection interrupted. Retrying…
+          </div>
+        )}
 
         <ChatWindow key={activeChatId} messages={messages} isTyping={isTyping} />
 

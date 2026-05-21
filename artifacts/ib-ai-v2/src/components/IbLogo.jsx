@@ -42,22 +42,22 @@ function IbMark({ size = 32 }) {
           <stop offset="100%" stopColor="#0c1222"/>
         </linearGradient>
 
-        {/* Inner blue radial glow — centre-top */}
+        {/* Inner gold radial glow — centre-top */}
         <radialGradient id={glowId} cx="50%" cy="32%" r="58%">
-          <stop offset="0%"   stopColor="#3b82f6" stopOpacity="0.20"/>
-          <stop offset="100%" stopColor="#3b82f6" stopOpacity="0"/>
+          <stop offset="0%"   stopColor="#d97706" stopOpacity="0.18"/>
+          <stop offset="100%" stopColor="#d97706" stopOpacity="0"/>
         </radialGradient>
 
         {/* Frosted glass sheen — white fade, top only */}
         <linearGradient id={sheenId} x1="16" y1="2.5" x2="16" y2="15" gradientUnits="userSpaceOnUse">
-          <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.20"/>
+          <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.22"/>
           <stop offset="100%" stopColor="#ffffff" stopOpacity="0"/>
         </linearGradient>
 
-        {/* Glass border — light refraction (bright top-left → dim bottom-right) */}
+        {/* Glass border — gold refraction (bright top-left → dim bottom-right) */}
         <linearGradient id={borderId} x1="3" y1="3" x2="29" y2="29" gradientUnits="userSpaceOnUse">
-          <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.55"/>
-          <stop offset="40%"  stopColor="#60a5fa" stopOpacity="0.35"/>
+          <stop offset="0%"   stopColor="#fbbf24" stopOpacity="0.70"/>
+          <stop offset="40%"  stopColor="#d97706" stopOpacity="0.35"/>
           <stop offset="100%" stopColor="#ffffff" stopOpacity="0.06"/>
         </linearGradient>
 
@@ -101,7 +101,7 @@ function IbMark({ size = 32 }) {
         x="16" y="21.5"
         textAnchor="middle"
         dominantBaseline="middle"
-        fill="#60a5fa"
+        fill="#f59e0b"
         fontFamily="Inter,system-ui,sans-serif"
         fontWeight="800"
         fontSize="9"
@@ -111,9 +111,9 @@ function IbMark({ size = 32 }) {
       {/* Thin separator line between IB and AI */}
       <line
         x1="9" y1="16.5" x2="23" y2="16.5"
-        stroke="#60a5fa"
+        stroke="#f59e0b"
         strokeWidth="0.5"
-        strokeOpacity="0.25"
+        strokeOpacity="0.30"
       />
     </svg>
   );
@@ -137,7 +137,7 @@ export function IbLogo({ variant = 'wordmark', size = 32, className = '' }) {
             className="font-bold text-foreground"
             style={{ fontSize: Math.round(size * 0.5) + 'px', letterSpacing: '-0.03em', fontFamily: 'Inter, sans-serif' }}
           >
-            IB <span className="text-primary">AI</span>
+            IB <span className="text-amber-500">AI</span>
           </span>
           <span
             className="text-muted-foreground font-medium uppercase tracking-[0.1em]"
@@ -158,7 +158,7 @@ export function IbLogo({ variant = 'wordmark', size = 32, className = '' }) {
           className="text-sm font-semibold tracking-tight text-foreground"
           style={{ fontFamily: 'Inter, sans-serif', letterSpacing: '-0.02em' }}
         >
-          IB <span className="text-primary">AI</span>{' '}
+          IB <span className="text-amber-500">AI</span>{' '}
           <span className="font-normal text-muted-foreground">Studio Lab</span>
         </span>
       </div>
@@ -173,7 +173,7 @@ export function IbLogo({ variant = 'wordmark', size = 32, className = '' }) {
           className="text-sm font-semibold tracking-tight text-foreground"
           style={{ fontFamily: 'Inter, sans-serif', letterSpacing: '-0.02em' }}
         >
-          IB <span className="text-primary">AI</span>
+          IB <span className="text-amber-500">AI</span>
         </span>
       </div>
     );

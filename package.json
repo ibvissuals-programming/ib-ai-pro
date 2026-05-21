@@ -13,7 +13,8 @@
     "db:guard": "node scripts/db-guard.cjs",
     "bootstrap": "node scripts/import-bootstrap.cjs",
     "bootstrap:dry": "node scripts/import-bootstrap.cjs --dry-run",
-    "startup:health": "node scripts/startup-health.cjs"
+    "startup:health": "node scripts/startup-health.cjs",
+    "production:check": "node scripts/production-check.cjs"
   },
   "private": true,
   "devDependencies": {

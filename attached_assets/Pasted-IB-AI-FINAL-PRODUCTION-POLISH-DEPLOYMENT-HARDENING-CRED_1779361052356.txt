@@ -1,0 +1,372 @@
+IB AI — FINAL PRODUCTION POLISH + DEPLOYMENT HARDENING (CREDIT-EFFICIENT MASTER PROMPT)
+
+MISSION:
+Perform a FINAL production polish + deployment hardening pass focused ONLY on:
+
+- production readiness
+- deployment reliability
+- branding polish
+- operational stability
+- graceful UX
+- Veo access handling
+- CEO/admin usability
+- frontend refinement
+
+DO NOT refactor stable systems.
+DO NOT rewrite architecture.
+DO NOT redesign backend foundations.
+DO NOT touch already-stable auth/chat/workflow systems unless required.
+
+PRIORITY ORDER:
+
+1. Prevent production-breaking edge cases
+2. Improve deployment stability
+3. Improve Veo/video UX clarity
+4. Improve branding/UI polish
+5. Improve CEO usability
+6. Reduce operational friction after imports
+7. Keep changes lightweight and additive
+
+==================================================
+PHASE 1 — IMPORT & DEPLOYMENT HARDENING
+
+MISSION:
+Ensure GitHub → Replit imports become deterministic and low-maintenance.
+
+REQUIRED:
+
+1. Verify bootstrap/import scripts:
+
+- import-bootstrap.cjs
+- startup-health.cjs
+- db-guard.cjs
+- health-check.cjs
+
+2. Ensure:
+
+- duplicate installs never occur
+- duplicate schema pushes never occur
+- startup loops never occur
+- workflows never endlessly restart
+
+3. Ensure:
+   GEMINI_API_KEY is the ONLY required AI key.
+
+4. GROQ_API_KEY:
+
+- optional only
+- never blocks startup
+- silent fallback to Gemini
+
+5. Add:
+   pnpm run production:check
+
+This should validate:
+✔ secrets
+✔ db
+✔ workflows
+✔ AI providers
+✔ storage
+✔ routes
+✔ health endpoint
+
+6. Ensure:
+   health scripts finish under 5 seconds.
+
+VALIDATION:
+
+- fresh import succeeds with only GEMINI_API_KEY
+- no repeated setup prompts
+- no import loops
+- startup clean
+
+==================================================
+PHASE 2 — VEO ACCESS UX HARDENING
+
+MISSION:
+Clarify Veo access state without confusing users.
+
+REQUIRED:
+
+1. Replace ambiguous wording.
+
+NEVER show:
+
+- No Access
+- Failed
+- Permission Denied
+- Unknown Error
+
+USE:
+"Video generation requires Veo-enabled Gemini API access."
+
+2. Add:
+   "Pipeline Ready" status badge when:
+
+- backend healthy
+- polling healthy
+- queue healthy
+  even if Veo permissions are unavailable.
+
+3. Add:
+   "Provider Access Pending"
+   instead of "failed"
+   for provider_not_configured.
+
+4. Ensure:
+   video history entries with provider_not_configured:
+
+- NEVER show broken download buttons
+- NEVER show fake completed states
+
+5. Add graceful fallback card:
+   "Image-to-video pipeline is operational. API permissions are still pending."
+
+VALIDATION:
+
+- no misleading error states
+- no fake MP4s
+- no broken buttons
+- clean polling termination
+
+==================================================
+PHASE 3 — CEO LOGIN & ADMIN HARDENING
+
+MISSION:
+Eliminate operational friction for CEO/admin usage.
+
+REQUIRED:
+
+1. Add:
+   clear startup log:
+   [CEO BOOTSTRAP]
+   username: ibaiceo
+   tempPassword: XXXXX
+
+2. Ensure:
+   CEO account auto-recreates safely if:
+
+- DB resets
+- missing row
+- import migration
+
+3. Add:
+   CEO diagnostic panel:
+
+- auth status
+- provider mode
+- importReady
+- bootstrapComplete
+- storage health
+- AI provider health
+
+4. Add:
+   copy-to-clipboard button
+   for temp password in admin panel (development only).
+
+5. NEVER expose temp password to non-CEO users.
+
+VALIDATION:
+
+- CEO login stable after import
+- DB reset recovery works
+- admin diagnostics visible
+
+==================================================
+PHASE 4 — BRANDING & VISUAL POLISH
+
+MISSION:
+Upgrade IB AI branding without redesigning the app.
+
+REQUIRED:
+
+1. Replace current placeholder logo.
+
+STYLE:
+
+- premium
+- futuristic
+- cinematic
+- minimal
+- black/gold OR dark metallic
+- modern AI studio feel
+
+2. Add:
+   SVG-based responsive logo system:
+
+- sidebar
+- auth page
+- loading states
+- mobile-safe
+
+3. Improve:
+   hero gradients
+   panel shadows
+   button polish
+   glass effects
+   empty states
+
+4. Ensure:
+   NO layout shifts.
+
+5. Maintain:
+   dark premium aesthetic.
+
+6. Avoid:
+   cheap neon
+   over-saturated glow spam
+   generic AI clipart
+
+VALIDATION:
+
+- mobile-safe
+- no overflow
+- no CLS/layout jumping
+- logo readable at small sizes
+
+==================================================
+PHASE 5 — FRONTEND RELIABILITY POLISH
+
+MISSION:
+Eliminate remaining UX rough edges.
+
+REQUIRED:
+
+1. Add:
+   global frontend fallback boundary:
+
+- prevents white-screen crashes
+- shows graceful retry UI
+
+2. Ensure:
+   all async polling:
+
+- cleans intervals correctly
+- stops on unmount
+- max timeout enforced
+
+3. Add:
+   network reconnect detection.
+
+4. Add:
+   temporary offline banner:
+   "Connection interrupted. Retrying..."
+
+5. Ensure:
+   chat input never locks permanently after failed request.
+
+6. Ensure:
+   WorkflowLauncher:
+
+- no duplicate listeners
+- no duplicate localStorage writes
+- no memory leaks
+
+VALIDATION:
+
+- no stuck loading states
+- no orphan intervals
+- no white screens
+
+==================================================
+PHASE 6 — PERFORMANCE & CREDIT EFFICIENCY
+
+MISSION:
+Reduce unnecessary processing + preserve runtime efficiency.
+
+REQUIRED:
+
+1. Audit:
+
+- repeated renders
+- repeated polling
+- repeated provider calls
+- duplicate effects
+
+2. Prevent:
+   duplicate API requests from rapid button taps.
+
+3. Add:
+   lightweight request lock:
+
+- image generation
+- TTS
+- video generation
+- chat send
+
+4. Ensure:
+   all retry systems:
+
+- max 1 retry only
+- no recursive retry loops
+
+5. Verify:
+   all cleanup intervals use:
+   .unref()
+
+6. Reduce:
+   unnecessary logging noise.
+
+VALIDATION:
+
+- no spam requests
+- no runaway polling
+- no repeated retries
+- stable memory usage
+
+==================================================
+PHASE 7 — FINAL PRODUCTION VALIDATION
+
+RUN FULL VALIDATION:
+
+✔ auth
+✔ CEO login
+✔ chat SSE
+✔ image generation
+✔ image editing
+✔ TTS
+✔ video unavailable flow
+✔ workflow launcher
+✔ mobile responsiveness
+✔ health endpoint
+✔ deployment scripts
+✔ startup scripts
+✔ import bootstrap
+✔ provider fallback
+✔ rate-limit headers
+✔ global error boundaries
+
+CONFIRM:
+✔ no HTML responses
+✔ no render loops
+✔ no duplicate polling
+✔ no fake video success
+✔ no broken auth
+✔ no raw provider errors
+✔ no workflow leaks
+✔ no stuck loading states
+✔ no layout overflow
+✔ no white screens
+✔ no unstable imports
+
+IMPORTANT RULES:
+
+- minimal edits only
+- additive changes preferred
+- preserve current architecture
+- preserve stable systems
+- avoid unnecessary abstractions
+- avoid dependency bloat
+- avoid backend rewrites
+- avoid redesigning routing/storage
+
+AFTER COMPLETION:
+Return ONLY:
+
+1. concise audit summary
+2. files changed
+3. validation results
+4. remaining operational risks
+
+DO NOT continue suggesting new features afterward.
+STOP after validation.
