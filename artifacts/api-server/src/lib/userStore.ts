@@ -556,6 +556,53 @@ export function getCeoBootstrapState(): CeoBootstrapState {
  *      - If CEO_PASSWORD is set → updates password hash (one-time repair).
  *   4. NO other user record is ever read, modified, or deleted.
  */
+// ── Index integrity check (called by startupIntegrityCheck.ts) ───────────────
+
+/**
+ * Scan the usernameIndex for inconsistencies against the store.
+ * Auto-repairs any found issues in place. Never throws.
+ */
+export function runIndexIntegrityCheck(): { violations: string[]; repaired: number } {
+  const violations: string[] = [];
+  let repaired = 0;
+
+  // Every user in store must have a matching index entry
+  for (const [userId, user] of store) {
+    const indexed = usernameIndex.get(user.username);
+    if (!indexed) {
+      violations.push(`missing_index:${user.username}`);
+      usernameIndex.set(user.username, userId);
+      repaired++;
+    } else if (indexed !== userId) {
+      violations.push(`index_mismatch:${user.username}(indexed=${indexed},actual=${userId})`);
+      usernameIndex.set(user.username, userId);
+      repaired++;
+    }
+  }
+
+  // Every index entry must point to an existing user
+  for (const [username, userId] of usernameIndex) {
+    if (!store.has(userId)) {
+      violations.push(`stale_index:${username}→${userId}`);
+      usernameIndex.delete(username);
+      repaired++;
+    }
+  }
+
+  return { violations, repaired };
+}
+
+/**
+ * Verify that a given plaintext password matches the stored hash for a user.
+ * Used by the change-password route to validate the current password.
+ * Returns false if the user does not exist.
+ */
+export function checkCurrentPassword(userId: string, password: string): boolean {
+  const user = store.get(userId);
+  if (!user) return false;
+  return verifyPassword(password, user.passwordHash);
+}
+
 export async function repairCeoAccount(): Promise<void> {
   const ceoUsername = process.env["CEO_USERNAME"]?.trim().toLowerCase();
 

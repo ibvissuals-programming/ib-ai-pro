@@ -8,6 +8,9 @@ import { loadSystemConfig, isPostgresEnabled, getLastMigrationRun } from "./lib/
 import { runMigration } from "./lib/migrationRunner";
 import { recoverStalledJobs } from "./services/imageJobManager";
 import { cleanOldAudioFiles } from "./services/ttsService";
+import { runStartupIntegrityCheck } from "./lib/startupIntegrityCheck";
+import { enableSafeMode } from "./lib/safeMode";
+import { isGeminiConfigured } from "./lib/geminiEnv";
 
 // ── Global error handlers ─────────────────────────────────────────────────────
 
@@ -41,8 +44,11 @@ async function bootstrap() {
     logger.warn({ err }, "[system] System config load failed — using defaults");
   }
 
-  // 1. Provider health check
+  // 1. Provider health check + safe mode gate
   logProviderHealth();
+  if (!isGeminiConfigured()) {
+    enableSafeMode("GEMINI_API_KEY is not set — set the secret and restart to enable AI features");
+  }
 
   // 2. Load users
   try {
@@ -59,6 +65,13 @@ async function bootstrap() {
   } catch (err) {
     setBootDegraded();
     logger.error({ err }, "[system] CEO repair failed (non-fatal)");
+  }
+
+  // 3b. Startup integrity check — silent, auto-repairs index inconsistencies
+  try {
+    await runStartupIntegrityCheck();
+  } catch (err) {
+    logger.warn({ err }, "[system] Startup integrity check threw unexpectedly (non-fatal)");
   }
 
   // 4. Auto-migrate JSON → PostgreSQL on first boot with PG enabled

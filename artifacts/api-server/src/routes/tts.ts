@@ -26,6 +26,7 @@ import { recordUsage }         from "../lib/usageAnalytics";
 import { sanitizeProviderError } from "../lib/providerGuard";
 import { buildStandardResponse, buildErrorResponse } from "../lib/aiOrchestrator";
 import { isGeminiConfigured } from "../lib/geminiEnv";
+import { isSafeMode, buildSafeModeError } from "../lib/safeMode";
 import { trackToolExecution }    from "../lib/toolHealthMonitor";
 import { logger }              from "../lib/logger";
 import { saveTtsHistory, getTtsHistory } from "../services/generationHistoryStore";
@@ -62,6 +63,10 @@ router.post(
       return;
     }
 
+    if (isSafeMode()) {
+      res.status(503).json(buildSafeModeError("tts"));
+      return;
+    }
     if (!isGeminiConfigured()) {
       res.status(503).json(buildErrorResponse("tts", "provider_not_configured: Gemini API key is required for voice generation", "gemini-tts"));
       return;

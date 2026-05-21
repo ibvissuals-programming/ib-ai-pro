@@ -25,6 +25,7 @@ import { addAuditEntry }       from "../lib/auditLog";
 import { recordUsage }         from "../lib/usageAnalytics";
 import { buildStandardResponse, buildErrorResponse } from "../lib/aiOrchestrator";
 import { trackToolExecution }  from "../lib/toolHealthMonitor";
+import { isSafeMode, buildSafeModeError } from "../lib/safeMode";
 import { logger }              from "../lib/logger";
 import { saveVideoHistory, getVideoHistory } from "../services/generationHistoryStore";
 
@@ -67,6 +68,10 @@ router.post(
     logger.info({ userId, promptLength: prompt.length, mode }, "[video] generate request");
 
     // Sync provider check — fail fast before creating a job or consuming credits
+    if (isSafeMode()) {
+      res.status(503).json(buildSafeModeError("video"));
+      return;
+    }
     if (!isVideoEnabled()) {
       res.status(503).json(buildErrorResponse("video", "provider_not_configured: Gemini API key is required for video generation", "gemini-veo"));
       return;

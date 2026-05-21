@@ -37,6 +37,7 @@ import { expandPrompt as expandPromptFn, PROMPT_CATEGORIES } from "../lib/prompt
 import { buildStandardResponse, buildErrorResponse } from "../lib/aiOrchestrator";
 import { trackToolExecution } from "../lib/toolHealthMonitor";
 import { isGeminiConfigured } from "../lib/geminiEnv";
+import { isSafeMode, buildSafeModeError } from "../lib/safeMode";
 import {
   recordEditAttempt,
   recordEditSuccess,
@@ -159,6 +160,11 @@ router.post(
       "[imageGen] generate request received",
     );
 
+    if (isSafeMode()) {
+      res.status(503).json(buildSafeModeError("image"));
+      return;
+    }
+
     try {
       // Optional smart prompt expansion — runs before queue entry
       let _genPrompt = parsed.data.prompt;
@@ -229,6 +235,10 @@ router.post(
   },
   policyEngine({ cost: CREDIT_COSTS.image_edit, rateKey: "image_edit", rateMax: 10, rateWindowMs: 60_000, allowRecovery: true }),
   async (req: Request, res: Response) => {
+    if (isSafeMode()) {
+      res.status(503).json(buildSafeModeError("image"));
+      return;
+    }
     if (!isGeminiConfigured()) {
       res.status(503).json(buildErrorResponse("image", "provider_not_configured: Gemini API key is required for image editing", "gemini-image"));
       return;

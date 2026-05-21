@@ -23,6 +23,7 @@ import {
   getUserById,
   toPublicUser,
   changeUserPassword,
+  checkCurrentPassword,
   CREDIT_COSTS,
   FREE_CREDITS,
   RESET_INTERVAL_MS,
@@ -259,6 +260,7 @@ router.post(
 // Auth: requireAuth (valid JWT — both session types accepted)
 
 const ChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(128).optional(),
   newPassword: z.string().min(6, "Password must be at least 6 characters").max(128),
 });
 
@@ -275,15 +277,42 @@ router.post(
       return;
     }
 
-    const { newPassword } = parsed.data;
+    const { currentPassword, newPassword } = parsed.data;
     const userId = req.user!.userId;
     const wasRecoverySession = req.user!.recoverySession;
+
+    // Normal sessions must supply and verify their current password
+    if (!wasRecoverySession) {
+      if (!currentPassword) {
+        res.status(400).json({ error: "Current password is required" });
+        return;
+      }
+      if (!checkCurrentPassword(userId, currentPassword)) {
+        addAuditEntry("password_change_failure", `Incorrect current password: ${req.user!.username}`, {
+          username: req.user!.username,
+          ip: req.ip ?? undefined,
+        });
+        res.status(401).json({ error: "Current password is incorrect" });
+        return;
+      }
+      // Prevent reuse of current password
+      if (currentPassword === newPassword) {
+        res.status(400).json({ error: "New password must be different from the current password" });
+        return;
+      }
+    }
 
     const ok = await changeUserPassword(userId, newPassword);
     if (!ok) {
       res.status(404).json({ error: "User not found" });
       return;
     }
+
+    addAuditEntry("password_changed", `Password changed: ${req.user!.username}`, {
+      username: req.user!.username,
+      ip: req.ip ?? undefined,
+      metadata: { wasRecoverySession },
+    });
 
     logger.info(
       { userId, username: req.user!.username, wasRecoverySession },
@@ -301,13 +330,16 @@ router.post(
       });
       res.json({
         success: true,
-        message: "Password updated successfully",
-        token: freshToken, // replace the recovery token
+        message: "Password updated successfully. Please log in again with your new password.",
+        token: freshToken,
       });
       return;
     }
 
-    res.json({ success: true, message: "Password updated successfully" });
+    res.json({
+      success: true,
+      message: "Password updated successfully. Please log in again with your new password.",
+    });
   },
 );
 

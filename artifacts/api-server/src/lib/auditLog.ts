@@ -18,6 +18,8 @@ export type AuditEventType =
   | "login_failure"
   | "signup_success"
   | "signup_failure"
+  | "password_changed"
+  | "password_change_failure"
   | "image_generate_success"
   | "image_generate_failure"
   | "image_edit_success"

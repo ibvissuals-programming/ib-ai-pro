@@ -15,6 +15,7 @@ import { logger } from "../lib/logger";
 import { db, imageJobsTable } from "@workspace/db";
 import { eq, inArray } from "drizzle-orm";
 import { isPostgresEnabled } from "../lib/systemConfig";
+import { logInvariantViolation } from "../lib/invariant";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -233,6 +234,20 @@ export function advanceJob(
  * Mark a job as successful and record final observability metrics.
  */
 export function completeJob(job: ImageJob, modelUsed: ModelUsed): void {
+  // Invariant: a job can only be completed once, and never after it has failed
+  if (job.status === "success") {
+    logInvariantViolation("completeJob called on already-successful job (duplicate completion)", {
+      jobId: job.jobId, jobType: job.jobType, modelUsed,
+    });
+    return; // do not double-complete
+  }
+  if (job.status === "failed") {
+    logInvariantViolation("completeJob called on already-failed job — provider failure cannot be masked as success", {
+      jobId: job.jobId, jobType: job.jobType, errorReason: job.errorReason, modelUsed,
+    });
+    return; // preserve the failed state
+  }
+
   const latencyMs = Date.now() - job.timestamp;
   job.status    = "success";
   job.modelUsed = modelUsed;
@@ -263,6 +278,14 @@ export function completeJob(job: ImageJob, modelUsed: ModelUsed): void {
  * Mark a job as failed and record the reason.
  */
 export function failJob(job: ImageJob, reason: string): void {
+  // Invariant: a successfully completed job must never be retroactively failed
+  if (job.status === "success") {
+    logInvariantViolation("failJob called on already-successful job — success cannot be reverted", {
+      jobId: job.jobId, jobType: job.jobType, reason,
+    });
+    return; // preserve the success state
+  }
+
   const latencyMs = Date.now() - job.timestamp;
   job.status      = "failed";
   job.latencyMs   = latencyMs;
