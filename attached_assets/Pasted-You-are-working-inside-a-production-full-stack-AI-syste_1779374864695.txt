@@ -1,0 +1,176 @@
+You are working inside a production full-stack AI system (Node.js + PostgreSQL + AI providers: image, video, TTS, chat).
+
+OBJECTIVE:
+Perform a FULL SYSTEM STABILITY PASS focusing on reliability, failure handling, and credit efficiency.
+
+DO NOT:
+- add new features
+- redesign architecture
+- introduce new providers
+- refactor auth system
+- change DB schema
+Only stabilize, validate, and harden existing behavior.
+
+------------------------------------------------------------
+1 — AI PROVIDER SAFETY LAYER (CRITICAL)
+------------------------------------------------------------
+
+For ALL AI systems (image, video, TTS, chat):
+
+Ensure every request follows:
+
+STEP A: Pre-check provider availability
+- if API key missing → FAIL FAST (no job creation)
+- if provider disabled → return 503 immediately
+- if quota/credit risk detected → block request early
+
+STEP B: No wasted credit execution
+- NEVER create jobs if provider cannot execute
+- NEVER queue AI jobs without valid provider readiness
+
+STEP C: Standard error format
+All failures must return:
+{
+  success: false,
+  code: "provider_not_available" | "quota_exceeded" | "invalid_request" | "internal_error",
+  error: string
+}
+
+------------------------------------------------------------
+2 — JOB PIPELINE INTEGRITY (VERY IMPORTANT)
+------------------------------------------------------------
+
+Ensure job system follows strict state rules:
+
+VALID FLOW:
+created → queued → processing → completed OR failed
+
+FORBIDDEN:
+- skipping queued state
+- marking failed jobs as completed
+- creating jobs without provider validation
+- silent job failures
+
+RULES:
+- every job MUST have final state
+- every failure MUST have reason code
+- every completion MUST have real output OR null-safe fallback
+
+------------------------------------------------------------
+3 — IMAGE / VIDEO / TTS SYSTEM HARDENING
+------------------------------------------------------------
+
+IMAGE:
+- validate prompt exists before job creation
+- reject empty/invalid prompts
+- ensure edit vs generate mode separation is respected
+
+VIDEO:
+- if VIDEO_ENABLED != true → return 503 immediately
+- if provider unavailable → fail job (do NOT complete)
+- never generate fake URLs or placeholders
+
+TTS:
+- validate text length before processing
+- block empty text
+- handle provider timeout gracefully
+
+------------------------------------------------------------
+4 — ERROR NORMALIZATION LAYER
+------------------------------------------------------------
+
+Standardize ALL errors across system:
+
+Map raw errors → clean codes:
+
+- 401 / invalid key → "auth_failed"
+- 403 / permission → "forbidden"
+- quota exceeded → "quota_exceeded"
+- missing provider → "provider_not_available"
+- unknown errors → "internal_error"
+
+DO NOT expose raw SDK errors to clients.
+
+------------------------------------------------------------
+5 — CREDIT PROTECTION SYSTEM (IMPORTANT)
+------------------------------------------------------------
+
+Before ANY AI call:
+
+Check:
+- provider is available
+- request is valid
+- job is allowed to proceed
+
+If ANY check fails:
+→ STOP immediately
+→ DO NOT call AI provider
+→ DO NOT create job
+→ DO NOT consume credits
+
+------------------------------------------------------------
+6 — EVENT LOGGING (LIGHTWEIGHT ONLY)
+------------------------------------------------------------
+
+Emit events ONLY for:
+- job_created
+- job_failed
+- job_completed
+- provider_blocked
+
+DO NOT log:
+- debug-level spam
+- internal retries
+- validation noise
+
+Keep event system minimal and production-safe.
+
+------------------------------------------------------------
+7 — SYSTEM HEALTH VALIDATION (POST-BOOT ONLY)
+------------------------------------------------------------
+
+Run a lightweight check:
+
+A) Provider check
+- Gemini/chat available OR correctly disabled
+
+B) Job pipeline check
+- can create dummy job in memory (no AI call)
+
+C) DB check
+- users table reachable
+- CEO exists
+
+D) Route check
+- image, video, tts endpoints respond with correct HTTP codes
+
+------------------------------------------------------------
+8 — FINAL OUTPUT FORMAT
+
+Print:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SYSTEM STABILITY REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PROVIDERS:    PASS / FAIL
+IMAGE:        PASS / FAIL
+VIDEO:        PASS / FAIL
+TTS:          PASS / FAIL
+JOB PIPELINE: PASS / FAIL
+ERROR LAYER:  PASS / FAIL
+DB:           PASS / FAIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OVERALL:      STABLE / DEGRADED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Include ONLY real failures. No fake passes.
+
+------------------------------------------------------------
+FINAL GOAL:
+
+System must:
+- never waste AI credits on invalid requests
+- never create fake outputs
+- always fail safely and early
+- remain stable under missing/partial provider conditions
+- behave predictably under production load

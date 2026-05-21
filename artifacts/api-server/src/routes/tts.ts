@@ -97,7 +97,7 @@ router.post(
       );
 
       const latencyMs = Date.now() - t0;
-      completeJob(job, "gemini-tts" as any);
+      completeJob(job, "gemini-tts");
       trackVoiceUsage(voiceStyle);
       trackFunnel("voice");
 
@@ -166,7 +166,7 @@ router.post(
           success:  false,
           mode:     "tts",
           error:    "Text-to-speech is not available in this environment.",
-          code:     "FEATURE_DISABLED",
+          code:     "feature_disabled",
         });
         return;
       }

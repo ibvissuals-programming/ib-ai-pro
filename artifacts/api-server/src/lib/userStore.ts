@@ -334,6 +334,21 @@ export function getAllUsers(): AdminUserView[] {
   }));
 }
 
+/**
+ * Delete a user by ID from the in-memory store and username index.
+ * Schedules a DB persist so the deletion propagates to PostgreSQL.
+ * Used exclusively by startupHealthTest to clean up ephemeral test users.
+ * Returns true if the user existed and was removed, false otherwise.
+ */
+export function deleteUserById(id: string): boolean {
+  const user = store.get(id);
+  if (!user) return false;
+  store.delete(id);
+  usernameIndex.delete(user.username.trim().toLowerCase());
+  scheduleSave();
+  return true;
+}
+
 export function createUser(
   username: string,
   password: string,

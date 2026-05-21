@@ -111,7 +111,7 @@ router.post(
         );
 
         if (result.status === "completed") {
-          completeJob(job, "gemini-veo" as never);
+          completeJob(job, "video-provider");
           if (userId) recordUsage({ userId, type: "generate", latencyMs: Date.now() - t0 });
           deductRequestCredits(req);
           addAuditEntry("video_success", `Video completed — mode: ${mode}`, { username, ip: req.ip ?? undefined });

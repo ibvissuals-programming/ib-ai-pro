@@ -13,6 +13,8 @@ import { SYSTEM_PROMPT } from "../prompts/system";
 import { logger } from "../lib/logger";
 import { policyEngine, deductRequestCredits } from "../middleware/policyEngine";
 import { CREDIT_COSTS } from "../lib/userStore";
+import { isGeminiConfigured } from "../lib/geminiEnv";
+import { isSafeMode } from "../lib/safeMode";
 import { getOrCreateSession, saveMessagePair } from "../services/chatStore";
 import { getUserMemory, buildMemoryBlock } from "../services/memoryStore";
 import { retrieveRelevantMemories } from "../services/memoryRetriever";
@@ -173,6 +175,19 @@ router.post(
     }
 
     const { messages: rawMessages, sessionId: incomingSessionId } = parsed.data;
+
+    // ── Provider pre-check — fail fast before any work begins ─────────────────
+    // policyEngine handles auth/rate/credits but not provider availability.
+    // Chat bypasses canCreateJob() (image/tts/video only), so we check here.
+    if (isSafeMode() || !isGeminiConfigured()) {
+      res.status(503).json({
+        success: false,
+        mode:    "chat",
+        error:   "AI provider not configured. GEMINI_API_KEY is required.",
+        code:    "provider_not_configured",
+      });
+      return;
+    }
 
     // ── Phase 4: Request timing ────────────────────────────────────────────────
     const tStart  = Date.now();
