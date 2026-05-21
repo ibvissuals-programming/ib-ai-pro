@@ -2,13 +2,13 @@
  * Auth routes — IB AI Assistant persistent identity system.
  *
  * POST /api/auth/register        — create a new account
- * POST /api/auth/login           — authenticate and receive a token (PATH A or B)
- * POST /api/auth/change-password — update password (works for recovery sessions)
+ * POST /api/auth/login           — authenticate and receive a token (password only)
+ * POST /api/auth/change-password — update password (normal sessions only)
+ * POST /api/auth/reset-password  — self-service password reset (only recovery mechanism)
  * GET  /api/auth/me              — return current user from token (normal sessions only)
  *
  * JWT claims:
- *   recoverySession: true  — issued via recovery key, ONLY /api/auth/change-password allowed
- *   recoverySession: false — full normal session access
+ *   recoverySession: false — only valid session type; recovery key login is permanently disabled
  *
  * Rate limits:
  *   register  — 5 per 5 minutes per IP
@@ -19,7 +19,6 @@ import { z } from "zod";
 import {
   createUser,
   authenticateUser,
-  authenticateCeoByRecoveryKey,
   getUserById,
   getUserByUsername,
   toPublicUser,
@@ -138,103 +137,32 @@ router.post(
 
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
 //
-// Two authentication paths:
+// Single authentication path — password only:
 //
-//   PATH A — Normal login (all users):
-//     Body: { username, password }
-//     Validates password against scrypt hash in DB.
-//     Issues: recoverySession: false
+//   Body: { username, password }
+//   Validates password against scrypt hash in PostgreSQL.
+//   Issues: recoverySession: false
 //
-//   PATH B — CEO recovery (CEO only):
-//     Header: x-ceo-recovery-key: <CEO_RECOVERY_KEY env var>
-//     Body:   { username }  (password field ignored / not required)
-//     Bypasses password check entirely.
-//     Rejected immediately if username !== CEO_USERNAME or key doesn't match.
-//     Issues: recoverySession: true  → ONLY /api/auth/change-password is permitted.
-//     Never available to normal users under any circumstance.
+// Recovery key login is PERMANENTLY DISABLED.
+// Any request with x-ceo-recovery-key header receives 410 Gone.
+// Use POST /api/auth/reset-password (requires valid session + current password).
 
 router.post(
   "/auth/login",
   rateLimit(15, 60_000, "login"),
   async (req: Request, res: Response) => {
-    const incomingRecoveryKey = req.headers["x-ceo-recovery-key"];
-
-    // ── PATH B: CEO recovery key flow ──────────────────────────────────────────
-    if (incomingRecoveryKey) {
-      const configuredKey = process.env["CEO_RECOVERY_KEY"];
-
-      // Recovery key must be configured server-side — if not, refuse with same
-      // generic error to avoid leaking that recovery exists.
-      if (!configuredKey || typeof incomingRecoveryKey !== "string") {
-        res.status(401).json({ success: false, code: "auth_failed", error: "Invalid username or password" });
-        return;
-      }
-
-      // Timing-safe comparison to prevent timing attacks on the recovery key.
-      const { timingSafeEqual } = await import("crypto");
-      const a = Buffer.from(incomingRecoveryKey);
-      const b = Buffer.from(configuredKey);
-      const keysMatch =
-        a.length === b.length && timingSafeEqual(a, b);
-
-      if (!keysMatch) {
-        logger.warn({ ip: req.ip }, "[auth] CEO recovery key mismatch");
-        res.status(401).json({ success: false, code: "auth_failed", error: "Invalid username or password" });
-        return;
-      }
-
-      // Key is valid — extract username from body (password not required).
-      const username = (req.body as Record<string, unknown>)?.username;
-      if (typeof username !== "string" || username.length < 1) {
-        res.status(400).json({ success: false, code: "invalid_request", error: "Username required" });
-        return;
-      }
-
-      const user = authenticateCeoByRecoveryKey(username);
-      if (!user) {
-        // username wasn't the CEO — reject with generic error
-        res.status(401).json({ success: false, code: "auth_failed", error: "Invalid username or password" });
-        return;
-      }
-
-      // Recovery token: restricted to change-password only
-      const recoverySessionRec = createSession({
-        userId:    user.id,
-        username:  user.username,
-        role:      user.role,
-        ipAddress: req.ip ?? undefined,
-        userAgent: req.headers["user-agent"] ?? undefined,
-      });
-      const token = signToken({
-        userId:          user.id,
-        username:        user.username,
-        role:            user.role,
-        recoverySession: true,
-        sessionId:       recoverySessionRec.sessionId,
-      });
-
-      emit({
-        eventType: "login_success",
-        source:    "auth_route",
-        userId:    user.id,
-        action:    "recovery_login",
-        status:    "success",
-        metadata:  { username: user.username, role: user.role, recoverySession: true, sessionId: recoverySessionRec.sessionId },
-      });
-      logger.info(
-        { username: user.username, role: user.role },
-        "[auth] recovery session issued",
-      );
-
-      res.json({
-        token,
-        user: toPublicUser(user),
-        recoveryLogin: true, // hint to frontend: password rotation required
+    // ── RECOVERY KEY: permanently disabled ─────────────────────────────────────
+    if (req.headers["x-ceo-recovery-key"]) {
+      logger.warn({ ip: req.ip }, "[auth] recovery key login attempted — permanently disabled");
+      res.status(410).json({
+        success: false,
+        code:    "auth_failed",
+        error:   "Recovery key login is disabled. Use password login and reset-password to change credentials.",
       });
       return;
     }
 
-    // ── PATH A: Normal password login (all users) ───────────────────────────────
+    // ── Password login (all users) ──────────────────────────────────────────────
     const parsed = LoginSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({

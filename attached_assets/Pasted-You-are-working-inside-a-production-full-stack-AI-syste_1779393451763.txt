@@ -1,0 +1,156 @@
+You are working inside a production full-stack AI system (Node.js + PostgreSQL + AI services).
+
+OBJECTIVE:
+LOCK AUTHENTICATION SYSTEM INTO A SINGLE RELIABLE MODE:
+→ Password-based CEO login only
+→ Reset-password is the only valid recovery mechanism
+→ REMOVE all recovery-key logic paths from effective execution
+
+DO NOT:
+- change database schema
+- redesign auth architecture
+- introduce new auth systems
+- modify AI provider logic
+- create alternative login methods
+
+------------------------------------------------------------
+1 — REMOVE RECOVERY KEY DEPENDENCY (CRITICAL)
+------------------------------------------------------------
+
+System must:
+
+- Ignore or disable any “recovery key” login flow in backend logic
+- If recovery key routes exist:
+  → they must return 410 Gone OR 403 Forbidden
+  → they must NOT authenticate users
+  → they must NOT issue JWT tokens
+  → they must NOT modify password state
+
+Frontend recovery UI may still exist, but backend MUST NOT support it.
+
+------------------------------------------------------------
+2 — CEO LOGIN MUST BE SINGLE SOURCE OF TRUTH
+------------------------------------------------------------
+
+CEO authentication rules:
+
+- ONLY PostgreSQL password_hash is valid source
+- NO fallback users
+- NO repairCeoAccount password overwrites
+- NO auto-reset or auto-repair of passwords on boot
+
+BOOT RULES:
+- If CEO exists → NEVER touch password_hash
+- If CEO missing → create CEO with env CEO_PASSWORD ONLY ONCE
+- After creation → system becomes immutable for password field
+
+------------------------------------------------------------
+3 — LOGIN FLOW ENFORCEMENT
+------------------------------------------------------------
+
+/api/auth/login must:
+
+- validate username strictly against DB
+- validate password strictly against scrypt hash
+- return 200 ONLY on success
+- return 401 for all failures
+
+NO EXCEPTIONS:
+- no implicit CEO creation
+- no silent recovery fallback
+- no alternative auth paths
+
+Add internal logging only:
+- user_not_found
+- password_mismatch
+BUT never expose internal reasons to client.
+
+------------------------------------------------------------
+4 — RESET PASSWORD IS THE ONLY RECOVERY MECHANISM
+------------------------------------------------------------
+
+/api/auth/reset-password must:
+
+- require valid JWT session ONLY
+- require currentPassword verification
+- update ONLY password_hash in PostgreSQL
+- persist across restarts
+- NOT interact with recovery-key system
+- NOT generate temporary passwords
+- NOT create new users
+
+------------------------------------------------------------
+5 — BOOT BEHAVIOR LOCKDOWN
+------------------------------------------------------------
+
+On server startup:
+
+- Load DB connection first
+- Load users from PostgreSQL
+- Validate CEO exists exactly once
+- Validate password_hash is NOT null
+- DO NOT mutate CEO credentials under any condition
+
+REMOVE any behavior that:
+- repairs CEO password
+- regenerates hashes on boot
+- overwrites authentication state
+
+------------------------------------------------------------
+6 — ENV VALIDATION
+------------------------------------------------------------
+
+Required secrets:
+
+- DATABASE_URL (must exist or FAIL BOOT)
+- JWT_SECRET (must exist or FAIL BOOT)
+- SESSION_SECRET (must exist or FAIL BOOT)
+- GEMINI_API_KEY (if AI enabled)
+- CEO_USERNAME
+
+Optional:
+- CEO_PASSWORD (ONLY used for first-time CEO creation if missing)
+
+------------------------------------------------------------
+7 — ERROR STANDARDIZATION
+
+All auth responses must follow:
+
+{
+  success: false,
+  code: "auth_failed" | "user_not_found" | "password_mismatch" | "invalid_request" | "internal_error",
+  error: string
+}
+
+NO raw stack traces to client.
+
+------------------------------------------------------------
+8 — FINAL OUTPUT FORMAT
+
+After applying changes, print:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+AUTH LOCK STATUS REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LOGIN FLOW:        PASS / FAIL
+RECOVERY FLOW:     DISABLED / BLOCKED
+CEO IMMUTABILITY:  PASS / FAIL
+RESET PASSWORD:    PASS / FAIL
+DB INTEGRITY:      PASS / FAIL
+ENV VALIDATION:    PASS / FAIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OVERALL:           LOCKED / DEGRADED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Include ONLY real failures. No simulated success.
+
+------------------------------------------------------------
+FINAL GOAL:
+
+System must behave as:
+- SINGLE login path (password only)
+- NO recovery-key authentication ever
+- NO CEO auto-repair mutations
+- NO credential drift across restarts
+- FULL PostgreSQL truth consistency
+- RESET PASSWORD is the ONLY recovery mechanism
