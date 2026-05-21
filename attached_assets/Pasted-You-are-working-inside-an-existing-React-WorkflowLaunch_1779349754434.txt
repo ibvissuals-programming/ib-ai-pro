@@ -1,0 +1,123 @@
+You are working inside an existing React WorkflowLauncher system that already has 7 completed UX phases:
+
+- Recent Workflows (localStorage, max 3, deduped)
+- Workflow Counts (×N per preset)
+- Top Workflows (top 2 ranking)
+- Clear History (two-step confirm)
+- Cmd/Ctrl + K shortcut (input-safe)
+- ⌘K / Ctrl K hint badge
+- Native tooltip (title attribute)
+
+MISSION:
+AUDIT + STABILIZE + CONSOLIDATE the WorkflowLauncher UX so it remains lightweight, non-redundant, and production-safe.
+
+CRITICAL RULES:
+- NO backend changes
+- NO new APIs
+- NO new global state libraries
+- NO duplication of existing features
+- NO additional notification systems unless explicitly required
+- ALL persistence stays localStorage/sessionStorage only
+- NO new UX layers that duplicate existing signals
+- KEEP UI minimal, fast, and deterministic
+
+---
+
+PHASE 1 — UX OVERLAP FIX
+Identify and remove or merge redundant UI signals:
+
+- Ensure "Recent Workflows", "Top Workflows", and "Workflow Counts" are not visually competing
+- Prevent multiple indicators showing the same meaning (e.g. recency vs activity vs usage)
+- Ensure only ONE primary attention signal exists per section
+
+RULE:
+If two UI elements communicate similar intent → merge or prioritize one
+
+---
+
+PHASE 2 — ACTIVITY INDICATOR CONSOLIDATION
+If a "new activity dot" or similar indicator exists or was added:
+
+- Replace any multi-source indicator logic with SINGLE SOURCE OF TRUTH:
+  → localStorage ib_ai_recent_workflows only
+
+- Remove sessionStorage-based duplication unless strictly needed
+- Ensure indicator resets ONLY when WorkflowLauncher is opened
+
+---
+
+PHASE 3 — STATE SIMPLIFICATION
+- Remove any unnecessary useState/useEffect combinations that duplicate:
+  - recent workflows tracking
+  - workflow counts
+  - activity detection
+
+RULE:
+Derived UI values must be computed, not stored, unless persistence is required.
+
+---
+
+PHASE 4 — LOCAL STORAGE SANITIZATION
+Ensure consistent storage schema:
+
+ib_ai_recent_workflows:
+- max 3 entries
+- deduped by (name + type + mode)
+- safe JSON parse fallback
+
+ib_ai_workflow_counts:
+- { [presetId]: number }
+- only increment on preset launch
+
+Add safe guards:
+- try/catch JSON parsing
+- silent failure on quota errors
+
+---
+
+PHASE 5 — UI PRIORITY CLEANUP
+Ensure this strict hierarchy:
+
+1. Top Workflows (only if data exists)
+2. Recent Workflows (always below top)
+3. Preset Grid (default state)
+
+Remove:
+- duplicate badges that show same information twice
+- redundant tooltip-like text if already covered by shortcut badge
+
+---
+
+PHASE 6 — INTERACTION CONSISTENCY
+- All “Re-run workflow” actions must use handleLaunch ONLY
+- No duplicate navigation logic anywhere
+- No alternative launch paths
+
+---
+
+PHASE 7 — FINAL SAFETY CHECK
+Ensure:
+
+- No render loops
+- No duplicated useEffects
+- No conflicting storage keys
+- No overlapping UI meaning
+- Mobile layout remains clean
+- Keyboard shortcut still works safely (Cmd/Ctrl+K)
+- Workflow restore via URL params remains untouched
+
+---
+
+OUTPUT RULE:
+- Only modify WorkflowLauncher.jsx unless absolutely required
+- Prefer removal/merge over addition
+- Keep UI simpler than before, not more complex
+- Do NOT introduce new UX features
+- Focus on stability, clarity, and deduplication
+
+END GOAL:
+A clean WorkflowLauncher that:
+- has ONE clear activity signal system
+- avoids UI redundancy
+- keeps localStorage lightweight and deterministic
+- is fast, predictable, and production-stable
