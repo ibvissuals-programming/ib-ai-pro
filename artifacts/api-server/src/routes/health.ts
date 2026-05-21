@@ -121,9 +121,10 @@ router.get(["/health", "/healthz"], async (_req, res) => {
   // providerReady:  the feature can accept requests right now
   // veoNote: Veo access requires specific API key permissions beyond GEMINI_API_KEY
   let systemsDegraded = false;
+  let geminiOk = false;
   try {
-    const aiSt     = getAiStatus();
-    const geminiOk = aiSt.geminiAvailable;
+    const aiSt = getAiStatus();
+    geminiOk   = aiSt.geminiAvailable;
     const videoOk  = isVideoEnabled();
 
     if (!geminiOk) systemsDegraded = true;
@@ -175,12 +176,24 @@ router.get(["/health", "/healthz"], async (_req, res) => {
   const bootState = getBootState();
   const bootField = bootState === "degraded" ? "degraded" : "success";
 
+  const sys = checks["systems"] ?? {};
   res.json({
-    status:   (degraded || systemsDegraded) ? "degraded" : "ok",
-    boot:     bootField,
-    uptime:   Math.floor(process.uptime()),
-    mode:     "full",
-    systems:  checks["systems"],
+    status:            (degraded || systemsDegraded) ? "degraded" : "ok",
+    boot:              bootField,
+    uptime:            Math.floor(process.uptime()),
+    mode:              "full",
+    // Semantic aliases consumed by monitoring / Phase 7 spec
+    providerMode:      geminiOk ? "gemini-primary" : "degraded",
+    importReady:       bootState !== "degraded",
+    bootstrapComplete: bootState !== "degraded",
+    capabilities: {
+      chat:   geminiOk,
+      image:  sys.image?.ok  ?? false,
+      tts:    sys.tts?.ok    ?? false,
+      video:  sys.video?.ok  ?? false,
+      prompt: sys.prompt?.ok ?? false,
+    },
+    systems:  sys,
     queue:    checks["queue"]    ?? { ok: false },
     storage:  checks["storage"]  ?? { ok: false },
     database: checks["postgres"] ?? { ok: true, note: "postgres not enabled" },

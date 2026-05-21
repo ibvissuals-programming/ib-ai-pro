@@ -20,17 +20,23 @@ function classifyStreamError(err) {
     return 'AI service temporarily unavailable. Please try again in a moment.';
   }
   if (msg === 'UNAUTHENTICATED') {
-    return 'Your session has expired. Please log in again.';
+    return 'Your session has expired. Please sign in again.';
   }
   if (msg === 'CREDITS_EXHAUSTED') {
-    return "You've used all your chat credits. Your balance resets daily.";
+    return "You've used all available credits.";
+  }
+  if (msg === 'RATE_LIMITED') {
+    return 'Too many requests. Please wait a moment and try again.';
   }
   if (msg.startsWith('API error 4')) {
     return 'Request rejected by the AI service. Please try again.';
   }
   if (msg.includes('STREAM_ERROR')) {
     const code = msg.split('STREAM_ERROR:')[1] ?? 'unknown';
-    return `AI generation error (${code}). Please try again.`;
+    if (code === 'provider_unavailable') return 'The AI provider is temporarily unavailable. Please try again.';
+    if (code === 'provider_not_configured') return 'This feature requires additional API access.';
+    if (code === 'network_timeout') return 'The request took too long. Please retry.';
+    return 'AI generation error. Please try again.';
   }
   if (msg.includes('Empty response')) {
     return 'AI returned an empty response. Please try again.';

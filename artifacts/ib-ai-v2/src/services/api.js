@@ -50,12 +50,33 @@ export async function* streamChat(messages, options = {}) {
     throw err;
   }
 
+  // One automatic retry on 429 — wait Retry-After (capped 5 s), then try once more
+  if (response.status === 429) {
+    const retryAfterMs = Math.min(
+      parseInt(response.headers.get('Retry-After') ?? '2', 10) * 1000,
+      5_000,
+    );
+    await new Promise(r => setTimeout(r, retryAfterMs));
+    try {
+      response = await fetch(CHAT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ messages, ...(sessionId ? { sessionId } : {}) }),
+        signal: controller.signal,
+      });
+    } catch (retryErr) {
+      clearTimeout(timer);
+      throw retryErr;
+    }
+  }
+
   if (!response.ok) {
     clearTimeout(timer);
     const body = await response.text().catch(() => '');
-    // Propagate 401/402 codes distinctly for the UI to handle
+    // Propagate 401/402/429 codes distinctly for the UI to handle
     if (response.status === 401) throw new Error('UNAUTHENTICATED');
     if (response.status === 402) throw new Error('CREDITS_EXHAUSTED');
+    if (response.status === 429) throw new Error('RATE_LIMITED');
     throw new Error(`API error ${response.status}: ${body}`);
   }
 

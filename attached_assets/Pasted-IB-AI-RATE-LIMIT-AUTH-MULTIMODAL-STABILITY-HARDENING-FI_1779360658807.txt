@@ -1,0 +1,347 @@
+IB AI — RATE LIMIT + AUTH + MULTIMODAL STABILITY HARDENING (FINAL CREDIT-EFFICIENT MASTER PROMPT)
+
+MISSION:
+Perform a FINAL production-hardening pass focused ONLY on:
+
+- auth/session stability
+- rate-limit UX
+- AI provider fallback reliability
+- multimodal reliability (image, TTS, video)
+- response contract consistency
+- CEO/admin stability
+- graceful degradation
+
+DO NOT redesign architecture.
+DO NOT refactor unrelated systems.
+DO NOT add unnecessary abstractions.
+DO NOT touch already-stable systems unless required for this mission.
+
+PRIORITY ORDER:
+
+1. Prevent login/session failures
+2. Prevent AI request failures
+3. Prevent broken video/image states
+4. Improve graceful fallback behavior
+5. Improve frontend error clarity
+6. Preserve credits + runtime stability
+7. Keep changes minimal and additive
+
+==================================================
+PHASE 1 — AUTH & SESSION HARDENING
+
+AUDIT:
+
+- verifySession()
+- auth middleware
+- token parsing
+- CEO bootstrap logic
+- frontend authService
+- session persistence
+
+FIXES REQUIRED:
+
+1. NEVER clear auth token except on:
+   
+   - explicit 401
+   - TOKEN_INVALID
+   - UNAUTHENTICATED
+
+2. Any transient:
+   
+   - 5xx
+   - timeout
+   - malformed provider response
+     MUST preserve current session.
+
+3. Add safe fallback:
+   
+   - if /auth/me fails transiently,
+     return cached user temporarily.
+
+4. Ensure:
+   CEO auto-bootstrap always works when:
+   
+   - CEO_PASSWORD missing
+   - CEO_RECOVERY_KEY missing
+
+5. Log temporary CEO password ONCE only.
+
+6. Prevent logout loops on frontend.
+
+VALIDATION:
+
+- login survives backend restart
+- no random logout
+- no “Invalid server response”
+- CEO login works reliably
+
+==================================================
+PHASE 2 — AI PROVIDER FAILSAFE
+
+AUDIT:
+
+- llm.ts
+- provider guards
+- chat route
+- Groq fallback logic
+- Gemini fallback logic
+
+FIXES REQUIRED:
+
+1. ALL Groq failures MUST gracefully fallback to Gemini:
+   
+   - 401
+   - invalid model
+   - provider unavailable
+   - timeout
+   - rate limit
+
+2. NEVER expose raw provider errors to frontend.
+
+3. Normalize ALL provider failures to:
+   {
+   error: true,
+   code: "provider_unavailable"
+   }
+
+4. Ensure chat never hard-crashes because of:
+
+- bad provider key
+- unavailable model
+- provider quota issue
+
+5. If BOTH providers fail:
+
+- graceful frontend error
+- no SSE corruption
+- no hanging streams
+
+VALIDATION:
+
+- remove GROQ key → chat still works
+- invalid Groq model → Gemini fallback works
+- SSE stream closes cleanly
+
+==================================================
+PHASE 3 — RESPONSE CONTRACT ENFORCEMENT
+
+MISSION:
+ALL API routes must return proper JSON.
+
+FIX:
+
+1. Add global JSON 404 handler:
+
+- /api/* unmatched routes
+  → application/json ONLY
+
+2. NEVER allow Express HTML fallback pages.
+
+3. Ensure all routes return:
+
+- application/json
+  OR
+- text/event-stream
+
+VALIDATION:
+GET /api/nonexistent
+→ JSON 404 only
+
+==================================================
+PHASE 4 — VIDEO PIPELINE STABILITY
+
+AUDIT:
+
+- routes/video.ts
+- videoService.ts
+- VideoStudio.jsx
+
+FIXES REQUIRED:
+
+1. provider_not_configured
+   MUST display:
+   "Not Available"
+   NOT:
+   "No Access"
+
+2. NEVER save videoUrl if no file exists.
+
+3. Ensure Veo permission failures:
+
+- 403
+- PERMISSION_DENIED
+- model unavailable
+  return:
+  provider_not_configured
+
+4. Prevent fake “completed” jobs.
+
+5. Ensure polling never loops forever.
+
+6. Add max polling timeout safeguard.
+
+7. Frontend must show:
+   “API access required”
+   instead of misleading failure language.
+
+VALIDATION:
+
+- no fake MP4 entries
+- history stable
+- graceful unavailable state
+
+==================================================
+PHASE 5 — RATE LIMIT UX HARDENING
+
+MISSION:
+Improve frontend visibility without backend complexity.
+
+FIXES REQUIRED:
+
+1. Ensure ALL policyEngine-gated routes emit:
+
+- X-RateLimit-Limit
+- X-RateLimit-Remaining
+- X-RateLimit-Reset
+
+2. Frontend:
+   show warning badge ONLY when remaining <= 5
+
+3. Add live countdown timer when exhausted.
+
+4. CEO role:
+
+- bypass limits
+- no rate-limit headers
+
+5. Add ONE retry only for transient 429s:
+
+- exponential backoff
+- no retry loops
+
+VALIDATION:
+
+- headers visible in curl
+- badge updates live
+- retry works once only
+
+==================================================
+PHASE 6 — FRONTEND ERROR NORMALIZATION
+
+MISSION:
+Users should NEVER see raw technical failures.
+
+NORMALIZE:
+UNAUTHENTICATED
+→ “Your session expired. Please sign in again.”
+
+CREDITS_EXHAUSTED
+→ “You’ve used all available credits.”
+
+provider_unavailable
+→ “The AI provider is temporarily unavailable.”
+
+provider_not_configured
+→ “This feature requires additional API access.”
+
+network_timeout
+→ “The request took too long. Please retry.”
+
+RULES:
+
+- no raw stack traces
+- no provider internals
+- no HTML dumps
+- no JSON parse explosions
+
+==================================================
+PHASE 7 — MULTIMODAL RELIABILITY
+
+AUDIT:
+
+- image generation
+- image editing
+- TTS
+- video
+- health endpoints
+
+REQUIRED:
+
+1. Image edit modes:
+
+- polish
+- cinematic
+- luxury
+- restore
+  must remain stable.
+
+2. Identity lock pipeline must remain active.
+
+3. TTS:
+
+- retry transient provider failures
+- cleanup orphan temp files
+- no memory leak intervals
+
+4. Video:
+
+- async jobs only
+- never block request thread
+
+5. Health endpoint:
+   include:
+   {
+   providerMode,
+   importReady,
+   bootstrapComplete,
+   creatorSystem,
+   capabilities
+   }
+
+==================================================
+PHASE 8 — FINAL VALIDATION PASS
+
+RUN:
+
+- auth validation
+- SSE validation
+- JSON response validation
+- video unavailable flow
+- image edit flow
+- TTS generation
+- health endpoint
+- rate-limit headers
+- CEO login flow
+
+CONFIRM:
+✔ no HTML responses
+✔ no broken auth
+✔ no fake video success
+✔ no provider crashes
+✔ no raw provider errors
+✔ no session wipes
+✔ no render loops
+✔ no duplicate polling
+✔ no type errors from new code
+
+IMPORTANT RULES:
+
+- MINIMAL edits only
+- additive changes preferred
+- DO NOT refactor architecture
+- DO NOT rewrite stable systems
+- DO NOT create new dependencies unless absolutely required
+- preserve current workflows
+- preserve current routing
+- preserve current storage system
+
+AFTER COMPLETION:
+Return ONLY:
+
+1. concise audit summary
+2. files changed
+3. validation results
+4. remaining risks (if any)
+
+DO NOT continue suggesting extra features afterward.
+STOP after validation.
