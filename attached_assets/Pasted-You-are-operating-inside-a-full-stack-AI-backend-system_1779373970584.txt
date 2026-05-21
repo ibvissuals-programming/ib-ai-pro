@@ -1,0 +1,128 @@
+You are operating inside a full-stack AI backend system with a broken CEO authentication state after migration.
+
+Your task is to PERMANENTLY FIX CEO LOGIN by repairing database state consistency and restoring deterministic authentication.
+
+DO NOT introduce new architecture. DO NOT create duplicate CEO accounts. DO NOT repeatedly regenerate credentials. DO NOT rely on recovery keys as a runtime dependency.
+
+------------------------------------------------------------
+1 — DIAGNOSE CEO STATE (MANDATORY FIRST STEP)
+------------------------------------------------------------
+
+Check PostgreSQL for CEO user:
+
+- username = "ibaiceo"
+- verify exactly ONE record exists
+
+Capture:
+- userId
+- createdAt
+- password_hash existence
+
+Determine state:
+
+CASE A:
+- CEO does NOT exist → system is fresh install state
+
+CASE B:
+- CEO exists but password_hash is invalid/null → corrupted auth state
+
+CASE C:
+- CEO exists and password_hash exists → normal state but login mismatch
+
+LOG detected case clearly.
+
+------------------------------------------------------------
+2 — SINGLE SOURCE OF TRUTH ENFORCEMENT
+------------------------------------------------------------
+
+Ensure:
+- ONLY ONE CEO account exists in entire system
+- NO duplicate CEO accounts are allowed under any circumstance
+- Memory store and PostgreSQL must be synchronized
+
+If duplicates exist:
+- DELETE extra CEO records
+- KEEP the oldest valid account ONLY
+
+------------------------------------------------------------
+3 — FIX AUTH ROOT CAUSE (DEPENDING ON CASE)
+
+CASE A — Fresh Install (CEO missing):
+- Create CEO account ONCE
+- Set username = "ibaiceo"
+- Set password using environment variable CEO_PASSWORD if available
+- Otherwise set temporary secure password and log it ONCE
+- Store hashed password in PostgreSQL only
+
+CASE B — Corrupted Password State:
+- DO NOT recreate user
+- Reset password_hash using secure hashing function
+- Ensure new password matches:
+  - CEO_PASSWORD env variable if available
+  - otherwise fallback to a generated secure password (log it once)
+
+CASE C — Normal user but login failing:
+- Debug verifyPassword() function
+- Ensure correct hashing algorithm is used consistently
+- Ensure no double-hashing or salt mismatch exists
+- Ensure DB retrieval returns correct user record
+
+------------------------------------------------------------
+4 — REMOVE BROKEN BOOT LOGIC
+------------------------------------------------------------
+
+Disable any of the following if present:
+- repairCeoAccount() auto-overwriting password
+- boot-time CEO regeneration
+- repeated user seeding logic
+- any fallback auth bypass paths
+
+CEO must NEVER be modified during boot if it already exists.
+
+------------------------------------------------------------
+5 — AUTH FLOW LOCK (CRITICAL)
+
+Enforce strict login flow:
+
+login(username, password):
+  1. fetch user from PostgreSQL ONLY
+  2. verify password against stored hash ONLY
+  3. if mismatch → fail immediately
+  4. never trigger repair logic during login
+  5. never fallback to memory store for authentication
+
+------------------------------------------------------------
+6 — FINAL VALIDATION TEST (MANDATORY)
+
+After fix, run:
+
+A) CEO LOGIN TEST
+- correct password → MUST PASS
+- wrong password → MUST FAIL
+
+B) STATE TEST
+- only ONE CEO exists
+- password_hash is non-null
+- DB and memory match exactly
+
+C) STABILITY TEST
+- restart server 3 times
+- CEO login must remain consistent across all restarts
+
+------------------------------------------------------------
+7 — FINAL OUTPUT
+
+Print:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CEO AUTH RECOVERY REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STATE: (FRESH_INSTALL | CORRUPTED | VALID)
+CEO_COUNT: 1
+PASSWORD_STATE: VALID / RESET / MISSING
+LOGIN_TEST: PASS / FAIL
+STABILITY: PASS / FAIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FINAL RULE:
+System must guarantee deterministic CEO login across all deployments without manual intervention after this fix.

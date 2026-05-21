@@ -553,7 +553,8 @@ export function getCeoBootstrapState(): CeoBootstrapState {
  *      - Logs temp password ONCE clearly — remove CEO_PASSWORD after first login.
  *   3. If CEO account exists:
  *      - Ensures role === "ceo" (upgrades if demoted).
- *      - If CEO_PASSWORD is set → updates password hash (one-time repair).
+ *      - Credentials are IMMUTABLE — password is NEVER overwritten during boot.
+ *      - To change the CEO password use the /api/auth/change-password endpoint.
  *   4. NO other user record is ever read, modified, or deleted.
  */
 // ── Index integrity check (called by startupIntegrityCheck.ts) ───────────────
