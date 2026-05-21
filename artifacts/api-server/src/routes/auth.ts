@@ -166,7 +166,7 @@ router.post(
       // Recovery key must be configured server-side — if not, refuse with same
       // generic error to avoid leaking that recovery exists.
       if (!configuredKey || typeof incomingRecoveryKey !== "string") {
-        res.status(401).json({ error: "Invalid username or password" });
+        res.status(401).json({ success: false, code: "auth_failed", error: "Invalid username or password" });
         return;
       }
 
@@ -179,21 +179,21 @@ router.post(
 
       if (!keysMatch) {
         logger.warn({ ip: req.ip }, "[auth] CEO recovery key mismatch");
-        res.status(401).json({ error: "Invalid username or password" });
+        res.status(401).json({ success: false, code: "auth_failed", error: "Invalid username or password" });
         return;
       }
 
       // Key is valid — extract username from body (password not required).
       const username = (req.body as Record<string, unknown>)?.username;
       if (typeof username !== "string" || username.length < 1) {
-        res.status(400).json({ error: "Username required" });
+        res.status(400).json({ success: false, code: "invalid_request", error: "Username required" });
         return;
       }
 
       const user = authenticateCeoByRecoveryKey(username);
       if (!user) {
         // username wasn't the CEO — reject with generic error
-        res.status(401).json({ error: "Invalid username or password" });
+        res.status(401).json({ success: false, code: "auth_failed", error: "Invalid username or password" });
         return;
       }
 
@@ -238,8 +238,9 @@ router.post(
     const parsed = LoginSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({
+        success: false,
+        code: "invalid_request",
         error: "Invalid request",
-        details: parsed.error.flatten(),
       });
       return;
     }
@@ -284,7 +285,7 @@ router.post(
         metadata:  { username, ip: req.ip, reason: resolvedReason },
         errorCode: "INVALID_CREDENTIALS",
       });
-      res.status(401).json({ error: "Invalid username or password" });
+      res.status(401).json({ success: false, code: "auth_failed", error: "Invalid username or password" });
       return;
     }
 
@@ -352,8 +353,9 @@ router.post(
     const parsed = ChangePasswordSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({
+        success: false,
+        code: "invalid_request",
         error: "Invalid request",
-        details: parsed.error.flatten(),
       });
       return;
     }
@@ -374,7 +376,7 @@ router.post(
     // Normal sessions must supply and verify their current password
     if (!wasRecoverySession) {
       if (!currentPassword) {
-        res.status(400).json({ error: "Current password is required" });
+        res.status(400).json({ success: false, code: "invalid_request", error: "Current password is required" });
         return;
       }
       if (!checkCurrentPassword(userId, currentPassword)) {
@@ -391,19 +393,19 @@ router.post(
           metadata:  { username: req.user!.username, reason: "incorrect_current_password" },
           errorCode: "INVALID_CREDENTIALS",
         });
-        res.status(401).json({ error: "Current password is incorrect" });
+        res.status(401).json({ success: false, code: "password_mismatch", error: "Current password is incorrect" });
         return;
       }
       // Prevent reuse of current password
       if (currentPassword === newPassword) {
-        res.status(400).json({ error: "New password must be different from the current password" });
+        res.status(400).json({ success: false, code: "invalid_request", error: "New password must be different from the current password" });
         return;
       }
     }
 
     const ok = await changeUserPassword(userId, newPassword);
     if (!ok) {
-      res.status(404).json({ error: "User not found" });
+      res.status(404).json({ success: false, code: "user_not_found", error: "User not found" });
       return;
     }
 
@@ -487,8 +489,9 @@ router.post(
     const parsed = ResetPasswordSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({
+        success: false,
+        code:    "invalid_request",
         error:   "Invalid request",
-        details: parsed.error.flatten(),
       });
       return;
     }
@@ -509,7 +512,9 @@ router.post(
     // Identical password guard
     if (currentPassword === newPassword) {
       res.status(400).json({
-        error: "New password must be different from the current password",
+        success: false,
+        code:    "invalid_request",
+        error:   "New password must be different from the current password",
       });
       return;
     }
@@ -529,7 +534,7 @@ router.post(
         metadata:  { username, reason: "incorrect_current_password" },
         errorCode: "INVALID_CREDENTIALS",
       });
-      res.status(401).json({ error: "Current password is incorrect" });
+      res.status(401).json({ success: false, code: "password_mismatch", error: "Current password is incorrect" });
       return;
     }
 
@@ -545,7 +550,7 @@ router.post(
         metadata:  { username, reason: "user_not_found" },
         errorCode: "USER_NOT_FOUND",
       });
-      res.status(404).json({ error: "User not found" });
+      res.status(404).json({ success: false, code: "user_not_found", error: "User not found" });
       return;
     }
 

@@ -1,0 +1,162 @@
+You are working inside a production full-stack AI system (Node.js + PostgreSQL + AI providers: Gemini chat, image, video, TTS).
+
+OBJECTIVE:
+Perform a FULL AUTH + SYSTEM RECOVERY STABILITY PASS focused ONLY on:
+1. Fixing CEO login issues
+2. Restoring correct password/reset behavior
+3. Ensuring recovery key OR reset-password works deterministically
+4. Verifying system health across all AI services
+5. Eliminating environment/secrets inconsistencies
+
+DO NOT:
+- redesign architecture
+- add new features beyond auth recovery fixes
+- change database schema unnecessarily
+- refactor AI pipeline logic
+- introduce new auth systems
+
+------------------------------------------------------------
+1 — CEO AUTH FIX (CRITICAL PRIORITY)
+------------------------------------------------------------
+
+Ensure EXACT consistency between:
+
+- PostgreSQL CEO record (single source of truth)
+- in-memory user store
+- repairCeoAccount() boot logic
+- login verification flow
+
+RULES:
+- CEO account must be EXACTLY ONE record
+- NEVER overwrite password_hash on boot if CEO exists
+- NEVER regenerate CEO credentials automatically unless explicitly missing
+- login must ALWAYS validate against PostgreSQL hash first
+- fallback logic must NOT create new CEO users under any condition
+
+------------------------------------------------------------
+2 — PASSWORD RESET CONSISTENCY (CRITICAL)
+------------------------------------------------------------
+
+Ensure BOTH systems are valid and aligned:
+
+A) /api/auth/reset-password
+- Requires valid JWT session
+- Requires currentPassword verification
+- Must update ONLY password_hash
+- Must persist correctly in PostgreSQL
+- Must survive restart
+
+B) Recovery Key Flow (if still present in UI)
+- Must map to SAME final password update logic as reset-password
+- Must NOT bypass hashing or create alternate password system
+- Must NOT generate temporary passwords silently
+- Must NOT create duplicate CEO entries
+
+------------------------------------------------------------
+3 — LOGIN FLOW HARDENING
+------------------------------------------------------------
+
+Fix login so that:
+
+- correct password ALWAYS returns 200 + token
+- wrong password ALWAYS returns 401
+- no fallback CEO creation ever occurs during login
+- no silent auth bypass paths exist
+
+Add explicit logging:
+- user_not_found
+- password_mismatch
+- invalid_ceo_state (if applicable)
+
+BUT do NOT expose sensitive details to client responses.
+
+------------------------------------------------------------
+4 — ENV / SECRETS VALIDATION (IMPORTANT)
+------------------------------------------------------------
+
+On boot, validate:
+
+REQUIRED:
+- JWT_SECRET
+- SESSION_SECRET
+- DATABASE_URL
+- GEMINI_API_KEY (if AI enabled)
+- CEO_USERNAME
+
+OPTIONAL:
+- CEO_PASSWORD (only used for initial bootstrap if CEO missing)
+
+RULE:
+If ANY required secret missing → FAIL FAST with clear error and stop boot.
+
+------------------------------------------------------------
+5 — DATABASE INTEGRITY CHECK
+------------------------------------------------------------
+
+On startup:
+- confirm exactly ONE CEO user exists
+- confirm password_hash is NOT null
+- confirm username matches CEO_USERNAME
+- ensure no duplicate role="ceo" users exist
+
+If mismatch:
+- attempt safe repair ONLY of role/username consistency
+- NEVER reset password automatically
+
+------------------------------------------------------------
+6 — AI SYSTEM HEALTH CHECK (POST-BOOT ONLY)
+------------------------------------------------------------
+
+Run lightweight validation only:
+
+- Gemini/chat reachable OR properly disabled
+- image generation route returns correct status (no fake output)
+- video route respects VIDEO_ENABLED flag
+- TTS validates input and returns correct error codes when invalid
+
+DO NOT call real AI credits during tests.
+
+------------------------------------------------------------
+7 — ERROR STANDARDIZATION
+------------------------------------------------------------
+
+All auth-related errors must follow:
+
+{
+  success: false,
+  code: "auth_failed" | "password_mismatch" | "user_not_found" | "invalid_request" | "internal_error",
+  error: string
+}
+
+Never leak raw stack traces or provider errors to client.
+
+------------------------------------------------------------
+8 — FINAL OUTPUT FORMAT (STRICT)
+
+Return ONLY:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+AUTH + SYSTEM STABILITY REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CEO LOGIN:        PASS / FAIL
+RESET PASSWORD:   PASS / FAIL
+RECOVERY FLOW:    PASS / FAIL / SKIP
+DB INTEGRITY:     PASS / FAIL
+ENV VALIDATION:   PASS / FAIL
+AI SERVICES:      PASS / FAIL
+------------------------------------------------------
+OVERALL:          STABLE / DEGRADED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Include ONLY real failures. No fake passes.
+
+------------------------------------------------------------
+FINAL GOAL:
+
+System must achieve:
+- deterministic CEO login success
+- single-source password truth (Postgres)
+- no recovery/login contradictions
+- no duplicate CEO creation ever
+- safe restart persistence
+- zero auth drift across deployments

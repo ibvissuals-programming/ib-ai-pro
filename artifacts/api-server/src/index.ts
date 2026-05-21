@@ -61,7 +61,14 @@ function validateSecrets(): boolean {
 
   const ceoUsername = process.env["CEO_USERNAME"];
   if (!ceoUsername) {
-    logger.warn("[secrets] CEO_USERNAME is not set — no CEO account will be bootstrapped");
+    logger.error("[secrets] CEO_USERNAME is not set — CEO account cannot be bootstrapped or verified. Set this secret and restart.");
+    valid = false;
+  }
+
+  const geminiKey = process.env["GEMINI_API_KEY"];
+  if (!geminiKey) {
+    logger.error("[secrets] GEMINI_API_KEY is not set — AI features will be disabled. Set this secret and restart.");
+    valid = false;
   }
 
   const ceoRecovery = process.env["CEO_RECOVERY_KEY"];

@@ -619,6 +619,27 @@ export function checkCurrentPassword(userId: string, password: string): boolean 
   return verifyPassword(password, user.passwordHash);
 }
 
+/**
+ * getCeoUser() — returns the full CEO User record for integrity checks.
+ * Used only by startupIntegrityCheck to verify passwordHash is non-null.
+ * Never expose passwordHash to clients or logs.
+ */
+export function getCeoUser(): User | null {
+  const ceoUsername = process.env["CEO_USERNAME"]?.trim().toLowerCase();
+  if (!ceoUsername) return null;
+  return getUserByUsername(ceoUsername) ?? null;
+}
+
+/**
+ * getAllCeoRoleUsers() — returns all users with role="ceo".
+ * Used by startupIntegrityCheck to detect rogue CEO role assignments.
+ */
+export function getAllCeoRoleUsers(): { id: string; username: string }[] {
+  return Array.from(store.values())
+    .filter((u) => u.role === "ceo")
+    .map((u) => ({ id: u.id, username: u.username }));
+}
+
 export async function repairCeoAccount(): Promise<void> {
   const ceoUsername = process.env["CEO_USERNAME"]?.trim().toLowerCase();
 

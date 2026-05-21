@@ -18,7 +18,7 @@ import { logger } from "./logger";
 import { logInvariantViolation } from "./invariant";
 import { pgLoadAllUsers } from "./pgUserStore";
 import { isPostgresEnabled } from "./systemConfig";
-import { getAllUsers, runIndexIntegrityCheck } from "./userStore";
+import { getAllUsers, runIndexIntegrityCheck, getCeoUser, getAllCeoRoleUsers } from "./userStore";
 import { emit } from "./eventBus";
 
 export interface IntegrityCheckResult {
@@ -86,7 +86,30 @@ export async function runStartupIntegrityCheck(): Promise<IntegrityCheckResult> 
         );
         violations.push(`ceo_wrong_role:${ceo.role}`);
       } else {
-        ceoVerified = true;
+        // Verify passwordHash is non-null and structurally valid (salt:hash format)
+        const ceoFull = getCeoUser();
+        if (!ceoFull || !ceoFull.passwordHash || !ceoFull.passwordHash.includes(":")) {
+          logInvariantViolation(
+            `CEO account "${ceoUsername}" has a null or invalid password hash`,
+            { ceoUsername },
+          );
+          violations.push(`ceo_invalid_password_hash`);
+        } else {
+          ceoVerified = true;
+        }
+      }
+    }
+
+    // Detect any user with role="ceo" that is NOT the configured CEO username
+    // (rogue elevation — should never happen)
+    const allCeoRoleUsers = getAllCeoRoleUsers();
+    for (const u of allCeoRoleUsers) {
+      if (u.username !== ceoUsername) {
+        logInvariantViolation(
+          `User "${u.username}" (${u.id}) has role="ceo" but does not match CEO_USERNAME "${ceoUsername}"`,
+          { username: u.username, id: u.id, ceoUsername },
+        );
+        violations.push(`rogue_ceo_role:${u.username}`);
       }
     }
   }
