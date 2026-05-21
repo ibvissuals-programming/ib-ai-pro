@@ -16,7 +16,7 @@ import {
   X, Plus, Pin, PinOff, Trash2, Copy, Download,
   ImageIcon, Mic, Video, MessageSquare,
   Zap, Sparkles, ChevronDown, ChevronRight,
-  RefreshCw, AlertCircle, Layers, Clock, History,
+  RefreshCw, AlertCircle, Layers, Clock, History, TrendingUp,
 } from 'lucide-react';
 import {
   listCreatorSessions,
@@ -609,6 +609,50 @@ export function WorkflowLauncher({ trigger }) {
 
               {tab === 'mine' && (
                 <>
+                  {/* ── Top Workflows ── derived from localStorage counts, no effect */}
+                  {(() => {
+                    const topPresets = WORKFLOW_PRESETS
+                      .filter(p => (workflowCounts[p.id] ?? 0) > 0)
+                      .sort((a, b) => (workflowCounts[b.id] ?? 0) - (workflowCounts[a.id] ?? 0))
+                      .slice(0, 2);
+                    if (!topPresets.length) return null;
+                    return (
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] text-muted-foreground/60 uppercase tracking-widest font-semibold flex items-center gap-1.5">
+                          <TrendingUp size={8} /> Top Workflows
+                        </p>
+                        {topPresets.map((preset, i) => (
+                          <motion.div
+                            key={preset.id}
+                            layout
+                            className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-border/40 bg-primary/5 hover:bg-primary/8 transition-colors"
+                          >
+                            <span className="text-base shrink-0 leading-none">{i === 0 ? '🥇' : '🥈'}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[11px] font-semibold text-foreground truncate leading-tight">{preset.name}</p>
+                              <span className={`flex items-center gap-0.5 text-[9px] mt-0.5 ${preset.color}`}>
+                                {TOOL_ICONS[preset.config.tool]}
+                                {preset.config.tool}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[9px] font-semibold text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded-full border border-primary/20">
+                                ×{workflowCounts[preset.id]}
+                              </span>
+                              <button
+                                onClick={() => handleLaunch(preset.config, preset.name, preset.id)}
+                                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-primary text-primary-foreground text-[9px] font-semibold hover:bg-primary/90 transition-colors"
+                              >
+                                <Zap size={8} />
+                                Launch
+                              </button>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+
                   {/* ── Recently Launched ── */}
                   {recents.length > 0 && (
                     <div className="space-y-1.5">
