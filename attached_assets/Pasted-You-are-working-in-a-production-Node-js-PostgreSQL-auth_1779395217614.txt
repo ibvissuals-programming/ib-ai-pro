@@ -1,0 +1,116 @@
+You are working in a production Node.js + PostgreSQL authentication system.
+
+OBJECTIVE:
+Enforce PostgreSQL as the ONLY source of truth for CEO authentication and prevent ANY boot-time or cache-layer mutation of CEO credentials.
+
+DO NOT:
+- modify frontend UI
+- reintroduce recovery authentication
+- redesign DB schema
+- change password hashing algorithm
+- alter user features unrelated to auth
+
+------------------------------------------------------------
+1 — ABSOLUTE AUTHORITY RULE (CRITICAL)
+------------------------------------------------------------
+
+CEO authentication MUST follow this rule:
+
+POSTGRESQL = ONLY SOURCE OF TRUTH
+
+RULES:
+- NEVER authenticate CEO from in-memory userStore
+- NEVER rebuild CEO user object during login
+- NEVER modify password_hash in ANY boot process
+- NEVER "repair" CEO account automatically
+
+------------------------------------------------------------
+2 — BOOT PROCESS LOCK (CRITICAL FIX)
+------------------------------------------------------------
+
+Find and modify all startup logic:
+
+REMOVE any behavior that:
+- updates CEO password_hash
+- regenerates CEO user
+- "repairs" CEO account credentials
+- syncs password between cache and DB
+
+ALLOW ONLY:
+- existence check (read-only)
+- role validation (read-only)
+
+------------------------------------------------------------
+3 — LOGIN FLOW FINALIZATION
+------------------------------------------------------------
+
+Ensure login does ONLY:
+
+Step 1: DB fetch by username
+Step 2: verify password against DB hash
+Step 3: return success OR failure
+
+NO OTHER LOGIC:
+- no cache fallback
+- no userStore fallback
+- no repair calls
+- no silent correction
+
+------------------------------------------------------------
+4 — SESSION OBJECT RULE
+------------------------------------------------------------
+
+After successful login:
+
+- session may use cached user object
+BUT:
+- authentication must NEVER depend on cached state
+
+------------------------------------------------------------
+5 — REMOVE SIDE-EFFECT RISK
+
+Scan codebase for and disable any of the following during boot:
+
+- repairCeoAccount()
+- startupIntegrityCheck() writes
+- any "sync userStore with DB" for CEO
+- any password normalization logic
+
+Replace with READ-ONLY validation only.
+
+------------------------------------------------------------
+6 — DIAGNOSTIC LOGGING ONLY
+
+Log internally:
+
+ceo_auth_source: "postgres"
+ceo_boot_mutation: true/false (must always be false)
+ceo_password_verified: true/false
+
+DO NOT modify data based on logs.
+
+------------------------------------------------------------
+FINAL GUARANTEE:
+
+After fix:
+
+- CEO password can NEVER change unless explicitly changed via reset-password endpoint
+- login result is identical across restarts
+- recovery system irrelevant (fully disabled)
+- no hidden boot mutation
+- no cache-induced login drift
+
+------------------------------------------------------------
+FINAL OUTPUT:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CEO AUTH FINAL STABILITY REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DB SOURCE:        PASS / FAIL
+BOOT MUTATION:    BLOCKED / DETECTED
+CACHE AUTH:       DISABLED
+LOGIN STABILITY:  PASS / FAIL
+PASSWORD PERSIST: PASS / FAIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OVERALL:          STABLE / DEGRADED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

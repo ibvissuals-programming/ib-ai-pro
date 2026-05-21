@@ -398,11 +398,12 @@ export function authenticateUser(
   if (!user) return null;
   if (!verifyPassword(password, user.passwordHash)) return null;
 
-  // Apply CEO role at every login — env var may be set after account creation
+  // Read-only role check — no silent mutation during auth.
   if (isCeoUsername(user.username) && user.role !== "ceo") {
-    user.role = "ceo";
-    scheduleSave();
-    logger.info({ username: user.username }, "[userStore] CEO role applied");
+    logger.warn(
+      { username: user.username, actual_role: user.role, ceo_boot_mutation: false },
+      "[auth] CEO user has unexpected role in memory — no auto-correction (manual fix required)",
+    );
   }
 
   return user;
@@ -499,10 +500,17 @@ export async function authenticateUserFromDb(
 
   // ── Auth passed — return in-memory user for session/credits continuity ─────
   if (memUser) {
+    // Read-only role check — no mutation, no silent correction.
     if (isCeoUsername(normalized) && memUser.role !== "ceo") {
-      memUser.role = "ceo";
-      scheduleSave();
-      logger.info({ username: normalized }, "[userStore] CEO role applied");
+      logger.warn(
+        { username: normalized, actual_role: memUser.role, ceo_auth_source: "postgres", ceo_boot_mutation: false },
+        "[auth] CEO user has unexpected role in memory — no auto-correction (manual fix required)",
+      );
+    } else {
+      logger.debug(
+        { username: normalized, ceo_auth_source: "postgres", ceo_boot_mutation: false },
+        "[auth] ceo_password_verified",
+      );
     }
     return { ok: true, user: memUser };
   }
@@ -800,19 +808,21 @@ export async function repairCeoAccount(): Promise<void> {
     return;
   }
 
-  // CEO account exists — role correction ONLY.
-  // Credentials are IMMUTABLE once set — password is NEVER overwritten during boot.
-  // To change the CEO password use the /api/auth/change-password endpoint.
-  if (existing.role !== "ceo") {
-    existing.role = "ceo";
-    await persistStore();
-    logger.info({ username: ceoUsername }, "[ceoRepair] CEO role corrected");
-  }
-
+  // CEO account exists — READ-ONLY validation only.
+  // Credentials are IMMUTABLE. Password is NEVER touched during boot.
+  // Role is NEVER silently corrected — log and halt boot mutation.
+  // To change CEO password: POST /api/auth/change-password (valid session required).
   _ceoBootstrapState = { ready: true, autoCreated: false, tempPassword: null };
 
-  logger.info(
-    { username: ceoUsername, role: existing.role },
-    "[ceoRepair] CEO account verified OK",
-  );
+  if (existing.role !== "ceo") {
+    logger.error(
+      { username: ceoUsername, actual_role: existing.role, ceo_boot_mutation: false },
+      "[ceoRepair] CEO account has unexpected role — boot mutation BLOCKED (manual DB fix required)",
+    );
+  } else {
+    logger.info(
+      { username: ceoUsername, role: existing.role, ceo_boot_mutation: false },
+      "[ceoRepair] CEO account verified OK",
+    );
+  }
 }
