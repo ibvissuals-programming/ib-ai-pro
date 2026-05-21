@@ -1,0 +1,136 @@
+You are working inside a production Node.js + PostgreSQL auth system.
+
+OBJECTIVE:
+Fix ALL login route crashes causing “empty response” while preserving existing architecture.
+
+DO NOT:
+- change DB schema
+- redesign auth system
+- modify recovery flow (already disabled)
+- introduce new auth methods
+- refactor unrelated services
+
+------------------------------------------------------------
+1 — HARDEN /auth/login AGAINST CRASHES (CRITICAL)
+------------------------------------------------------------
+
+Ensure /api/auth/login NEVER throws uncaught exceptions.
+
+WRAP ENTIRE LOGIN HANDLER IN SAFE BLOCK:
+
+- Add top-level try/catch around full handler
+- ANY error MUST return JSON response (NEVER crash connection)
+
+Fallback error response:
+{
+  success: false,
+  code: "internal_error",
+  error: "Login service temporarily unavailable"
+}
+
+------------------------------------------------------------
+2 — SAFE USER RESOLUTION (CRITICAL FIX)
+------------------------------------------------------------
+
+Before accessing password_hash:
+
+RULE:
+- Always validate user existence
+- NEVER access properties of undefined/null
+
+Add guard:
+
+if (!user) {
+  return 401 {
+    success: false,
+    code: "user_not_found",
+    error: "Invalid credentials"
+  }
+}
+
+if (!user.password_hash) {
+  return 500 {
+    success: false,
+    code: "invalid_request",
+    error: "Corrupted user record"
+  }
+}
+
+------------------------------------------------------------
+3 — SAFE PASSWORD CHECK (CRITICAL)
+------------------------------------------------------------
+
+Ensure password verification is wrapped safely:
+
+- NEVER allow scrypt/compare to run on undefined
+- Catch all hashing errors
+
+If verification fails due to exception:
+→ return 401 password_mismatch (DO NOT crash)
+
+------------------------------------------------------------
+4 — ENSURE SINGLE RESPONSE PATH (IMPORTANT)
+------------------------------------------------------------
+
+Every execution path in login MUST return exactly one response:
+
+FORBIDDEN:
+- missing return after res.json()
+- async paths without return
+- falling through after response
+
+RULE:
+After every res.status().json(), immediately return.
+
+------------------------------------------------------------
+5 — DATABASE SAFETY CHECK
+------------------------------------------------------------
+
+Before login logic:
+
+- Ensure DB query completes
+- Ensure user object is fully resolved
+- Ensure no undefined destructuring
+
+If DB query fails:
+→ return internal_error safely (no crash)
+
+------------------------------------------------------------
+6 — LOGGING ONLY (NO CLIENT EXPOSURE)
+------------------------------------------------------------
+
+Log internally:
+- login_attempt
+- user_not_found
+- password_mismatch
+- login_crash_prevented
+
+DO NOT expose stack traces to client.
+
+------------------------------------------------------------
+7 — FINAL OUTPUT FORMAT
+
+After applying fix, print:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LOGIN STABILITY REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CRASH FIX:        PASS / FAIL
+USER GUARD:       PASS / FAIL
+PASSWORD GUARD:   PASS / FAIL
+DB SAFETY:        PASS / FAIL
+EMPTY RESPONSE:   RESOLVED / STILL PRESENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OVERALL:          STABLE / DEGRADED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Only report real results.
+
+------------------------------------------------------------
+FINAL GOAL:
+
+Login endpoint must:
+- NEVER return empty response
+- NEVER crash server
+- ALWAYS return JSON response
+- ALWAYS fail gracefully (401 or 500)

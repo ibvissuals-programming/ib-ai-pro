@@ -162,97 +162,150 @@ router.post(
       return;
     }
 
-    // ── Password login (all users) ──────────────────────────────────────────────
-    const parsed = LoginSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({
-        success: false,
-        code: "invalid_request",
-        error: "Invalid request",
-      });
-      return;
-    }
+    // ── Top-level crash guard — NOTHING in this handler may produce an empty response ──
+    try {
+      // ── Password login (all users) ────────────────────────────────────────────
+      const parsed = LoginSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({
+          success: false,
+          code: "invalid_request",
+          error: "Invalid request",
+        });
+        return;
+      }
 
-    emit({
-      eventType: "login_attempt",
-      source:    "auth_route",
-      action:    "login",
-      status:    "info",
-      metadata:  { username: parsed.data.username, ip: req.ip },
-    });
+      const { username, password } = parsed.data;
 
-    const { username, password } = parsed.data;
-
-    // Distinguish exact failure reason for structured logging.
-    // The generic 401 response is identical in both cases to prevent user enumeration.
-    const existingUser = getUserByUsername(username);
-    const failureReason: string | null = !existingUser
-      ? "user_not_found"
-      : null;
-
-    const user = existingUser ? authenticateUser(username, password) : null;
-
-    const resolvedReason = failureReason ?? (user === null ? "password_mismatch" : null);
-
-    if (!user) {
-      incLoginFailure();
-      incAuthError();
-      logger.warn(
-        { username, reason: resolvedReason, ip: req.ip },
-        "[auth] Login failed",
-      );
-      addAuditEntry("login_failure", `Login failed: ${username} (${resolvedReason})`, {
-        username,
-        ip: req.ip ?? undefined,
-      });
+      logger.info({ username, ip: req.ip }, "[auth] login_attempt");
       emit({
-        eventType: "login_failure",
+        eventType: "login_attempt",
         source:    "auth_route",
         action:    "login",
-        status:    "failure",
-        metadata:  { username, ip: req.ip, reason: resolvedReason },
-        errorCode: "INVALID_CREDENTIALS",
+        status:    "info",
+        metadata:  { username, ip: req.ip },
       });
-      res.status(401).json({ success: false, code: "auth_failed", error: "Invalid username or password" });
-      return;
+
+      // ── Safe user resolution ───────────────────────────────────────────────────
+      let existingUser;
+      try {
+        existingUser = getUserByUsername(username);
+      } catch (lookupErr) {
+        logger.error({ err: lookupErr, username }, "[auth] login_crash_prevented — user lookup threw");
+        res.status(500).json({ success: false, code: "internal_error", error: "Login service temporarily unavailable" });
+        return;
+      }
+
+      if (!existingUser) {
+        incLoginFailure();
+        incAuthError();
+        logger.warn({ username, reason: "user_not_found", ip: req.ip }, "[auth] Login failed");
+        addAuditEntry("login_failure", `Login failed: ${username} (user_not_found)`, {
+          username,
+          ip: req.ip ?? undefined,
+        });
+        emit({
+          eventType: "login_failure",
+          source:    "auth_route",
+          action:    "login",
+          status:    "failure",
+          metadata:  { username, ip: req.ip, reason: "user_not_found" },
+          errorCode: "INVALID_CREDENTIALS",
+        });
+        res.status(401).json({ success: false, code: "auth_failed", error: "Invalid username or password" });
+        return;
+      }
+
+      // ── Corrupted record guard ─────────────────────────────────────────────────
+      if (!existingUser.passwordHash || !existingUser.passwordHash.includes(":")) {
+        logger.error({ username }, "[auth] login_crash_prevented — user record has null/invalid passwordHash");
+        res.status(500).json({ success: false, code: "internal_error", error: "Login service temporarily unavailable" });
+        return;
+      }
+
+      // ── Safe password verification ─────────────────────────────────────────────
+      let user;
+      try {
+        user = authenticateUser(username, password);
+      } catch (authErr) {
+        logger.error({ err: authErr, username }, "[auth] login_crash_prevented — authenticateUser threw");
+        res.status(401).json({ success: false, code: "auth_failed", error: "Invalid username or password" });
+        return;
+      }
+
+      if (!user) {
+        incLoginFailure();
+        incAuthError();
+        logger.warn({ username, reason: "password_mismatch", ip: req.ip }, "[auth] Login failed");
+        addAuditEntry("login_failure", `Login failed: ${username} (password_mismatch)`, {
+          username,
+          ip: req.ip ?? undefined,
+        });
+        emit({
+          eventType: "login_failure",
+          source:    "auth_route",
+          action:    "login",
+          status:    "failure",
+          metadata:  { username, ip: req.ip, reason: "password_mismatch" },
+          errorCode: "INVALID_CREDENTIALS",
+        });
+        res.status(401).json({ success: false, code: "auth_failed", error: "Invalid username or password" });
+        return;
+      }
+
+      // ── Issue session + token ──────────────────────────────────────────────────
+      const loginSession = createSession({
+        userId:    user.id,
+        username:  user.username,
+        role:      user.role,
+        ipAddress: req.ip ?? undefined,
+        userAgent: req.headers["user-agent"] ?? undefined,
+      });
+      const token = signToken({
+        userId:          user.id,
+        username:        user.username,
+        role:            user.role,
+        recoverySession: false,
+        sessionId:       loginSession.sessionId,
+      });
+
+      incLoginSuccess();
+      addAuditEntry("login_success", `Login: ${user.username}`, {
+        username: user.username,
+        ip: req.ip ?? undefined,
+        metadata: { role: user.role },
+      });
+      emit({
+        eventType: "login_success",
+        source:    "auth_route",
+        userId:    user.id,
+        action:    "login",
+        status:    "success",
+        metadata:  { username: user.username, role: user.role, sessionId: loginSession.sessionId },
+      });
+      recordLogin(user.id, user.username, user.role);
+      logger.info({ username: user.username, role: user.role }, "[auth] Login");
+
+      res.json({
+        token,
+        user: toPublicUser(user),
+      });
+
+    } catch (unexpectedErr) {
+      // Belt-and-suspenders: catch anything that slips through the inner guards.
+      // NEVER let the connection close without a response.
+      logger.error(
+        { err: unexpectedErr instanceof Error ? { message: unexpectedErr.message } : String(unexpectedErr), ip: req.ip },
+        "[auth] login_crash_prevented — unexpected error in login handler",
+      );
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          code:    "internal_error",
+          error:   "Login service temporarily unavailable",
+        });
+      }
     }
-
-    const loginSession = createSession({
-      userId:    user.id,
-      username:  user.username,
-      role:      user.role,
-      ipAddress: req.ip ?? undefined,
-      userAgent: req.headers["user-agent"] ?? undefined,
-    });
-    const token = signToken({
-      userId:          user.id,
-      username:        user.username,
-      role:            user.role,
-      recoverySession: false,
-      sessionId:       loginSession.sessionId,
-    });
-
-    incLoginSuccess();
-    addAuditEntry("login_success", `Login: ${user.username}`, {
-      username: user.username,
-      ip: req.ip ?? undefined,
-      metadata: { role: user.role },
-    });
-    emit({
-      eventType: "login_success",
-      source:    "auth_route",
-      userId:    user.id,
-      action:    "login",
-      status:    "success",
-      metadata:  { username: user.username, role: user.role, sessionId: loginSession.sessionId },
-    });
-    recordLogin(user.id, user.username, user.role);
-    logger.info({ username: user.username, role: user.role }, "[auth] Login");
-
-    res.json({
-      token,
-      user: toPublicUser(user),
-    });
   },
 );
 
