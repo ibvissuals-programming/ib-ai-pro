@@ -150,6 +150,27 @@ function useRecentWorkflows() {
   return [recents, addRecent, removeRecent];
 }
 
+// ── Workflow run counter (localStorage) ───────────────────────────────────────
+
+const COUNTS_KEY = 'ib_ai_workflow_counts';
+
+function useWorkflowCounts() {
+  const [counts, setCounts] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(COUNTS_KEY) ?? '{}'); }
+    catch { return {}; }
+  });
+
+  const increment = useCallback((id) => {
+    setCounts(prev => {
+      const next = { ...prev, [id]: (prev[id] ?? 0) + 1 };
+      try { localStorage.setItem(COUNTS_KEY, JSON.stringify(next)); } catch { /* quota */ }
+      return next;
+    });
+  }, []);
+
+  return [counts, increment];
+}
+
 // ── URL param builder ─────────────────────────────────────────────────────────
 
 function buildLaunchUrl(config) {
@@ -167,7 +188,7 @@ function buildLaunchUrl(config) {
 
 // ── Preset card ───────────────────────────────────────────────────────────────
 
-const PresetCard = memo(function PresetCard({ preset, onLaunch, onSave }) {
+const PresetCard = memo(function PresetCard({ preset, count = 0, onLaunch, onSave }) {
   return (
     <motion.div
       layout
@@ -188,11 +209,16 @@ const PresetCard = memo(function PresetCard({ preset, onLaunch, onSave }) {
           {preset.config.voiceStyle && (
             <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-background/60 border border-border/40 text-muted-foreground">{preset.config.voiceStyle.replace(/_/g, ' ')}</span>
           )}
+          {count > 1 && (
+            <span className="text-[9px] font-medium text-muted-foreground/50 px-1.5 py-0.5 rounded-full bg-background/40 border border-border/30">
+              ×{count}
+            </span>
+          )}
         </div>
       </div>
       <div className="flex flex-col gap-1.5 shrink-0">
         <button
-          onClick={() => onLaunch(preset.config, preset.name)}
+          onClick={() => onLaunch(preset.config, preset.name, preset.id)}
           className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-[10px] font-semibold hover:bg-primary/90 transition-colors shadow-sm shadow-primary/20"
         >
           <Zap size={9} />
@@ -428,6 +454,7 @@ export function WorkflowLauncher({ trigger }) {
   const [saveTarget, setSaveTarget] = useState(null);
   const [error, setError] = useState(null);
   const [recents, addRecent, removeRecent] = useRecentWorkflows();
+  const [workflowCounts, incrementCount]   = useWorkflowCounts();
 
   const loadSessions = useCallback(async () => {
     setLoadingSessions(true);
@@ -446,11 +473,12 @@ export function WorkflowLauncher({ trigger }) {
     if (open && tab === 'mine') loadSessions();
   }, [open, tab, loadSessions]);
 
-  const handleLaunch = useCallback((config, name) => {
+  const handleLaunch = useCallback((config, name, presetId) => {
+    if (presetId) incrementCount(presetId);
     addRecent(buildRecentEntry(config, name));
     setOpen(false);
     navigate(buildLaunchUrl(config));
-  }, [navigate, addRecent]);
+  }, [navigate, addRecent, incrementCount]);
 
   const handleSaveSession = useCallback(async (payload) => {
     await createCreatorSession(payload);
@@ -570,6 +598,7 @@ export function WorkflowLauncher({ trigger }) {
                       <PresetCard
                         key={preset.id}
                         preset={preset}
+                        count={workflowCounts[preset.id] ?? 0}
                         onLaunch={handleLaunch}
                         onSave={(p) => setSaveTarget(p)}
                       />
