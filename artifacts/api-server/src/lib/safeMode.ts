@@ -9,6 +9,7 @@
  * It cannot be disabled at runtime without a restart (by design).
  */
 import { logger } from "./logger";
+import { emit }   from "./eventBus";
 
 let _active = false;
 let _reason = "";
@@ -32,13 +33,21 @@ export function getSafeModeInfo(): { active: boolean; reason: string; activatedA
  */
 export function enableSafeMode(reason: string): void {
   if (!_active) {
-    _active = true;
-    _reason = reason;
+    _active      = true;
+    _reason      = reason;
     _activatedAt = Date.now();
     logger.warn(
       { reason },
       "[safeMode] SAFE MODE ENABLED — all AI job creation is blocked",
     );
+    emit({
+      eventType: "safe_mode_triggered",
+      source:    "safeMode",
+      action:    "enable_safe_mode",
+      status:    "blocked",
+      metadata:  { reason },
+      errorCode: "provider_not_configured",
+    });
   }
 }
 

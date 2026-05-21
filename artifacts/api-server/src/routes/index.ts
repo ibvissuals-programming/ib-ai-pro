@@ -27,6 +27,7 @@ import aiHealthRouter     from "./aiHealth";
 import presetsRouter      from "./presets";
 import multimodalStatsRouter from "./multimodalStats";
 import creatorSessionsRouter from "./creatorSessions";
+import sessionsRouter        from "./sessions";
 import { trackActivity }  from "../middleware/trackActivity";
 
 const router: IRouter = Router();
@@ -54,5 +55,6 @@ router.use(aiHealthRouter);
 router.use(presetsRouter);
 router.use(multimodalStatsRouter);
 router.use(creatorSessionsRouter);
+router.use(sessionsRouter);
 
 export default router;

@@ -1,0 +1,132 @@
+You are operating inside a full-stack AI backend system. Implement a unified system upgrade across three layers: System Policy Layer, Event Bus Observability Layer, and Session Management Layer. You must integrate with existing safe mode, invariant enforcement, startup integrity checks, and job pipeline state machine without duplicating logic or breaking existing behavior. Do not rewrite or weaken existing safeguards; extend them in a centralized and consistent way.
+
+1 — SYSTEM POLICY LAYER (SINGLE SOURCE OF TRUTH)
+
+Create a central module (systemPolicy.ts) that becomes the ONLY authority for runtime decisions across the backend. It must define and expose deterministic rules for:
+
+- authentication permission checks
+- AI provider availability rules
+- job creation eligibility
+- safe mode enforcement rules
+- role-based access control (CEO and users)
+- failure classification rules
+
+All existing routes, services, and managers (auth, image, video, TTS, imageJobManager, etc.) must STOP implementing local rule checks and instead call systemPolicy only.
+
+SystemPolicy must expose:
+- canCreateJob(user, providerState, systemState)
+- canExecuteAuthAction(user, action)
+- isSafeModeActive()
+- validateRequestContext(context)
+
+If any rule fails, return a structured rejection reason without creating side effects.
+
+No business logic duplication is allowed outside this module.
+
+---
+
+2 — EVENT BUS OBSERVABILITY LAYER (SYSTEM TRACE ENGINE)
+
+Create a lightweight in-memory event bus (eventBus.ts) with zero external dependencies.
+
+Every critical system action must emit structured events:
+
+Event format:
+- timestamp
+- eventType
+- source (route/service/module)
+- userId (if available)
+- action
+- status (success/failure/blocked)
+- metadata (object)
+- errorCode (if applicable)
+
+Mandatory event emissions:
+
+AUTH:
+- login_attempt
+- login_success
+- login_failure
+- password_change_attempt
+- password_change_success
+- password_change_failure
+
+AI SYSTEM:
+- job_creation_attempt
+- job_blocked_by_policy
+- job_created
+- job_failed
+- provider_blocked
+- safe_mode_triggered
+
+SYSTEM:
+- startup_integrity_check
+- invariant_violation
+- index_repair_action
+
+All existing logs remain, but eventBus becomes the PRIMARY structured observability layer.
+
+Add ability to retrieve:
+- recentEvents(limit)
+- filterEventsByType(type)
+
+No persistence required (in-memory only).
+
+---
+
+3 — SESSION MANAGEMENT LAYER (SECURE SESSION CONTROL SYSTEM)
+
+Implement session tracking without external libraries.
+
+Create sessionStore.ts:
+
+Each session must include:
+- sessionId
+- userId
+- role
+- createdAt
+- lastActiveAt
+- ipAddress (if available)
+- userAgent (if available)
+- isActive
+
+Add endpoints:
+
+POST /api/auth/sessions
+→ returns all active sessions for authenticated user (CEO can view all sessions system-wide)
+
+POST /api/auth/sessions/revoke
+→ revoke a specific sessionId
+
+POST /api/auth/sessions/revoke-all
+→ revoke all sessions for current user (CEO can revoke all users)
+
+Rules:
+- session validation must integrate with systemPolicy.canExecuteAuthAction
+- revoked sessions must immediately be invalidated
+- no session can bypass safe mode or auth policy
+
+---
+
+4 — INTEGRATION RULES (CRITICAL)
+
+- systemPolicy is the ONLY decision authority
+- eventBus logs ALL decisions and failures
+- sessionStore integrates with auth middleware
+- safeMode and startupIntegrityCheck remain unchanged but must emit events
+- job pipeline state machine remains unchanged but must emit events
+
+No duplicate logic allowed across modules.
+
+---
+
+5 — FINAL SYSTEM BEHAVIOR
+
+After implementation:
+
+- All backend decisions are centrally governed (systemPolicy)
+- All actions are traceable (eventBus)
+- All user sessions are visible and controllable (sessionStore)
+- Safe mode + invariants still fully enforced
+- No silent failures exist anywhere in system
+- System behavior becomes deterministic, auditable, and centrally controlled

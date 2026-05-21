@@ -36,8 +36,7 @@ import { recordUsage }  from "../lib/usageAnalytics";
 import { expandPrompt as expandPromptFn, PROMPT_CATEGORIES } from "../lib/promptExpander";
 import { buildStandardResponse, buildErrorResponse } from "../lib/aiOrchestrator";
 import { trackToolExecution } from "../lib/toolHealthMonitor";
-import { isGeminiConfigured } from "../lib/geminiEnv";
-import { isSafeMode, buildSafeModeError } from "../lib/safeMode";
+import { canCreateJob } from "../lib/systemPolicy";
 import {
   recordEditAttempt,
   recordEditSuccess,
@@ -160,8 +159,9 @@ router.post(
       "[imageGen] generate request received",
     );
 
-    if (isSafeMode()) {
-      res.status(503).json(buildSafeModeError("image"));
+    const genPolicy = canCreateJob({ mode: "image", userId: req.user?.userId, source: "imageGen_generate" });
+    if (!genPolicy.allowed) {
+      res.status(genPolicy.httpStatus).json(buildErrorResponse("image", genPolicy.reason));
       return;
     }
 
@@ -235,12 +235,9 @@ router.post(
   },
   policyEngine({ cost: CREDIT_COSTS.image_edit, rateKey: "image_edit", rateMax: 10, rateWindowMs: 60_000, allowRecovery: true }),
   async (req: Request, res: Response) => {
-    if (isSafeMode()) {
-      res.status(503).json(buildSafeModeError("image"));
-      return;
-    }
-    if (!isGeminiConfigured()) {
-      res.status(503).json(buildErrorResponse("image", "provider_not_configured: Gemini API key is required for image editing", "gemini-image"));
+    const editPolicy = canCreateJob({ mode: "image", userId: req.user?.userId, source: "imageGen_edit" });
+    if (!editPolicy.allowed) {
+      res.status(editPolicy.httpStatus).json(buildErrorResponse("image", editPolicy.reason));
       return;
     }
 

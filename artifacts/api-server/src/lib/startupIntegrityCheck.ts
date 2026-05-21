@@ -19,6 +19,7 @@ import { logInvariantViolation } from "./invariant";
 import { pgLoadAllUsers } from "./pgUserStore";
 import { isPostgresEnabled } from "./systemConfig";
 import { getAllUsers, runIndexIntegrityCheck } from "./userStore";
+import { emit } from "./eventBus";
 
 export interface IntegrityCheckResult {
   passed:           boolean;
@@ -146,6 +147,14 @@ export async function runStartupIntegrityCheck(): Promise<IntegrityCheckResult> 
       "[integrity] Startup integrity check completed with violations — see SYSTEM_INVARIANT_VIOLATION logs above",
     );
   }
+
+  emit({
+    eventType: "startup_integrity_check",
+    source:    "startupIntegrityCheck",
+    action:    "startup_check",
+    status:    passed ? "success" : "failure",
+    metadata:  { userCount, pgUserCount, ceoVerified, violations: violations.length, repaired, duplicatesFound },
+  });
 
   return { passed, violations, repaired, ceoVerified, userCount, pgUserCount, duplicatesFound };
 }

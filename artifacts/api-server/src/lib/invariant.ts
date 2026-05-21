@@ -12,6 +12,7 @@
  * it logs the violation and returns, never crashing the request path.
  */
 import { logger } from "./logger";
+import { emit }   from "./eventBus";
 
 export function logInvariantViolation(
   message: string,
@@ -21,6 +22,14 @@ export function logInvariantViolation(
     { INVARIANT: true, ...context },
     `[SYSTEM_INVARIANT_VIOLATION] ${message}`,
   );
+  emit({
+    eventType: "invariant_violation",
+    source:    (context?.["source"] as string | undefined) ?? "unknown",
+    action:    "invariant_check",
+    status:    "failure",
+    metadata:  { message, ...context },
+    errorCode: "INVARIANT_VIOLATION",
+  });
 }
 
 /**

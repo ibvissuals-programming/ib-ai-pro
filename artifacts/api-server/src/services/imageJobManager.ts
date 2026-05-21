@@ -16,6 +16,7 @@ import { db, imageJobsTable } from "@workspace/db";
 import { eq, inArray } from "drizzle-orm";
 import { isPostgresEnabled } from "../lib/systemConfig";
 import { logInvariantViolation } from "../lib/invariant";
+import { emit } from "../lib/eventBus";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -189,6 +190,15 @@ export function createJob(params: {
   jobs.set(jobId, job);
   persistJobCreate(job);
 
+  emit({
+    eventType: "job_created",
+    source:    params.source ?? "jobManager",
+    userId:    params.userId,
+    action:    "create_job",
+    status:    "info",
+    metadata:  { jobId, jobType: params.jobType, complexity: params.complexity, intent: params.intent },
+  });
+
   logger.info(
     {
       jobId,
@@ -260,6 +270,15 @@ export function completeJob(job: ImageJob, modelUsed: ModelUsed): void {
 
   persistJobTerminal(job);
 
+  emit({
+    eventType: "job_completed",
+    source:    job.source ?? "jobManager",
+    userId:    job.userId,
+    action:    "complete_job",
+    status:    "success",
+    metadata:  { jobId: job.jobId, jobType: job.jobType, modelUsed, latencyMs, retryCount: job.retryCount },
+  });
+
   logger.info(
     {
       jobId:                job.jobId,
@@ -297,6 +316,16 @@ export function failJob(job: ImageJob, reason: string): void {
   });
 
   persistJobTerminal(job);
+
+  emit({
+    eventType: "job_failed",
+    source:    job.source ?? "jobManager",
+    userId:    job.userId,
+    action:    "fail_job",
+    status:    "failure",
+    metadata:  { jobId: job.jobId, jobType: job.jobType, reason, latencyMs, retryCount: job.retryCount },
+    errorCode: "job_failed",
+  });
 
   logger.error(
     {

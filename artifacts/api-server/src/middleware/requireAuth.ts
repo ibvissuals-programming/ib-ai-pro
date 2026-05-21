@@ -10,6 +10,7 @@
  */
 import { type Request, type Response, type NextFunction } from "express";
 import { verifyToken, type TokenPayload } from "../lib/token";
+import { isSessionActive, touchSession }  from "../lib/sessionStore";
 
 // ── Request type augmentation ─────────────────────────────────────────────────
 
@@ -46,7 +47,18 @@ export function requireAuth(
     return;
   }
   try {
-    req.user = verifyToken(token);
+    const payload = verifyToken(token);
+    if (payload.sessionId) {
+      if (!isSessionActive(payload.sessionId)) {
+        res.status(401).json({
+          error: "Session has been revoked — please log in again",
+          code:  "SESSION_REVOKED",
+        });
+        return;
+      }
+      touchSession(payload.sessionId);
+    }
+    req.user = payload;
     next();
   } catch {
     res.status(401).json({
@@ -84,6 +96,16 @@ export function requireNormalAuth(
       code: "TOKEN_INVALID",
     });
     return;
+  }
+  if (payload.sessionId) {
+    if (!isSessionActive(payload.sessionId)) {
+      res.status(401).json({
+        error: "Session has been revoked — please log in again",
+        code:  "SESSION_REVOKED",
+      });
+      return;
+    }
+    touchSession(payload.sessionId);
   }
   if (payload.recoverySession) {
     res.status(403).json({

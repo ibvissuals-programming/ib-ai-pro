@@ -40,7 +40,9 @@ import {
   incSignupFailure,
   incAuthError,
 } from "../lib/statsCounter";
-import { recordLogin } from "../lib/activityTracker";
+import { recordLogin }  from "../lib/activityTracker";
+import { createSession } from "../lib/sessionStore";
+import { emit }          from "../lib/eventBus";
 
 const router = Router();
 
@@ -96,17 +98,33 @@ router.post(
     }
 
     const { user } = result;
+    const regSession = createSession({
+      userId:    user.id,
+      username:  user.username,
+      role:      user.role,
+      ipAddress: req.ip ?? undefined,
+      userAgent: req.headers["user-agent"] ?? undefined,
+    });
     const token = signToken({
-      userId: user.id,
-      username: user.username,
-      role: user.role,
+      userId:          user.id,
+      username:        user.username,
+      role:            user.role,
       recoverySession: false,
+      sessionId:       regSession.sessionId,
     });
 
     incSignupSuccess();
     addAuditEntry("signup_success", `New account: ${user.username}`, {
       username: user.username,
       ip: req.ip ?? undefined,
+    });
+    emit({
+      eventType: "register_success",
+      source:    "auth_route",
+      userId:    user.id,
+      action:    "register",
+      status:    "success",
+      metadata:  { username: user.username, role: user.role, sessionId: regSession.sessionId },
     });
     logger.info({ username: user.username, role: user.role }, "[auth] Registered");
 
@@ -179,13 +197,29 @@ router.post(
       }
 
       // Recovery token: restricted to change-password only
+      const recoverySessionRec = createSession({
+        userId:    user.id,
+        username:  user.username,
+        role:      user.role,
+        ipAddress: req.ip ?? undefined,
+        userAgent: req.headers["user-agent"] ?? undefined,
+      });
       const token = signToken({
-        userId: user.id,
-        username: user.username,
-        role: user.role,
+        userId:          user.id,
+        username:        user.username,
+        role:            user.role,
         recoverySession: true,
+        sessionId:       recoverySessionRec.sessionId,
       });
 
+      emit({
+        eventType: "login_success",
+        source:    "auth_route",
+        userId:    user.id,
+        action:    "recovery_login",
+        status:    "success",
+        metadata:  { username: user.username, role: user.role, recoverySession: true, sessionId: recoverySessionRec.sessionId },
+      });
       logger.info(
         { username: user.username, role: user.role },
         "[auth] recovery session issued",
@@ -209,6 +243,14 @@ router.post(
       return;
     }
 
+    emit({
+      eventType: "login_attempt",
+      source:    "auth_route",
+      action:    "login",
+      status:    "info",
+      metadata:  { username: parsed.data.username, ip: req.ip },
+    });
+
     const { username, password } = parsed.data;
     const user = authenticateUser(username, password);
 
@@ -219,15 +261,31 @@ router.post(
         username,
         ip: req.ip ?? undefined,
       });
+      emit({
+        eventType: "login_failure",
+        source:    "auth_route",
+        action:    "login",
+        status:    "failure",
+        metadata:  { username, ip: req.ip },
+        errorCode: "INVALID_CREDENTIALS",
+      });
       res.status(401).json({ error: "Invalid username or password" });
       return;
     }
 
+    const loginSession = createSession({
+      userId:    user.id,
+      username:  user.username,
+      role:      user.role,
+      ipAddress: req.ip ?? undefined,
+      userAgent: req.headers["user-agent"] ?? undefined,
+    });
     const token = signToken({
-      userId: user.id,
-      username: user.username,
-      role: user.role,
+      userId:          user.id,
+      username:        user.username,
+      role:            user.role,
       recoverySession: false,
+      sessionId:       loginSession.sessionId,
     });
 
     incLoginSuccess();
@@ -235,6 +293,14 @@ router.post(
       username: user.username,
       ip: req.ip ?? undefined,
       metadata: { role: user.role },
+    });
+    emit({
+      eventType: "login_success",
+      source:    "auth_route",
+      userId:    user.id,
+      action:    "login",
+      status:    "success",
+      metadata:  { username: user.username, role: user.role, sessionId: loginSession.sessionId },
     });
     recordLogin(user.id, user.username, user.role);
     logger.info({ username: user.username, role: user.role }, "[auth] Login");
@@ -281,6 +347,15 @@ router.post(
     const userId = req.user!.userId;
     const wasRecoverySession = req.user!.recoverySession;
 
+    emit({
+      eventType: "password_change_attempt",
+      source:    "auth_route",
+      userId,
+      action:    "change_password",
+      status:    "info",
+      metadata:  { username: req.user!.username, wasRecoverySession },
+    });
+
     // Normal sessions must supply and verify their current password
     if (!wasRecoverySession) {
       if (!currentPassword) {
@@ -291,6 +366,15 @@ router.post(
         addAuditEntry("password_change_failure", `Incorrect current password: ${req.user!.username}`, {
           username: req.user!.username,
           ip: req.ip ?? undefined,
+        });
+        emit({
+          eventType: "password_change_failure",
+          source:    "auth_route",
+          userId,
+          action:    "change_password",
+          status:    "failure",
+          metadata:  { username: req.user!.username, reason: "incorrect_current_password" },
+          errorCode: "INVALID_CREDENTIALS",
         });
         res.status(401).json({ error: "Current password is incorrect" });
         return;
@@ -314,6 +398,15 @@ router.post(
       metadata: { wasRecoverySession },
     });
 
+    emit({
+      eventType: "password_change_success",
+      source:    "auth_route",
+      userId,
+      action:    "change_password",
+      status:    "success",
+      metadata:  { username: req.user!.username, wasRecoverySession },
+    });
+
     logger.info(
       { userId, username: req.user!.username, wasRecoverySession },
       "[auth] password rotation completed",
@@ -322,11 +415,19 @@ router.post(
     // If this was a recovery session, issue a fresh normal JWT immediately.
     // The client must replace its stored token with this new one.
     if (wasRecoverySession) {
+      const freshSession = createSession({
+        userId:    req.user!.userId,
+        username:  req.user!.username,
+        role:      req.user!.role,
+        ipAddress: req.ip ?? undefined,
+        userAgent: req.headers["user-agent"] ?? undefined,
+      });
       const freshToken = signToken({
-        userId: req.user!.userId,
-        username: req.user!.username,
-        role: req.user!.role,
+        userId:          req.user!.userId,
+        username:        req.user!.username,
+        role:            req.user!.role,
         recoverySession: false,
+        sessionId:       freshSession.sessionId,
       });
       res.json({
         success: true,

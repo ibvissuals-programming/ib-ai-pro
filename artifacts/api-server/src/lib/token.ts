@@ -20,12 +20,13 @@ const EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 // ── Token payload ─────────────────────────────────────────────────────────────
 
 export interface TokenPayload {
-  userId: string;
-  username: string;
-  role: UserRole;
-  recoverySession: boolean; // true = restricted to password change only
-  iat: number; // issued at (Unix ms)
-  exp: number; // expires at (Unix ms)
+  userId:          string;
+  username:        string;
+  role:            UserRole;
+  recoverySession: boolean;  // true = restricted to password change only
+  sessionId?:      string;   // present in tokens issued after sessionStore was added
+  iat:             number;   // issued at (Unix ms)
+  exp:             number;   // expires at (Unix ms)
 }
 
 // ── Sign ──────────────────────────────────────────────────────────────────────
