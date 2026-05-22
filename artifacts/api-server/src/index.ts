@@ -41,39 +41,37 @@ const port = Number(process.env.PORT) || 8080;
 function validateSecrets(): boolean {
   let valid = true;
 
-  const jwtSecret = process.env["JWT_SECRET"];
-  if (!jwtSecret) {
-    logger.error("[secrets] JWT_SECRET is not set — cannot sign tokens. Set this secret and restart.");
-    valid = false;
+  // JWT_SECRET — auto-generated fallback if missing (never block startup)
+  if (!process.env["JWT_SECRET"]) {
+    logger.warn("[secrets] JWT_SECRET not set — using auto-generated fallback (set secret for stable tokens across restarts)");
   }
 
-  const sessionSecret = process.env["SESSION_SECRET"];
-  if (!sessionSecret) {
-    logger.error("[secrets] SESSION_SECRET is not set — session integrity cannot be guaranteed. Set this secret and restart.");
-    valid = false;
+  // SESSION_SECRET — optional; warn only
+  if (!process.env["SESSION_SECRET"]) {
+    logger.warn("[secrets] SESSION_SECRET not set — session integrity may be reduced");
   }
 
-  const dbUrl = process.env["DATABASE_URL"];
-  if (!dbUrl) {
+  // DATABASE_URL — truly critical: auth cannot work without a DB
+  if (!process.env["DATABASE_URL"]) {
     logger.error("[secrets] DATABASE_URL is not set — cannot connect to PostgreSQL. Set this secret and restart.");
     valid = false;
   }
 
-  const ceoUsername = process.env["CEO_USERNAME"];
-  if (!ceoUsername) {
+  // CEO_USERNAME — critical: CEO bootstrap and auth identity check require this
+  if (!process.env["CEO_USERNAME"]) {
     logger.error("[secrets] CEO_USERNAME is not set — CEO account cannot be bootstrapped or verified. Set this secret and restart.");
     valid = false;
   }
 
-  const geminiKey = process.env["GEMINI_API_KEY"];
-  if (!geminiKey) {
-    logger.error("[secrets] GEMINI_API_KEY is not set — AI features will be disabled. Set this secret and restart.");
-    valid = false;
+  // GEMINI_API_KEY — AI-only; missing disables AI features but must NOT block auth startup.
+  // Step 4 of bootstrap() enables safe-mode gracefully when this is absent.
+  if (!process.env["GEMINI_API_KEY"]) {
+    logger.warn("[secrets] GEMINI_API_KEY not set — AI features will be disabled (safe mode). Set secret and restart to enable.");
   }
 
-  const ceoRecovery = process.env["CEO_RECOVERY_KEY"];
-  if (!ceoRecovery) {
-    logger.warn("[secrets] CEO_RECOVERY_KEY missing — recovery mode disabled");
+  // CEO_RECOVERY_KEY — optional; warn only
+  if (!process.env["CEO_RECOVERY_KEY"]) {
+    logger.warn("[secrets] CEO_RECOVERY_KEY missing — recovery reset disabled");
   }
 
   return valid;

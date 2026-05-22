@@ -1,0 +1,150 @@
+# 🔒 CEO LOGIN + SERVER CONNECTIVITY EMERGENCY FIX MASTER PROMPT
+
+You are working inside a full-stack Node.js + PostgreSQL + Vite frontend system.
+
+## 🎯 OBJECTIVE
+Fix the system so that:
+- frontend can reliably reach backend
+- CEO login always returns a real response (never “Cannot reach server”)
+- auth system works end-to-end in browser
+- no fake PASS reports or internal-only validation is used
+
+This is a **real runtime recovery task**, not an architecture redesign.
+
+---
+
+# 🚨 STEP 1 — VERIFY BACKEND REACHABILITY (CRITICAL)
+
+Check if backend is actually running and reachable from frontend.
+
+- Confirm server is listening (any port: 8099 or configured port)
+- Confirm `/api/auth/login` responds with HTTP response
+- If backend is NOT reachable → FIX STARTUP ONLY
+
+DO NOT TOUCH AUTH LOGIC YET.
+
+---
+
+# 🌐 STEP 2 — FIX FRONTEND ↔ BACKEND CONNECTION
+
+Ensure frontend API calls are correctly routed.
+
+Check and enforce ONE of the following:
+
+### If using Vite proxy:
+- `/api → http://localhost:8099`
+- backend must be running on 8099
+
+### If using deployed Replit URL:
+- REMOVE localhost usage entirely
+- frontend must call:
+  `/api/...` relative only
+
+### RULE:
+There must be ONLY ONE active backend target.
+
+---
+
+# 🧠 STEP 3 — ELIMINATE “Cannot reach server” ERROR SOURCE
+
+Locate frontend `safeParseJson` or fetch wrapper.
+
+Ensure:
+
+- network failure → shows “Server unreachable”
+- empty response → treated as backend failure
+- non-JSON response → handled safely
+
+DO NOT break login logic — only fix error clarity.
+
+---
+
+# 🔐 STEP 4 — VALIDATE AUTH FLOW (NO CHANGES UNLESS BROKEN)
+
+Only verify:
+
+- POST /api/auth/login returns:
+  - 200 with token for correct password
+  - 401 for wrong password
+- POST /api/auth/reset-password works
+- GET /api/me works with token
+
+If any fail:
+→ fix ONLY DB connection or route binding issues
+→ DO NOT rewrite auth system
+
+---
+
+# 🧾 STEP 5 — VERIFY DATABASE CONNECTION
+
+Ensure:
+- only ONE PostgreSQL source is used
+- CEO user exists:
+  username = ibaiceo
+- password_hash exists and is valid format
+- no duplicate DB configs or fallback DBs
+
+---
+
+# ⚠️ STEP 6 — STOP FAKE “STABLE” REPORTS
+
+DO NOT output “PASS” unless:
+- verified via browser or real HTTP request
+- not internal logs only
+
+---
+
+# 🧪 STEP 7 — FINAL END-TO-END TEST
+
+Run ONLY real checks:
+
+1. Open login page
+2. Login with CEO credentials
+3. Verify token stored
+4. Refresh page
+5. Verify session persists
+6. Logout and login again
+
+---
+
+# 📦 FINAL OUTPUT FORMAT
+
+Return ONLY:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CEO LOGIN RECOVERY REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BACKEND:        PASS / FAIL
+FRONTEND LINK:  PASS / FAIL
+LOGIN:          PASS / FAIL
+SESSION:        PASS / FAIL
+DATABASE:       PASS / FAIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OVERALL:        STABLE / BROKEN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Include ONLY real runtime results.
+
+---
+
+# 🎯 FINAL GOAL
+
+System must behave like:
+
+✔ frontend always reaches backend  
+✔ CEO login works in browser  
+✔ no “Cannot reach server” false failures  
+✔ DB is single source of truth  
+✔ no hidden duplicate runtime instances  
+
+---
+
+# 🚫 ABSOLUTE RULE
+
+If anything fails:
+→ fix ONLY connectivity or runtime mismatch  
+→ DO NOT modify auth architecture again  
+
+---
+
+If this still doesn’t resolve it, the next step is not coding — it’s **deployment/runtime cleanup (single server + single DB + single proxy)**.
