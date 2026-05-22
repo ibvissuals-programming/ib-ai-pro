@@ -1,0 +1,134 @@
+You are fixing a production auth issue in an existing Node.js + PostgreSQL system.
+
+OBJECTIVE:
+Force-reset the CEO account password directly in PostgreSQL to a known value and verify login stability.
+
+DO NOT:
+- redesign auth
+- refactor architecture
+- modify session system
+- touch recovery flow
+- change DB schema
+- create duplicate CEO users
+- modify credits or AI systems
+
+ONLY:
+1. Find the existing CEO account
+2. Reset its password hash safely
+3. Restart backend
+4. Verify login works
+5. Verify restart persistence
+
+------------------------------------------------------------
+STEP 1 — CEO VALIDATION
+------------------------------------------------------------
+
+Query PostgreSQL directly.
+
+Requirements:
+- exactly ONE CEO account must exist
+- username must be "ibaiceo"
+- role must be "ceo"
+
+Print:
+- user id
+- username
+- role
+- password hash exists? true/false
+
+If duplicates exist:
+- STOP
+- print DUPLICATE_CEO_DETECTED
+
+------------------------------------------------------------
+STEP 2 — FORCE PASSWORD RESET
+------------------------------------------------------------
+
+Generate a fresh secure scrypt hash for:
+
+Admin@12345
+
+Use the SAME hashing format already used by the system:
+salt:hash
+
+ONLY update:
+password_hash
+
+DO NOT modify:
+- id
+- role
+- username
+- credits
+- created_at
+- any other field
+
+Confirm:
+UPDATE 1
+
+------------------------------------------------------------
+STEP 3 — BACKEND RESTART
+------------------------------------------------------------
+
+Restart the backend fully so memory reloads from PostgreSQL.
+
+After restart:
+- confirm backend listening
+- confirm no auth crash
+- confirm OVERALL: STABLE still appears
+
+------------------------------------------------------------
+STEP 4 — LIVE LOGIN TEST
+------------------------------------------------------------
+
+Run REAL HTTP login tests against:
+
+POST /api/auth/login
+
+TEST A:
+username: ibaiceo
+password: Admin@12345
+
+EXPECT:
+HTTP 200
+
+TEST B:
+wrong password
+
+EXPECT:
+HTTP 401
+
+------------------------------------------------------------
+STEP 5 — RESTART PERSISTENCE TEST
+------------------------------------------------------------
+
+Restart backend AGAIN.
+
+Re-run TEST A and TEST B.
+
+Password must survive restart unchanged.
+
+------------------------------------------------------------
+STEP 6 — FINAL REPORT
+------------------------------------------------------------
+
+Print EXACTLY:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CEO LOGIN FIX REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CEO_COUNT:      PASS/FAIL
+PASSWORD_RESET: PASS/FAIL
+LOGIN_TEST:     PASS/FAIL
+WRONG_PW_TEST:  PASS/FAIL
+RESTART_TEST:   PASS/FAIL
+OVERALL:        STABLE/FAIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+IMPORTANT:
+- No fake passes
+- No assumptions
+- No architecture rewrites
+- No recovery key logic
+- No feature additions
+- No cache-based auth
+- PostgreSQL must remain source of truth
