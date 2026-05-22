@@ -1,0 +1,156 @@
+You are working inside a production full-stack system (Node.js + PostgreSQL + React frontend).
+
+OBJECTIVE:
+Fix CEO authentication so that:
+1. CEO login works reliably in the REAL running environment (frontend proxy + backend + PostgreSQL)
+2. Password reset works reliably
+3. Recovery mechanism is either restored OR replaced with a clean secure reset flow
+4. NO fake “STABLE” reports unless verified through frontend (port 5000)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULES (STRICT)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DO NOT:
+- rely on previous agent logs or reports
+- assume PASS without testing via frontend (port 5000)
+- modify unrelated AI systems, providers, or job pipeline
+- create duplicate backend instances
+- introduce new architecture
+
+ONLY FIX AUTH SYSTEM REAL BEHAVIOR.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PHASE 1 — SINGLE SOURCE OF TRUTH AUDIT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Identify ACTIVE backend instance (ONLY ONE must exist)
+   - confirm port used by frontend proxy (/api → backend)
+
+2. Confirm PostgreSQL connection used by ACTIVE server
+
+3. Ensure ONLY ONE user exists with:
+   role = "ceo"
+   username = "ibaiceo"
+
+4. Print:
+   - active backend port
+   - db connection string source (masked)
+   - CEO row count
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PHASE 2 — FIX CEO LOGIN (ROOT CAUSE ONLY)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Ensure login uses:
+
+- authenticateUserFromDb ONLY
+- NO in-memory fallback for CEO auth decision
+- password check MUST use DB password_hash
+
+If multiple backends exist:
+→ STOP extra instance (kill duplicates)
+→ ensure only ONE server listens
+
+Then reset CEO password in PostgreSQL:
+
+Password must be:
+Admin@12345
+
+Use correct system hashing:
+- randomBytes(16)
+- scryptSync(password, salt, 64)
+- format: salt:hash
+- UPDATE ONLY password_hash column
+
+DO NOT modify:
+- role
+- id
+- credits
+- username
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PHASE 3 — VERIFY LOGIN THROUGH FRONTEND PROXY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Run ONLY through:
+
+POST http://localhost:5000/api/auth/login
+
+TEST A:
+username: ibaiceo
+password: Admin@12345
+
+EXPECT:
+HTTP 200
+token present
+role = ceo
+
+TEST B:
+wrong password
+
+EXPECT:
+HTTP 401 auth_failed
+
+If this fails:
+→ trace exact layer (frontend / proxy / backend / DB)
+→ DO NOT guess
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PHASE 4 — PASSWORD RESET SYSTEM FIX
+
+Ensure ONE of the following is implemented correctly:
+
+OPTION A (preferred - secure modern):
+- POST /api/auth/reset-password
+- requires currentPassword + newPassword
+- requires CEO session token
+- updates PostgreSQL only
+
+OPTION B (legacy recovery system restoration):
+- restore x-ceo-recovery-key header flow
+- validate recovery key securely
+- allow forced password reset
+- generate new password hash in DB
+
+IMPORTANT:
+Only ONE system should exist — remove duplicates or conflicting flows.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PHASE 5 — ELIMINATE EMPTY RESPONSE ISSUE
+
+If "empty response" appears anywhere:
+- check Vite proxy
+- check backend crash logs
+- check missing res.json() returns
+- ensure NO route returns undefined response
+
+Every auth route MUST return JSON ALWAYS:
+{ success, code, data OR error }
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PHASE 6 — FINAL REAL-WORLD VALIDATION
+
+Run FULL test ONLY via frontend (port 5000):
+
+1. Login CEO
+2. Refresh page (session persists)
+3. Logout
+4. Login again
+5. Reset password flow
+6. Re-login after reset
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FINAL REPORT (REAL ONLY)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CEO_LOGIN:        PASS / FAIL
+DB_SOURCE:        PASS / FAIL
+LOGIN_PROXY:      PASS / FAIL
+PASSWORD_RESET:   PASS / FAIL
+SESSION_STABILITY: PASS / FAIL
+EMPTY_RESPONSE:   FIXED / FAIL
+OVERALL:          STABLE / FAIL
+
+IMPORTANT:
+Do NOT mark PASS unless verified through PORT 5000 frontend flow.
