@@ -80,17 +80,19 @@ async function safeParseJson(res) {
   try {
     text = await res.text();
   } catch {
-    return { error: 'Failed to read server response' };
+    return { error: 'Cannot reach server — please try again' };
   }
 
   if (!text || !text.trim()) {
-    return { error: 'Server returned an empty response' };
+    // Empty body — proxy error, cold start, or connection refused
+    return { error: 'Cannot reach server — please try again' };
   }
 
   try {
     return JSON.parse(text);
   } catch {
-    return { error: 'Invalid server response' };
+    // Non-JSON body (e.g. HTML proxy error page)
+    return { error: 'Cannot reach server — please try again' };
   }
 }
 

@@ -1,0 +1,164 @@
+You are debugging a production frontend ↔ backend auth connection issue in a full-stack Node.js + PostgreSQL system.
+
+IMPORTANT CONTEXT:
+Backend auth has already been VERIFIED WORKING internally:
+
+- correct password → HTTP 200
+- wrong password → HTTP 401
+- restart persistence → PASS
+
+BUT the frontend still shows:
+"Server returned an empty response"
+
+OBJECTIVE:
+Find and fix the exact disconnect between frontend auth requests and the live backend.
+
+DO NOT:
+- redesign auth
+- modify DB schema
+- rewrite architecture
+- reset passwords again
+- touch AI systems
+- add features
+- modify credits system
+
+ONLY:
+- trace frontend auth requests
+- verify backend target
+- fix routing/proxy issues
+- guarantee frontend receives valid JSON
+
+------------------------------------------------------------
+STEP 1 — TRACE FRONTEND AUTH REQUEST
+------------------------------------------------------------
+
+Inspect the frontend login flow completely:
+
+Find:
+- login API call
+- fetch/axios wrapper
+- API base URL
+- proxy config
+- environment variables
+- deployment URL logic
+
+Verify:
+- exact URL frontend calls
+- exact port
+- exact protocol
+- exact response parsing logic
+
+------------------------------------------------------------
+STEP 2 — VERIFY LIVE BACKEND TARGET
+------------------------------------------------------------
+
+Determine:
+- actual backend port
+- actual running workflow
+- actual live server URL
+
+IMPORTANT:
+The frontend may still point to:
+- an old workflow
+- dead artifact
+- stale localhost port
+- outdated preview URL
+
+Verify frontend target matches:
+the ACTIVE backend listening on port 8099.
+
+------------------------------------------------------------
+STEP 3 — TEST AUTH REQUEST FROM FRONTEND CONTEXT
+------------------------------------------------------------
+
+Run a REAL frontend-triggered login request.
+
+Capture:
+- request URL
+- request payload
+- response status
+- response body
+- browser/network errors
+- CORS issues
+- fetch parsing failures
+
+If backend returns valid JSON but frontend crashes:
+→ fix frontend parsing/error handling.
+
+------------------------------------------------------------
+STEP 4 — RESPONSE SAFETY
+------------------------------------------------------------
+
+Guarantee frontend safely handles:
+- HTTP 200
+- HTTP 400
+- HTTP 401
+- HTTP 500
+- malformed responses
+- network failures
+
+Frontend must NEVER show:
+"Server returned an empty response"
+
+Instead show normalized errors.
+
+------------------------------------------------------------
+STEP 5 — REGISTER FLOW TEST
+------------------------------------------------------------
+
+Verify:
+- frontend register request reaches backend
+- backend returns JSON
+- frontend parses response correctly
+
+Test:
+- valid registration
+- duplicate username
+- invalid payload
+
+------------------------------------------------------------
+STEP 6 — FULL END-TO-END VALIDATION
+------------------------------------------------------------
+
+Validate complete real flow:
+
+A)
+Frontend login → backend auth → token returned
+
+B)
+Frontend stores token correctly
+
+C)
+Authenticated request succeeds
+
+D)
+Page refresh preserves session
+
+E)
+Wrong password shows proper error
+
+------------------------------------------------------------
+STEP 7 — FINAL REPORT
+------------------------------------------------------------
+
+Print EXACTLY:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FRONTEND AUTH CONNECTION REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BACKEND_TARGET:   PASS/FAIL
+LOGIN_FLOW:       PASS/FAIL
+REGISTER_FLOW:    PASS/FAIL
+TOKEN_FLOW:       PASS/FAIL
+ERROR_HANDLING:   PASS/FAIL
+EMPTY_RESPONSE:   RESOLVED/FAIL
+OVERALL:          STABLE/FAIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+IMPORTANT:
+- No fake passes
+- No password resets
+- No auth rewrites
+- No DB rewrites
+- No architecture redesign
+- Fix ONLY the frontend/backend connection layer
