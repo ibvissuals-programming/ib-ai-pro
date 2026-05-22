@@ -1,0 +1,140 @@
+You are performing a FINAL CEO LOGIN RECOVERY PASS.
+
+DO NOT redesign architecture.
+DO NOT add features.
+DO NOT refactor auth.
+DO NOT touch providers.
+ONLY repair and verify live CEO authentication end-to-end.
+
+OBJECTIVE:
+Force the live production CEO credentials to a known working state and verify login THROUGH THE FRONTEND PROXY.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PHASE 1 — HARD RESET CEO PASSWORD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Requirements:
+
+1. Query PostgreSQL directly.
+2. Find the single CEO account:
+   username = ibaiceo
+   role = ceo
+
+3. Generate a NEW password hash for:
+
+Admin@12345
+
+using the EXACT EXISTING SYSTEM FORMAT:
+- randomBytes(16)
+- scryptSync(password, salt, 64)
+- store as:
+  salt:hash
+
+4. UPDATE ONLY:
+password_hash
+
+DO NOT:
+- create users
+- modify IDs
+- modify credits
+- modify role
+- modify timestamps
+- modify username
+
+5. Print:
+- CEO row count
+- hash length
+- update count
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PHASE 2 — FORCE LIVE DB RELOAD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Restart backend workflow completely.
+2. Wait until:
+OVERALL: STABLE
+
+3. Confirm boot logs show:
+ceo_boot_mutation: false
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PHASE 3 — LIVE FRONTEND LOGIN TEST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CRITICAL:
+DO NOT test localhost:8099 directly.
+
+Test THROUGH the frontend proxy:
+http://localhost:5000/api/auth/login
+
+Run:
+
+TEST A:
+username: ibaiceo
+password: Admin@12345
+
+EXPECT:
+HTTP 200
+token present
+role = ceo
+
+TEST B:
+wrong password
+
+EXPECT:
+HTTP 401
+code = auth_failed
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PHASE 4 — TRACE EMPTY RESPONSE SOURCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+If login fails OR frontend shows:
+"Cannot reach server"
+OR
+"Server returned an empty response"
+
+then:
+
+1. inspect frontend proxy logs
+2. inspect backend auth logs
+3. inspect auth route exceptions
+4. inspect response body handling
+5. inspect workflow ports
+6. inspect duplicate backend processes
+
+Fix ONLY the exact failing layer.
+
+DO NOT rewrite unrelated systems.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PHASE 5 — VERIFY SINGLE SOURCE OF TRUTH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Confirm ALL are true:
+
+- authenticateUserFromDb() is used
+- PostgreSQL is sole auth source
+- no memory hash auth path exists
+- no boot-time password overwrite exists
+- no recovery-key auth path exists
+- getUserByIdFromDb() hydrates sessions
+- exactly 1 CEO exists
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FINAL REPORT FORMAT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CEO_COUNT:      PASS / FAIL
+PASSWORD_RESET: PASS / FAIL
+LOGIN_PROXY:    PASS / FAIL
+WRONG_PW_TEST:  PASS / FAIL
+DB_SOURCE:      PASS / FAIL
+EMPTY_RESPONSE: PASS / FAIL
+RESTART_TEST:   PASS / FAIL
+OVERALL:        STABLE / FAIL
+
+IMPORTANT:
+Do NOT claim PASS unless the login succeeds THROUGH PORT 5000 using:
+username = ibaiceo
+password = Admin@12345
