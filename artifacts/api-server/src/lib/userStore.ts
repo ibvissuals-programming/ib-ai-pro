@@ -18,7 +18,13 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { logger } from "./logger";
 import { isPostgresEnabled } from "./systemConfig";
-import { pgLoadAllUsers, pgPersistAllUsers, pgGetUserByUsername, pgGetUserById } from "./pgUserStore";
+import {
+  pgLoadAllUsers,
+  pgPersistAllUsers,
+  pgGetUserByUsername,
+  pgGetUserById,
+  pgUpdatePasswordHashOnly,
+} from "./pgUserStore";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "../../data");
@@ -697,11 +703,69 @@ export async function changeUserPassword(
     logger.warn({ userId }, "[userStore] changeUserPassword — password too short");
     return false;
   }
-  user.passwordHash = hashPassword(newPassword);
-  // Persist immediately and await (not deferred) for password changes
-  await persistStore();
+  const newHash = hashPassword(newPassword);
+  user.passwordHash = newHash; // keep memory in sync
+  if (isPostgresEnabled()) {
+    // Write directly to DB.  pgPersistAllUsers (bulk upsert) intentionally skips
+    // passwordHash in its conflict-update clause, so we must write it here.
+    try {
+      await pgUpdatePasswordHashOnly(userId, newHash);
+    } catch (err) {
+      logger.error({ err, userId }, "[userStore] changeUserPassword — pg direct write failed");
+      return false;
+    }
+  } else {
+    // Non-PG mode: JSON file is the store — persist normally.
+    await persistStore();
+  }
   logger.info({ userId, username: user.username }, "[userStore] Password changed");
   return true;
+}
+
+/**
+ * updatePasswordHashInDbOnly() — write a new password hash to PostgreSQL ONLY.
+ *
+ * The in-memory store is intentionally NOT updated.  All subsequent password
+ * verification must go through checkCurrentPasswordFromDb() which fetches the
+ * live DB row — making PostgreSQL the single source of truth.
+ *
+ * Use this function for all mutation routes (reset-password, recovery reset)
+ * so that memory can never drift from the DB state silently.
+ *
+ * Falls back to changeUserPassword() when PostgreSQL is disabled.
+ */
+export async function updatePasswordHashInDbOnly(
+  userId:      string,
+  newPassword: string,
+): Promise<boolean> {
+  if (newPassword.length < 6) {
+    logger.warn({ userId }, "[userStore] updatePasswordHashInDbOnly — password too short");
+    return false;
+  }
+
+  if (!isPostgresEnabled()) {
+    // Non-PG mode: memory IS the store — fall back to the standard mutation.
+    return changeUserPassword(userId, newPassword);
+  }
+
+  try {
+    // Confirm the user exists in DB before writing
+    const existing = await pgGetUserById(userId);
+    if (!existing) {
+      logger.warn({ userId }, "[userStore] updatePasswordHashInDbOnly — user not found in DB");
+      return false;
+    }
+    const newHash = hashPassword(newPassword);
+    await pgUpdatePasswordHashOnly(userId, newHash);
+    logger.info(
+      { userId, username: existing.username },
+      "[userStore] password_hash updated in PostgreSQL only (memory cache intentionally unchanged)",
+    );
+    return true;
+  } catch (err) {
+    logger.error({ err, userId }, "[userStore] updatePasswordHashInDbOnly — db error");
+    return false;
+  }
 }
 
 // ── CEO account repair ────────────────────────────────────────────────────────

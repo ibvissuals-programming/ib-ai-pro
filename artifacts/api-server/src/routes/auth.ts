@@ -26,7 +26,7 @@ import {
   getUserByUsername,
   toPublicUser,
   changeUserPassword,
-  checkCurrentPassword,
+  updatePasswordHashInDbOnly,
   checkCurrentPasswordFromDb,
   CREDIT_COSTS,
   FREE_CREDITS,
@@ -330,7 +330,9 @@ router.post(
         res.status(400).json({ success: false, code: "invalid_request", error: "Current password is required" });
         return;
       }
-      if (!checkCurrentPassword(userId, currentPassword)) {
+      // Always verify against PostgreSQL — never the in-memory cache
+      const pwValid = await checkCurrentPasswordFromDb(userId, currentPassword);
+      if (!pwValid) {
         addAuditEntry("password_change_failure", `Incorrect current password: ${req.user!.username}`, {
           username: req.user!.username,
           ip: req.ip ?? undefined,
@@ -522,7 +524,7 @@ router.post(
         return;
       }
 
-      const ok = await changeUserPassword(targetUser.id, newPassword);
+      const ok = await updatePasswordHashInDbOnly(targetUser.id, newPassword);
       if (!ok) {
         res.status(500).json({ success: false, code: "internal_error", error: "Password update failed" });
         return;
@@ -602,8 +604,8 @@ router.post(
       return;
     }
 
-    // Update password_hash only — all other fields are immutable
-    const ok = await changeUserPassword(userId, newPassword);
+    // Update ONLY PostgreSQL password_hash — all other fields and memory are untouched
+    const ok = await updatePasswordHashInDbOnly(userId, newPassword);
     if (!ok) {
       emit({
         eventType: "password_reset_failure",

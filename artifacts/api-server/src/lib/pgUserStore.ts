@@ -63,16 +63,19 @@ export async function pgPersistAllUsers(users: PgUserRecord[]): Promise<void> {
       .onConflictDoUpdate({
         target: usersTable.id,
         set: {
-          username:     user.username,
-          passwordHash: user.passwordHash,
-          role:         user.role,
-          credits:      user.credits,
-          lastReset:    user.lastReset,
+          // password_hash is intentionally excluded from the conflict update.
+          // All password changes must go through pgUpdatePasswordHashOnly() so that
+          // a bulk upsert (e.g. triggered by a new user registering) can NEVER
+          // silently revert a password that was written via a direct DB update.
+          username:  user.username,
+          role:      user.role,
+          credits:   user.credits,
+          lastReset: user.lastReset,
         },
       });
   }
 
-  logger.info({ count: users.length }, "[pgUserStore] Users upserted to PostgreSQL");
+  logger.info({ count: users.length }, "[pgUserStore] Users upserted to PostgreSQL (passwordHash excluded from conflict update)");
 }
 
 // ── Single-user fetch by userId (fresh DB read — used by session hydration) ───
@@ -102,6 +105,30 @@ export async function pgGetUserById(userId: string): Promise<PgUserRecord | null
     lastReset:    r.lastReset,
     createdAt:    r.createdAt,
   };
+}
+
+// ── Single-field update: password_hash only ───────────────────────────────────
+
+/**
+ * pgUpdatePasswordHashOnly() — update ONLY the password_hash column for one user.
+ *
+ * No other column is touched.  Memory store is intentionally NOT updated —
+ * PostgreSQL is the single source of truth for credentials.
+ *
+ * The caller must verify the user exists before calling this function.
+ */
+export async function pgUpdatePasswordHashOnly(
+  userId:       string,
+  passwordHash: string,
+): Promise<void> {
+  await db
+    .update(usersTable)
+    .set({ passwordHash })
+    .where(eq(usersTable.id, userId));
+  logger.info(
+    { userId },
+    "[pgUserStore] password_hash updated (PostgreSQL only — memory not mutated)",
+  );
 }
 
 // ── Single-user fetch by username (fresh DB read — used by auth flow) ─────────

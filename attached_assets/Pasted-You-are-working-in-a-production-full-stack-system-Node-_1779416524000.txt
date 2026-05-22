@@ -1,0 +1,150 @@
+You are working in a production full-stack system (Node.js + PostgreSQL + React).
+
+OBJECTIVE:
+Fix CEO authentication by eliminating ALL state drift between DB, memory cache, and frontend assumptions. Make authentication strictly deterministic and DB-driven.
+
+DO NOT:
+- add new auth systems
+- create alternative login flows
+- keep dual password sources (memory + DB)
+- allow partial recovery implementations
+- allow silent fallbacks anywhere in auth
+
+------------------------------------------------------------
+1 — SINGLE SOURCE OF TRUTH (HARD RULE)
+------------------------------------------------------------
+PostgreSQL is the ONLY authority for:
+- password_hash
+- user identity
+- role (including CEO)
+
+Memory store is CACHE ONLY:
+- NEVER used for password verification
+- NEVER used for reset-password validation
+- NEVER allowed to override DB values
+
+------------------------------------------------------------
+2 — REMOVE ALL DRIFT SOURCES (CRITICAL)
+------------------------------------------------------------
+Eliminate or refactor ALL of the following so they become read-only:
+
+- checkCurrentPassword (must be DB-based only)
+- any in-memory password verification fallback
+- any role correction logic during login/reset/boot
+- any function that writes to user during authentication flow
+
+RULE:
+Authentication paths MUST NEVER mutate user data.
+
+------------------------------------------------------------
+3 — LOGIN FLOW (STRICT CONTRACT)
+------------------------------------------------------------
+POST /api/auth/login must:
+
+1. Fetch user ONLY from PostgreSQL
+2. If not found → return { success:false, code:"user_not_found" }
+3. If passwordHash missing → return corrupted_account
+4. Verify password using scrypt ONLY against DB hash
+5. NEVER touch memory store
+6. NEVER fallback to alternate auth logic
+
+Response must ALWAYS be JSON (never empty response).
+
+------------------------------------------------------------
+4 — RESET PASSWORD (SINGLE CLEAN PATH)
+------------------------------------------------------------
+POST /api/auth/reset-password must:
+
+- Accept ONLY ONE of:
+  a) valid session JWT
+  b) valid CEO_RECOVERY_KEY
+
+- Must ALWAYS validate password using DB checkCurrentPasswordFromDb
+- Must update ONLY PostgreSQL password_hash
+- Must NOT update memory store
+- Must NOT auto-login user
+
+Response format:
+{
+  success: true,
+  message: "Password updated successfully"
+}
+
+Errors:
+- invalid_current_password
+- invalid_recovery_key
+- unauthorized
+- internal_error
+
+------------------------------------------------------------
+5 — RECOVERY SYSTEM (FIXED RULE)
+------------------------------------------------------------
+Recovery key MUST:
+
+- NEVER be used in login route
+- ONLY be used inside reset-password route
+- NEVER grant session or login token directly
+- ONLY allow password reset action
+
+Remove ALL:
+- login-time recovery handling
+- recovery 410 blocking logic
+- mixed recovery/login flows
+
+------------------------------------------------------------
+6 — FRONTEND AUTH FIX (CRITICAL STABILITY)
+------------------------------------------------------------
+Frontend must:
+
+- Clear token + cached user ON login page mount
+- Never reuse stale ib_token or ib_cached_user
+- Handle ALL API responses safely:
+  - empty body → "Cannot reach server"
+  - invalid JSON → "Cannot reach server"
+  - 401 → invalid credentials
+  - 500 → server error
+
+- NEVER redirect based on stale localStorage without verifySession()
+
+------------------------------------------------------------
+7 — FINAL VALIDATION TEST
+------------------------------------------------------------
+Run full suite:
+
+CEO LOGIN:
+- correct password → PASS
+- wrong password → FAIL (expected)
+- restart server → still PASS
+
+RESET PASSWORD:
+- reset via session → PASS
+- reset via recovery key → PASS
+- login after reset → PASS
+
+RECOVERY KEY:
+- valid key → allows reset only
+- invalid key → blocked
+
+FRONTEND:
+- no empty response ever
+- no login redirect loop
+- no stale token bypass
+
+------------------------------------------------------------
+FINAL OUTPUT:
+------------------------------------------------------------
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CEO AUTH FINAL STABILITY REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LOGIN:          PASS/FAIL
+RESET:          PASS/FAIL
+RECOVERY:       PASS/FAIL
+DB SOURCE:      PASS/FAIL
+FRONTEND:       PASS/FAIL
+EMPTY RESPONSE: FIXED/BROKEN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OVERALL:        STABLE/DEGRADED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GOAL:
+Make authentication fully deterministic, DB-only, and impossible to drift across restarts or UI states.
