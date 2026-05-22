@@ -1,0 +1,183 @@
+You are working in a production full-stack system (Node.js + PostgreSQL + React).
+
+OBJECTIVE:
+Eliminate ALL authentication drift permanently by enforcing a strict DB-only write model for password + CEO identity.
+
+This is a HARD LOCKDOWN PASS:
+No refactors, no enhancements — ONLY removal of conflicting mutation paths and enforcement of single-source truth.
+
+------------------------------------------------------------
+🚨 CRITICAL RULE: SINGLE WRITE SOURCE
+------------------------------------------------------------
+password_hash MUST have exactly ONE write path:
+
+✔ pgUpdatePasswordHashOnly()
+
+NO OTHER FUNCTION IS ALLOWED TO WRITE PASSWORD DATA:
+- no persistStore() password writes
+- no changeUserPassword memory updates
+- no boot repair password changes
+- no fallback auth mutations
+- no bulk sync overwriting passwordHash
+
+------------------------------------------------------------
+1 — FIND AND REMOVE ALL PASSWORD MUTATION PATHS
+------------------------------------------------------------
+
+Search entire backend for ANY of the following patterns:
+
+- passwordHash =
+- password_hash =
+- persistStore()
+- scheduleSave()
+- bulk user sync/upsert touching password fields
+- role = "ceo" assignment during runtime auth
+- memory → DB sync that includes credentials
+
+RULE:
+If it is NOT pgUpdatePasswordHashOnly → it MUST NOT touch passwordHash.
+
+Replace mutation behavior with:
+✔ log only (warning)
+✔ no write
+✔ no auto-correction
+
+------------------------------------------------------------
+2 — ENFORCE DB-ONLY AUTH FLOW
+------------------------------------------------------------
+
+Login must be strictly:
+
+POST /api/auth/login
+
+STEP FLOW:
+1. Fetch user from PostgreSQL ONLY
+2. If not found → return auth_failed
+3. If passwordHash missing → corrupted_account
+4. Verify using scrypt against DB hash ONLY
+5. NEVER touch memory store
+6. NEVER fallback to any alternate auth method
+
+No exceptions.
+
+------------------------------------------------------------
+3 — RESET PASSWORD (SINGLE WRITE PATH)
+------------------------------------------------------------
+
+POST /api/auth/reset-password must:
+
+- Accept session OR CEO_RECOVERY_KEY
+- Validate current password using DB ONLY
+- Call ONLY:
+    pgUpdatePasswordHashOnly()
+
+STRICT RULES:
+- NO memory updates
+- NO persistStore calls
+- NO secondary sync logic
+- NO role changes
+
+Response:
+{
+  success: true,
+  message: "Password updated successfully"
+}
+
+------------------------------------------------------------
+4 — REMOVE ROLE MUTATION DRIFT
+------------------------------------------------------------
+
+Remove ALL runtime mutations like:
+
+- user.role = "ceo"
+- existing.role = "ceo"
+- boot-time role correction writes
+
+Replace with:
+✔ read-only validation
+✔ log mismatch only
+✔ NO auto-fix
+
+------------------------------------------------------------
+5 — MEMORY MODEL RULE
+------------------------------------------------------------
+
+Memory store rules:
+
+✔ allowed:
+- caching user profile AFTER DB read
+
+❌ forbidden:
+- password storage
+- password comparison
+- role correction writes
+- credential persistence
+
+Memory is VIEW ONLY for auth.
+
+------------------------------------------------------------
+6 — FRONTEND SAFETY (MINIMAL FIX)
+------------------------------------------------------------
+
+Ensure frontend:
+
+- NEVER trusts localStorage auth blindly
+- always calls verifySession() before protected routes
+- clears ib_token + ib_cached_user on login mount
+- handles empty/invalid responses as:
+  "Cannot reach server"
+
+------------------------------------------------------------
+7 — FINAL INTEGRITY TEST (MANDATORY)
+------------------------------------------------------------
+
+Run:
+
+CEO LOGIN:
+- correct password → PASS
+- wrong password → FAIL
+- restart → PASS persists
+
+RESET PASSWORD:
+- reset via session → PASS
+- reset via recovery key → PASS
+- login after reset → PASS
+
+DRIFT TEST:
+- create user → must NOT affect CEO password
+- restart → password unchanged
+- memory cache → must not overwrite DB
+
+RECOVERY KEY:
+- valid → reset only
+- invalid → blocked
+
+FRONTEND:
+- no empty response
+- no redirect loop
+- no stale token bypass
+
+------------------------------------------------------------
+FINAL OUTPUT:
+------------------------------------------------------------
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+AUTH LOCKDOWN REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LOGIN:           PASS/FAIL
+RESET:           PASS/FAIL
+RECOVERY:        PASS/FAIL
+DB SOURCE:       PASS/FAIL
+MEMORY DRIFT:    BLOCKED/FAILED
+FRONTEND:        PASS/FAIL
+EMPTY RESPONSE:  FIXED/BROKEN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OVERALL:         STABLE/DEGRADED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GOAL:
+Make authentication fully deterministic:
+- ONE write path
+- ONE source of truth (PostgreSQL)
+- ZERO memory-based credential logic
+- ZERO silent mutations anywhere in system

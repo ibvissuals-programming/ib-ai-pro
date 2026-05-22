@@ -607,37 +607,28 @@ export function authenticateCeoByRecoveryKey(
     return null;
   }
 
-  let user = getUserByUsername(username);
+  const user = getUserByUsername(username);
 
-  // Bootstrap CEO if somehow missing (e.g. fresh deploy, corrupted DB)
+  // If the CEO account doesn't exist, this is an integrity violation.
+  // Do NOT bootstrap, create, or mutate anything — log and reject.
+  // CEO account must be created at startup via repairCeoAccount().
   if (!user) {
-    const placeholder = `recovery-bootstrap-${randomUUID()}`;
-    user = {
-      id: randomUUID(),
-      username: username.trim().toLowerCase(),
-      passwordHash: hashPassword(placeholder), // unknown password until set
-      role: "ceo",
-      credits: FREE_CREDITS,
-      lastReset: Date.now(),
-      createdAt: Date.now(),
-    };
-    store.set(user.id, user);
-    usernameIndex.set(user.username, user.id);
-    scheduleSave();
-    logger.warn(
+    logger.error(
       { username },
-      "[userStore] CEO bootstrapped via recovery key — set a real password",
+      "[userStore] authenticateCeoByRecoveryKey — CEO account not found; no auto-bootstrap (fix via repairCeoAccount at startup)",
+    );
+    return null;
+  }
+
+  // Read-only role check — no mutation, no scheduleSave, no silent correction.
+  if (user.role !== "ceo") {
+    logger.error(
+      { username, actual_role: user.role, ceo_boot_mutation: false },
+      "[userStore] authenticateCeoByRecoveryKey — CEO user has unexpected role in memory; no auto-correction (manual DB fix required)",
     );
   }
 
-  // Always ensure role is ceo regardless of stored value
-  if (user.role !== "ceo") {
-    user.role = "ceo";
-    scheduleSave();
-    logger.info({ username }, "[userStore] CEO role corrected via recovery");
-  }
-
-  logger.info({ username }, "[userStore] CEO authenticated via recovery key");
+  logger.info({ username }, "[userStore] CEO identity verified via recovery key (read-only)");
   return user;
 }
 
