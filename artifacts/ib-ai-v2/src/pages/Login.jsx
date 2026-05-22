@@ -46,7 +46,6 @@ export default function Login() {
       if (cancelled) return;
       setServerReady(result.ready);
       if (result.ready) {
-        // Server is up — clear any stale "starting up" error so user isn't confused
         setError(prev =>
           prev === 'Server is still starting up — please wait a moment and try again'
             ? ''
