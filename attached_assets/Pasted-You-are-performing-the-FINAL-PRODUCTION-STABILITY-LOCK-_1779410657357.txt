@@ -1,0 +1,163 @@
+You are performing the FINAL PRODUCTION STABILITY LOCK pass on an already-working full-stack AI platform.
+
+IMPORTANT:
+The following systems are ALREADY VERIFIED WORKING:
+
+- CEO login
+- frontend ↔ backend auth
+- PostgreSQL auth
+- token/session flow
+- registration flow
+- AI provider routing
+- proxy configuration
+- health checks
+
+DO NOT:
+- redesign architecture
+- rewrite auth
+- modify DB schema
+- reset passwords
+- add major features
+- change providers
+- refactor frontend structure
+
+OBJECTIVE:
+Lock system stability permanently and eliminate future migration/import instability.
+
+------------------------------------------------------------
+1 — CONFIGURATION IMMUTABILITY
+------------------------------------------------------------
+
+Audit and stabilize:
+
+- env loading
+- secrets loading
+- workflow startup order
+- proxy configuration
+- frontend API target resolution
+- backend port resolution
+
+Guarantee:
+- same behavior after EVERY restart
+- same behavior after EVERY Replit import
+- no hidden dependency on transient memory state
+
+------------------------------------------------------------
+2 — STARTUP RELIABILITY LOCK
+------------------------------------------------------------
+
+Guarantee boot order:
+
+1. env validation
+2. database connection
+3. auth store hydration
+4. provider validation
+5. route registration
+6. frontend readiness
+
+No subsystem may initialize before dependencies are ready.
+
+------------------------------------------------------------
+3 — AUTH STABILITY LOCK
+------------------------------------------------------------
+
+Guarantee:
+- PostgreSQL is sole auth source
+- no in-memory credential authority
+- no boot-time credential mutation
+- no fallback credential paths
+- no stale cache auth
+- all auth routes always return JSON
+
+Verify:
+- login
+- register
+- verify-session
+- /me
+- reset-password
+
+------------------------------------------------------------
+4 — FRONTEND CONNECTION LOCK
+------------------------------------------------------------
+
+Guarantee frontend:
+- always targets active backend
+- never surfaces raw proxy/internal errors
+- gracefully handles offline backend
+- gracefully handles malformed responses
+- never shows "empty response"
+
+------------------------------------------------------------
+5 — HEALTH SYSTEM LOCK
+------------------------------------------------------------
+
+Ensure startup health report validates:
+
+- DB
+- auth
+- providers
+- image
+- TTS
+- video
+- proxy connectivity
+- route readiness
+
+No fake PASS states.
+
+------------------------------------------------------------
+6 — CREDIT PROTECTION LOCK
+------------------------------------------------------------
+
+Guarantee:
+- provider unavailable → fail BEFORE job creation
+- invalid request → fail BEFORE provider call
+- no fake outputs
+- no silent provider failures
+- no wasted AI credits
+
+------------------------------------------------------------
+7 — RESTART + IMPORT STABILITY TEST
+------------------------------------------------------------
+
+Simulate production stability:
+
+- restart backend twice
+- restart frontend twice
+- verify auth still works
+- verify AI routes still work
+- verify sessions persist
+- verify no route crashes
+
+Then verify:
+- clean behavior after fresh import conditions
+- no missing secrets edge cases
+- no stale workflow references
+
+------------------------------------------------------------
+8 — FINAL REPORT
+------------------------------------------------------------
+
+Print EXACTLY:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FINAL STABILITY LOCK REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+AUTH:           PASS/FAIL
+FRONTEND:       PASS/FAIL
+DATABASE:       PASS/FAIL
+PROVIDERS:      PASS/FAIL
+AI PIPELINE:    PASS/FAIL
+HEALTH SYSTEM:  PASS/FAIL
+RESTART TEST:   PASS/FAIL
+IMPORT SAFETY:  PASS/FAIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OVERALL:        LOCKED/STABLE/FAIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+IMPORTANT:
+- No fake passes
+- No architecture rewrites
+- No unnecessary feature additions
+- No overengineering
+- Preserve current working behavior
+- Prioritize long-term migration stability
