@@ -346,32 +346,6 @@ export function isAuthenticated() {
 }
 
 /**
- * checkServerReady() — lightweight readiness probe.
- *
- * Calls /api/auth/health before login/signup so the user sees
- * "Server is starting…" instead of a cryptic network error when
- * the backend is still booting.
- *
- * Returns true if the server responded with { ready: true }.
- * Returns false on timeout, network failure, or non-OK response.
- * Never throws.
- */
-export async function checkServerReady() {
-  try {
-    const res = await fetchWithTimeout(
-      `${BASE}/api/auth/health`,
-      { method: 'GET' },
-      4_000, // short timeout — health endpoint must be instant
-    );
-    if (!res.ok) return false;
-    const data = await safeParseJson(res);
-    return data?.ready === true;
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Verify the current token against the server and refresh the cached user.
  */
 export async function verifySession() {

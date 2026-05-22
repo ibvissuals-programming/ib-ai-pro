@@ -3,7 +3,8 @@ import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertCircle, KeyRound, Lock, CheckCircle } from 'lucide-react';
 import { IbLogo } from '../components/IbLogo';
-import { login, recoveryLogin, recoveryResetPassword, changePassword, clearToken, checkServerReady } from '../auth/authService';
+import { login, recoveryLogin, recoveryResetPassword, changePassword, clearToken } from '../auth/authService';
+import { checkServerHealth } from '../utils/serverReadiness';
 import { useAuth } from '../hooks/useAuth';
 
 export default function Login() {
@@ -41,10 +42,10 @@ export default function Login() {
     let retryTimer = null;
 
     async function probe() {
-      const ready = await checkServerReady();
+      const result = await checkServerHealth();
       if (cancelled) return;
-      setServerReady(ready);
-      if (ready) {
+      setServerReady(result.ready);
+      if (result.ready) {
         // Server is up — clear any stale "starting up" error so user isn't confused
         setError(prev =>
           prev === 'Server is still starting up — please wait a moment and try again'
@@ -66,11 +67,11 @@ export default function Login() {
   // ── Login attempt ──────────────────────────────────────────────────────────
 
   const doLogin = async (user, pass) => {
-    // Guard: if server not yet confirmed ready, re-check before sending credentials.
+    // Button is disabled while serverReady !== true, so this is a safety net only.
     if (!serverReady) {
-      const ready = await checkServerReady();
-      setServerReady(ready);
-      if (!ready) {
+      const result = await checkServerHealth();
+      setServerReady(result.ready);
+      if (!result.ready) {
         setError('Server is still starting up — please wait a moment and try again');
         return;
       }
