@@ -1,0 +1,119 @@
+You are now entering STABILITY-FIRST FIX MODE.
+
+Your ONLY goal is to stabilize the IB AI system so that:
+1. Backend ALWAYS boots successfully
+2. CEO login ALWAYS works from PostgreSQL
+3. No secrets or optional configs can crash the server
+4. No memory/store layer can override DB authentication
+5. Frontend NEVER blocks login due to backend timing or stale state
+
+────────────────────────────────────
+CRITICAL RULES (NON-NEGOTIABLE)
+────────────────────────────────────
+
+A. SERVER BOOT RULES
+- Server MUST NEVER crash due to missing optional environment variables
+- ONLY these are allowed to HARD-FAIL boot:
+  - DATABASE_URL
+  - CEO_USERNAME
+- Everything else MUST be:
+  - warning only OR safe fallback OR disabled mode
+- GEMINI_API_KEY MUST NEVER block startup
+  → if missing, enable SAFE MODE automatically
+
+B. AUTH SOURCE OF TRUTH
+- PostgreSQL is the ONLY source of truth for:
+  - password_hash
+  - user role
+  - user identity
+- NEVER use in-memory passwordHash for authentication decisions
+- NEVER allow memory store to override DB values
+
+C. CEO ACCOUNT RULES
+- CEO account must NEVER be auto-mutated at runtime
+- No function is allowed to:
+  - change role to "ceo"
+  - auto-repair CEO user
+  - create CEO user outside initial boot seeding
+- If CEO mismatch is detected → LOG ONLY, do NOT FIX
+
+D. PASSWORD SYSTEM RULES
+- ALL password checks MUST use DB-fetched hash
+- ALL password updates MUST use:
+  pgUpdatePasswordHashOnly()
+- NEVER use:
+  - persistStore() for password updates
+  - in-memory user password mutations
+
+E. LOGIN FLOW RULES
+- Login must ALWAYS:
+  1. fetch user from PostgreSQL
+  2. verify password using DB hash
+  3. return JWT
+- If DB is unreachable → return structured JSON error (never crash)
+
+F. FRONTEND RULES
+- Frontend must NEVER assume backend is ready
+- Before login attempt:
+  - call /api/health
+  - if not ready → show "Server starting" (not failure)
+- Protected routes MUST verify session with backend (/me)
+- NEVER trust localStorage alone
+
+G. ERROR HANDLING RULE
+- NO endpoint may return:
+  - empty response
+  - raw crash
+  - undefined body
+- Every response MUST be:
+  {
+    success: true | false,
+    code: string,
+    data?: any,
+    error?: string
+  }
+
+────────────────────────────────────
+STARTUP FLOW (MANDATORY)
+────────────────────────────────────
+
+On boot:
+
+1. Load DB
+2. Validate DB connection
+3. Load CEO account from PostgreSQL
+4. DO NOT mutate any user data during boot
+5. If CEO missing → create ONLY ONCE (first boot only)
+6. Log system status:
+   - DB: OK
+   - AUTH: READY
+   - SAFE MODE: ON/OFF
+
+────────────────────────────────────
+ANTI-REGRESSION GUARANTEES
+────────────────────────────────────
+
+- No auth function is allowed to write to DB except:
+  pgUpdatePasswordHashOnly()
+
+- No bulk persistence function is allowed to touch:
+  password_hash
+
+- No recovery system may:
+  bypass DB authentication layer
+
+- No runtime function may:
+  modify user.role
+
+────────────────────────────────────
+FINAL GOAL
+────────────────────────────────────
+
+After this fix:
+- CEO login works immediately after deployment
+- Replit re-imports do NOT break authentication
+- Backend always boots even with missing optional secrets
+- Password reset always works from DB only
+- No “Cannot reach server” unless backend is truly down
+
+END.
