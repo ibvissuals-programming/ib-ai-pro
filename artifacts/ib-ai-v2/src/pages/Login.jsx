@@ -3,7 +3,7 @@ import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertCircle, KeyRound, Lock, CheckCircle } from 'lucide-react';
 import { IbLogo } from '../components/IbLogo';
-import { login, recoveryLogin, recoveryResetPassword, changePassword, clearToken } from '../auth/authService';
+import { login, recoveryLogin, recoveryResetPassword, changePassword, clearToken, checkServerReady } from '../auth/authService';
 import { useAuth } from '../hooks/useAuth';
 
 export default function Login() {
@@ -24,14 +24,50 @@ export default function Login() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  // null = unknown, true = ready, false = starting up
+  const [serverReady, setServerReady] = useState(null);
 
   // Clear any stale token/cache whenever the login page mounts.
   // Prevents redirect loops from tokens that became invalid while the tab was closed.
   useEffect(() => { clearToken(); }, []);
 
+  // ── Server readiness probe ─────────────────────────────────────────────────
+  // Checks /api/auth/health once on mount. If the backend is still booting,
+  // shows "Server is starting…" instead of a cryptic network error.
+  // Retries every 3 s until ready.
+
+  useEffect(() => {
+    let cancelled = false;
+    let retryTimer = null;
+
+    async function probe() {
+      const ready = await checkServerReady();
+      if (cancelled) return;
+      setServerReady(ready);
+      if (!ready) {
+        retryTimer = setTimeout(probe, 3_000);
+      }
+    }
+
+    probe();
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, []);
+
   // ── Login attempt ──────────────────────────────────────────────────────────
 
   const doLogin = async (user, pass) => {
+    // Guard: if server not yet confirmed ready, re-check before sending credentials.
+    if (!serverReady) {
+      const ready = await checkServerReady();
+      setServerReady(ready);
+      if (!ready) {
+        setError('Server is still starting up — please wait a moment and try again');
+        return;
+      }
+    }
     setLoading(true);
     setError('');
     const result = await login(user, pass);
@@ -142,6 +178,29 @@ export default function Login() {
         transition={{ duration: 0.3, ease: 'easeOut' }}
         className="w-full max-w-sm"
       >
+
+        {/* Server-starting banner — shown until /api/auth/health confirms ready */}
+        <AnimatePresence>
+          {serverReady === false && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden mb-4"
+            >
+              <div className="flex items-center gap-2 text-amber-400 text-xs bg-amber-400/10 border border-amber-400/20 rounded-xl px-3 py-2.5">
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
+                  className="w-3 h-3 border-2 border-amber-400/30 border-t-amber-400 rounded-full shrink-0"
+                />
+                Server is starting up — login will be available in a moment…
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div className="flex flex-col items-center mb-8">
           <IbLogo variant="mark" size={44} className="mb-5" />
           <h1 className="text-xl font-bold text-foreground tracking-tight font-heading">

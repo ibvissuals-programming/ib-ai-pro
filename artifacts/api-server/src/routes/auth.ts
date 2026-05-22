@@ -25,7 +25,6 @@ import {
   getUserByIdFromDb,
   getUserByUsername,
   toPublicUser,
-  changeUserPassword,
   updatePasswordHashInDbOnly,
   checkCurrentPasswordFromDb,
   CREDIT_COSTS,
@@ -356,7 +355,9 @@ router.post(
       }
     }
 
-    const ok = await changeUserPassword(userId, newPassword);
+    // DB-only write — never mutates the in-memory store so PostgreSQL remains
+    // the single source of truth. Falls back to changeUserPassword when PG is off.
+    const ok = await updatePasswordHashInDbOnly(userId, newPassword);
     if (!ok) {
       res.status(404).json({ success: false, code: "user_not_found", error: "User not found" });
       return;
