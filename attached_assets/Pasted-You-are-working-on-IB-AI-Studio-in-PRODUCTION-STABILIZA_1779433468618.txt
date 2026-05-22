@@ -1,0 +1,118 @@
+You are working on IB AI Studio in PRODUCTION STABILIZATION MODE.
+
+This is NOT a refactor task.
+This is NOT an architecture redesign.
+This is a FINAL STABILITY + FEATURE PATCH.
+
+━━━━━━━━━━━━━━━━━━━━━━
+🚨 HARD RULES (DO NOT BREAK)
+━━━━━━━━━━━━━━━━━━━━━━
+- Do NOT redesign authentication system
+- Do NOT modify database schema
+- Do NOT introduce duplicate auth/session systems
+- Do NOT change JWT structure or login flow logic
+- Do NOT rewrite backend architecture
+- Only fix real, proven bugs
+- All changes must be minimal, surgical, and reversible
+
+━━━━━━━━━━━━━━━━━━━━━━
+1. AUTH SYSTEM — FULL STABILITY (ALL USERS)
+━━━━━━━━━━━━━━━━━━━━━━
+Goal: make login stable for every user role (admin, CEO, normal users)
+
+Fix ONLY if needed:
+- Remove infinite loading states in login UI
+- Ensure /api/auth/login ALWAYS returns structured JSON
+- Ensure /api/auth/me is the SINGLE source of session truth
+- Remove any frontend logic that trusts localStorage role without server verification
+- Fix stale token loops:
+  - invalid tokens must be cleared cleanly
+  - no redirect loops
+- Ensure verifySession() does not block UI rendering
+
+DO NOT:
+- change authentication architecture
+- add new auth systems
+- duplicate session checks
+
+━━━━━━━━━━━━━━━━━━━━━━
+2. RECOVERY KEY — SAFE ROTATION SYSTEM
+━━━━━━━━━━━━━━━━━━━━━━
+Add a controlled recovery key system:
+
+- Allow generation of a NEW CEO_RECOVERY_KEY
+- Store it ONLY in environment secrets (.env / Replit Secrets)
+- Must NOT crash server if missing
+- If missing:
+  - log warning only
+  - system must continue running
+
+Optional (safe enhancement):
+- add recovery_key_version tracking (non-breaking)
+
+━━━━━━━━━━━━━━━━━━━━━━
+3. VOICE-TO-TEXT FEATURE (FRONTEND ONLY)
+━━━━━━━━━━━━━━━━━━━━━━
+Add microphone input to chat UI:
+
+- Add 🎤 button inside message input field
+- Use browser Web Speech API:
+  - SpeechRecognition / webkitSpeechRecognition
+- On voice result:
+  - append transcript into input field ONLY
+  - do NOT auto-send messages
+- Must work on mobile (Chrome Android priority)
+- Must NOT affect backend or API logic
+
+━━━━━━━━━━━━━━━━━━━━━━
+4. UI / BRANDING — LOGO UPGRADE (FRONTEND ONLY)
+━━━━━━━━━━━━━━━━━━━━━━
+Replace IB AI logo with a new modern design.
+
+Requirements:
+- Minimal, futuristic AI branding style
+- Clean, scalable SVG preferred
+- Works in dark mode and light mode
+- Should feel like a premium AI product (ChatGPT-level aesthetic)
+
+Rules:
+- Only modify frontend logo asset or component reference
+- Do NOT change layout, routing, or UI structure
+- Do NOT touch backend logic
+
+If needed:
+- generate SVG logo file
+- replace existing logo import reference only
+
+━━━━━━━━━━━━━━━━━━━━━━
+5. SYSTEM STABILITY REQUIREMENTS (MANDATORY)
+━━━━━━━━━━━━━━━━━━━━━━
+Before finishing, verify:
+
+- Login works for ALL users (not just CEO)
+- No infinite loading states anywhere in auth flow
+- /api/auth/health returns stable true
+- No duplicate auth clients or conflicting hooks
+- No multiple session verification systems running in parallel
+- Backend starts cleanly with no secret-induced crash loops
+
+━━━━━━━━━━━━━━━━━━━━━━
+6. FINAL OUTPUT REQUIREMENTS
+━━━━━━━━━━━━━━━━━━━━━━
+Return:
+
+- list of files changed
+- list of bugs fixed (ONLY real bugs)
+- confirmation login works for all roles
+- confirmation voice input is active in chat UI
+- confirmation recovery key rotation is safe
+- confirmation no auth duplication exists
+
+━━━━━━━━━━━━━━━━━━━━━━
+🚫 ABSOLUTE RESTRICTION
+━━━━━━━━━━━━━━━━━━━━━━
+If unsure, do NOT change it.
+Prefer stability over feature addition.
+Do NOT "improve architecture".
+Do NOT "optimize system design".
+Only fix verified issues.

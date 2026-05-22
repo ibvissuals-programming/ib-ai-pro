@@ -1,30 +1,29 @@
 /**
  * IbLogo — IB AI Studio Lab brand logo system.
  *
- * Glass Monolith Mark
- *   A rounded glass slab with frosted highlight, gradient border (simulates
- *   light refraction), inner blue radial glow, and "IB / AI" embedded
- *   typography. No images — pure SVG gradients.
+ * Azure Neural Mark
+ *   A deep navy rounded slab with electric-blue radial glow,
+ *   blue-to-indigo gradient border, and "IB / AI" embedded
+ *   typography with neural-node separator dots.
+ *   No images — pure SVG gradients.
  *
  * Variants:
- *   mark      — SVG glass mark only (default size 32)
+ *   mark      — SVG mark only (default size 32)
  *   wordmark  — mark + stacked "IB AI / Studio Lab" (login, splash)
  *   nav       — mark + inline "IB AI Studio Lab" (navbars, sidebars)
  *   compact   — mark + "IB AI" only (tight spaces)
  *
- * All gradient IDs are instance-unique via a static counter to avoid
- * SVG ID collisions when multiple instances render on the same page.
+ * All gradient IDs are instance-unique via useId to avoid SVG ID
+ * collisions when multiple instances render on the same page.
  */
 
 import { useId } from 'react';
 
 function IbMark({ size = 32 }) {
-  const uid = useId().replace(/:/g, '');
-  const bgId      = `ibm-bg-${uid}`;
-  const glowId    = `ibm-glow-${uid}`;
-  const sheenId   = `ibm-sh-${uid}`;
-  const borderId  = `ibm-bd-${uid}`;
-  const clipId    = `ibm-cl-${uid}`;
+  const uid      = useId().replace(/:/g, '');
+  const bgId     = `ibm-bg-${uid}`;
+  const glowId   = `ibm-gw-${uid}`;
+  const borderId = `ibm-bd-${uid}`;
 
   return (
     <svg
@@ -36,58 +35,42 @@ function IbMark({ size = 32 }) {
       aria-hidden="true"
     >
       <defs>
-        {/* Dark glass base — subtle blue tint */}
-        <linearGradient id={bgId} x1="3" y1="3" x2="29" y2="29" gradientUnits="userSpaceOnUse">
-          <stop offset="0%"   stopColor="#18223e"/>
-          <stop offset="100%" stopColor="#0c1222"/>
+        {/* Deep navy background */}
+        <linearGradient id={bgId} x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
+          <stop offset="0%"   stopColor="#0c1220"/>
+          <stop offset="100%" stopColor="#080c18"/>
         </linearGradient>
 
-        {/* Inner gold radial glow — centre-top */}
-        <radialGradient id={glowId} cx="50%" cy="32%" r="58%">
-          <stop offset="0%"   stopColor="#d97706" stopOpacity="0.18"/>
-          <stop offset="100%" stopColor="#d97706" stopOpacity="0"/>
+        {/* Electric blue radial glow — centred slightly above middle */}
+        <radialGradient id={glowId} cx="50%" cy="40%" r="55%">
+          <stop offset="0%"   stopColor="#3b82f6" stopOpacity="0.22"/>
+          <stop offset="100%" stopColor="#3b82f6" stopOpacity="0"/>
         </radialGradient>
 
-        {/* Frosted glass sheen — white fade, top only */}
-        <linearGradient id={sheenId} x1="16" y1="2.5" x2="16" y2="15" gradientUnits="userSpaceOnUse">
-          <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.22"/>
-          <stop offset="100%" stopColor="#ffffff" stopOpacity="0"/>
+        {/* Blue → indigo gradient border */}
+        <linearGradient id={borderId} x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
+          <stop offset="0%"   stopColor="#60a5fa" stopOpacity="0.80"/>
+          <stop offset="45%"  stopColor="#818cf8" stopOpacity="0.45"/>
+          <stop offset="100%" stopColor="#6366f1" stopOpacity="0.15"/>
         </linearGradient>
-
-        {/* Glass border — gold refraction (bright top-left → dim bottom-right) */}
-        <linearGradient id={borderId} x1="3" y1="3" x2="29" y2="29" gradientUnits="userSpaceOnUse">
-          <stop offset="0%"   stopColor="#fbbf24" stopOpacity="0.70"/>
-          <stop offset="40%"  stopColor="#d97706" stopOpacity="0.35"/>
-          <stop offset="100%" stopColor="#ffffff" stopOpacity="0.06"/>
-        </linearGradient>
-
-        {/* Clip mask — top half of the glass slab for sheen layer */}
-        <clipPath id={clipId}>
-          <rect x="0" y="0" width="32" height="14.5"/>
-        </clipPath>
       </defs>
 
-      {/* Base glass fill */}
-      <rect x="2.5" y="2.5" width="27" height="27" rx="6.5" fill={`url(#${bgId})`}/>
+      {/* Base fill */}
+      <rect x="1.5" y="1.5" width="29" height="29" rx="7" fill={`url(#${bgId})`}/>
 
-      {/* Inner blue glow */}
-      <rect x="2.5" y="2.5" width="27" height="27" rx="6.5" fill={`url(#${glowId})`}/>
+      {/* Blue glow layer */}
+      <rect x="1.5" y="1.5" width="29" height="29" rx="7" fill={`url(#${glowId})`}/>
 
-      {/* Frosted sheen — top portion only */}
-      <g clipPath={`url(#${clipId})`}>
-        <rect x="2.5" y="2.5" width="27" height="27" rx="6.5" fill={`url(#${sheenId})`}/>
-      </g>
-
-      {/* Glass border — gradient stroke */}
+      {/* Crisp gradient border */}
       <rect
-        x="2.5" y="2.5" width="27" height="27" rx="6.5"
+        x="1.5" y="1.5" width="29" height="29" rx="7"
         stroke={`url(#${borderId})`}
-        strokeWidth="0.85"
+        strokeWidth="0.8"
       />
 
-      {/* Embedded typography: "IB" white / "AI" blue */}
+      {/* "IB" — white, bold */}
       <text
-        x="16" y="12"
+        x="16" y="12.5"
         textAnchor="middle"
         dominantBaseline="middle"
         fill="#ffffff"
@@ -97,24 +80,27 @@ function IbMark({ size = 32 }) {
         letterSpacing="-0.4"
       >IB</text>
 
+      {/* Separator with neural-node endpoints */}
+      <line
+        x1="9.5" y1="16.5" x2="22.5" y2="16.5"
+        stroke="#3b82f6"
+        strokeWidth="0.6"
+        strokeOpacity="0.55"
+      />
+      <circle cx="9.5"  cy="16.5" r="0.8" fill="#60a5fa" opacity="0.65"/>
+      <circle cx="22.5" cy="16.5" r="0.8" fill="#60a5fa" opacity="0.65"/>
+
+      {/* "AI" — electric blue */}
       <text
         x="16" y="21.5"
         textAnchor="middle"
         dominantBaseline="middle"
-        fill="#f59e0b"
+        fill="#60a5fa"
         fontFamily="Inter,system-ui,sans-serif"
         fontWeight="800"
         fontSize="9"
         letterSpacing="-0.4"
       >AI</text>
-
-      {/* Thin separator line between IB and AI */}
-      <line
-        x1="9" y1="16.5" x2="23" y2="16.5"
-        stroke="#f59e0b"
-        strokeWidth="0.5"
-        strokeOpacity="0.30"
-      />
     </svg>
   );
 }
@@ -137,7 +123,7 @@ export function IbLogo({ variant = 'wordmark', size = 32, className = '' }) {
             className="font-bold text-foreground"
             style={{ fontSize: Math.round(size * 0.5) + 'px', letterSpacing: '-0.03em', fontFamily: 'Inter, sans-serif' }}
           >
-            IB <span className="text-amber-500">AI</span>
+            IB <span className="text-blue-400">AI</span>
           </span>
           <span
             className="text-muted-foreground font-medium uppercase tracking-[0.1em]"
@@ -158,7 +144,7 @@ export function IbLogo({ variant = 'wordmark', size = 32, className = '' }) {
           className="text-sm font-semibold tracking-tight text-foreground"
           style={{ fontFamily: 'Inter, sans-serif', letterSpacing: '-0.02em' }}
         >
-          IB <span className="text-amber-500">AI</span>{' '}
+          IB <span className="text-blue-400">AI</span>{' '}
           <span className="font-normal text-muted-foreground">Studio Lab</span>
         </span>
       </div>
@@ -173,7 +159,7 @@ export function IbLogo({ variant = 'wordmark', size = 32, className = '' }) {
           className="text-sm font-semibold tracking-tight text-foreground"
           style={{ fontFamily: 'Inter, sans-serif', letterSpacing: '-0.02em' }}
         >
-          IB <span className="text-amber-500">AI</span>
+          IB <span className="text-blue-400">AI</span>
         </span>
       </div>
     );

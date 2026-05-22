@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowUp, Trash2, ImagePlus, X, AlertCircle, Wand2 } from 'lucide-react';
+import { ArrowUp, Trash2, ImagePlus, X, AlertCircle, Wand2, Mic, MicOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { readImageFile, validateImageFile } from '../services/imageApi';
 import { hasEditIntent } from '../services/aiEngine';
@@ -12,9 +12,16 @@ export function InputBox({ onSend, onSendImage, onSendImageEdit, onClear, disabl
   const [imageError, setImageError] = useState('');
   const [isDragging, setIsDragging] = useState(false);
 
-  const textareaRef = useRef(null);
-  const fileInputRef = useRef(null);
+  const [isListening, setIsListening] = useState(false);
+
+  const textareaRef    = useRef(null);
+  const fileInputRef   = useRef(null);
   const dragCounterRef = useRef(0); // track nested drag events
+  const recognitionRef = useRef(null);
+
+  const speechSupported =
+    typeof window !== 'undefined' &&
+    !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 
   useEffect(() => {
     if (!disabled) textareaRef.current?.focus();
@@ -145,6 +152,37 @@ export function InputBox({ onSend, onSendImage, onSendImageEdit, onClear, disabl
     e.target.value = ''; // reset so same file can be re-selected
   };
 
+  // ── Voice input (Web Speech API) ─────────────────────────────────────────────
+  const handleVoice = useCallback(() => {
+    if (!speechSupported) return;
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SR();
+    recognition.lang             = 'en-US';
+    recognition.interimResults   = false;
+    recognition.maxAlternatives  = 1;
+    recognition.continuous       = false;
+
+    recognition.onstart  = () => setIsListening(true);
+    recognition.onend    = () => { setIsListening(false); recognitionRef.current = null; };
+    recognition.onerror  = () => { setIsListening(false); recognitionRef.current = null; };
+    recognition.onresult = (e) => {
+      const transcript = e.results[0]?.[0]?.transcript ?? '';
+      if (transcript) setValue(prev => prev ? `${prev} ${transcript}` : transcript);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  }, [isListening, speechSupported]);
+
+  // Stop recognition if the component unmounts while listening
+  useEffect(() => () => { recognitionRef.current?.stop(); }, []);
+
   const canSend = (value.trim().length > 0 || attachedImage !== null) && !disabled;
 
   return (
@@ -260,6 +298,23 @@ export function InputBox({ onSend, onSendImage, onSendImageEdit, onClear, disabl
           />
 
           <div className="absolute right-2 bottom-2 flex items-center gap-1">
+            {/* Voice input — only rendered when browser supports Web Speech API */}
+            {speechSupported && (
+              <button
+                type="button"
+                onClick={handleVoice}
+                disabled={disabled}
+                title={isListening ? 'Stop recording' : 'Voice input'}
+                className={`p-2 rounded-xl transition-all ${
+                  isListening
+                    ? 'text-red-400 bg-red-400/10 animate-pulse'
+                    : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-secondary disabled:opacity-30'
+                }`}
+              >
+                {isListening ? <MicOff size={14} /> : <Mic size={14} />}
+              </button>
+            )}
+
             {/* Image upload button */}
             <button
               onClick={() => fileInputRef.current?.click()}
