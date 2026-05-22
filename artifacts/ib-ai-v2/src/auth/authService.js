@@ -49,7 +49,7 @@ function saveToken(token) {
   catch { /* ignore */ }
 }
 
-function clearToken() {
+export function clearToken() {
   try {
     localStorage.removeItem(IB_TOKEN_KEY);
     localStorage.removeItem(IB_USER_KEY);
@@ -225,24 +225,50 @@ export async function login(username, password) {
 }
 
 /**
- * recoveryLogin() — CEO recovery path.
+ * recoveryLogin() — validate recovery inputs locally only.
  *
- * Attempts immediately. One retry on network-level failure only.
- * Hard auth failures (401/400) are returned immediately without retry.
+ * Recovery key login via the /auth/login endpoint is disabled.
+ * The recovery key is ONLY used in recoveryResetPassword() which calls
+ * POST /auth/reset-password directly with the key in a request header.
+ *
+ * This function purely validates that the caller supplied non-empty
+ * username and key before showing the set-password form.  No network
+ * call is made here.
  */
-export async function recoveryLogin(username, recoveryKey) {
+export function recoveryLogin(username, recoveryKey) {
+  if (!username || !username.trim()) {
+    return Promise.resolve({ success: false, error: 'Username is required' });
+  }
+  if (!recoveryKey || !recoveryKey.trim()) {
+    return Promise.resolve({ success: false, error: 'Recovery key is required' });
+  }
+  // Return success so the Login page can show the set-password form.
+  // The actual key is forwarded by recoveryResetPassword().
+  return Promise.resolve({ success: true, recoveryLogin: true });
+}
+
+/**
+ * recoveryResetPassword() — reset CEO password using a recovery key.
+ *
+ * Sends POST /api/auth/reset-password with the recovery key in the
+ * x-ceo-recovery-key header and the new password in the body.
+ * No session token is issued — the user must log in normally afterward.
+ *
+ * One retry on network-level failures only.
+ */
+export async function recoveryResetPassword(username, recoveryKey, newPassword) {
   for (let attempt = 1; attempt <= 2; attempt++) {
     let res, data;
     try {
       res = await fetchWithTimeout(
-        `${BASE}/api/auth/login`,
+        `${BASE}/api/auth/reset-password`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'x-ceo-recovery-key': recoveryKey,
           },
-          body: JSON.stringify({ username }),
+          body: JSON.stringify({ username, newPassword }),
         },
         AUTH_TIMEOUT_MS,
       );
@@ -256,20 +282,13 @@ export async function recoveryLogin(username, recoveryKey) {
     }
 
     if (!res.ok) {
-      // Hard auth failure — never retry
-      if (res.status === 401 || res.status === 400) {
-        return { success: false, error: data.error || 'Invalid recovery key' };
+      if (res.status === 401 || res.status === 400 || res.status === 503) {
+        return { success: false, error: data.error || 'Recovery reset failed' };
       }
       return { success: false, error: data.error || 'Server error — please try again' };
     }
 
-    if (!data.token || !data.user) {
-      return { success: false, error: data.error || 'Unexpected server response — please try again' };
-    }
-
-    saveToken(data.token);
-    saveUser(data.user);
-    return { success: true, user: data.user, recoveryLogin: true };
+    return { success: true };
   }
 
   return { success: false, error: 'Cannot reach server — please try again' };

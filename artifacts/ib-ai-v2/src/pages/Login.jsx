@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertCircle, KeyRound, Lock, CheckCircle } from 'lucide-react';
 import { IbLogo } from '../components/IbLogo';
-import { login, recoveryLogin, changePassword } from '../auth/authService';
+import { login, recoveryLogin, recoveryResetPassword, changePassword, clearToken } from '../auth/authService';
 import { useAuth } from '../hooks/useAuth';
 
 export default function Login() {
@@ -18,9 +18,16 @@ export default function Login() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
+  // Tracks whether the set-password step was reached via recovery key (not login)
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Clear any stale token/cache whenever the login page mounts.
+  // Prevents redirect loops from tokens that became invalid while the tab was closed.
+  useEffect(() => { clearToken(); }, []);
 
   // ── Login attempt ──────────────────────────────────────────────────────────
 
@@ -44,6 +51,8 @@ export default function Login() {
   };
 
   // ── Recovery attempt ───────────────────────────────────────────────────────
+  // recoveryLogin() only validates that inputs are non-empty — no network call.
+  // The recovery key is forwarded to the server only in handleSetPassword().
 
   const doRecovery = async (user, key) => {
     setLoading(true);
@@ -52,10 +61,10 @@ export default function Login() {
     setLoading(false);
 
     if (result.success) {
-      setUser(result.user);
+      setIsRecoveryMode(true);
       setMode('set-password');
     } else {
-      setError(result.error || 'Recovery login failed');
+      setError(result.error || 'Recovery failed');
     }
   };
 
@@ -85,8 +94,8 @@ export default function Login() {
     e.preventDefault();
     setError('');
     setSuccess('');
-    if (newPassword.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -94,13 +103,34 @@ export default function Login() {
       return;
     }
     setLoading(true);
-    const result = await changePassword(newPassword);
+
+    let result;
+    if (isRecoveryMode) {
+      // Recovery path: submit key + new password directly to reset-password.
+      // No token is issued — user must log in normally after this step.
+      result = await recoveryResetPassword(username.trim(), recoveryKey.trim(), newPassword);
+    } else {
+      result = await changePassword(newPassword);
+    }
+
     setLoading(false);
     if (result.success) {
-      setSuccess('Password updated! Redirecting to chat…');
-      setTimeout(() => setLocation('/chat'), 1500);
+      if (isRecoveryMode) {
+        setSuccess('Password updated! Please sign in with your new password.');
+        setTimeout(() => {
+          setIsRecoveryMode(false);
+          setMode('login');
+          setNewPassword('');
+          setConfirmPassword('');
+          setRecoveryKey('');
+          setSuccess('');
+        }, 1800);
+      } else {
+        setSuccess('Password updated! Redirecting to chat…');
+        setTimeout(() => setLocation('/chat'), 1500);
+      }
     } else {
-      setError(result.error || 'Password change failed');
+      setError(result.error || 'Password update failed');
     }
   };
 

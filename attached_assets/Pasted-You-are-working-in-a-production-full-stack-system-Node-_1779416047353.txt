@@ -1,0 +1,131 @@
+You are working in a production full-stack system (Node.js + PostgreSQL + React).
+
+OBJECTIVE:
+Fix CEO authentication permanently so login, reset-password, and recovery are stable, consistent, and use PostgreSQL as the ONLY source of truth.
+
+DO NOT:
+- change DB schema
+- create new auth systems
+- add duplicate CEO accounts
+- rely on in-memory password verification
+- auto-mutate CEO role or password during boot/login
+- introduce alternative login paths
+
+------------------------------------------------------------
+1 — SINGLE SOURCE OF TRUTH
+------------------------------------------------------------
+PostgreSQL password_hash is the ONLY valid credential source.
+
+- Memory store is cache only (NEVER for password verification)
+- No function may modify password_hash except:
+  - POST /api/auth/reset-password
+  - Explicit CEO recovery reset flow
+
+------------------------------------------------------------
+2 — CEO LOGIN FIX (CRITICAL)
+------------------------------------------------------------
+Login flow MUST:
+
+1. Fetch user from PostgreSQL only
+2. If user not found → auth_failed
+3. If passwordHash missing → corrupted_account
+4. Verify password using scrypt against DB hash ONLY
+5. Never fallback to memory password hash
+6. Never mutate user during login
+
+Expected:
+- correct password → 200 + token
+- wrong password → 401 auth_failed
+- NEVER return empty response
+
+------------------------------------------------------------
+3 — REMOVE ALL MUTATION PATHS
+------------------------------------------------------------
+Search and ensure these NEVER modify DB or memory:
+- repairCeoAccount()
+- authenticateUser() fallback logic
+- authenticateUserFromDb() (must be read-only)
+- any role correction logic during login/boot
+
+Instead:
+- log inconsistencies only
+- never auto-fix silently
+
+------------------------------------------------------------
+4 — PASSWORD RESET (REBUILD CLEAN)
+------------------------------------------------------------
+POST /api/auth/reset-password MUST:
+
+- Require auth OR valid CEO recovery key
+- Verify current password OR recovery key (one only)
+- Update ONLY PostgreSQL password_hash
+- NOT touch memory store
+- NOT auto-login user
+
+Responses:
+- success → { success: true, message: "Password updated successfully" }
+- invalid_current_password
+- invalid_recovery_key
+- unauthorized
+- internal_error
+
+------------------------------------------------------------
+5 — RECOVERY KEY FIX
+------------------------------------------------------------
+- Recovery key MUST NOT be a login method
+- Remove any login-path recovery logic
+- Remove 410/blocking recovery login responses
+- Recovery key ONLY allowed inside reset-password endpoint
+
+------------------------------------------------------------
+6 — FRONTEND FIX (EMPTY RESPONSE)
+------------------------------------------------------------
+Fix auth frontend:
+
+- If fetch returns empty/invalid JSON:
+  → show "Cannot reach server"
+- On login page mount:
+  → clear ib_token and ib_cached_user
+- Prevent redirect loops from stale tokens
+
+------------------------------------------------------------
+7 — FINAL VALIDATION TEST
+------------------------------------------------------------
+Run full tests:
+
+CEO LOGIN:
+- correct password → PASS
+- wrong password → FAIL (expected)
+- restart → still PASS
+
+RESET PASSWORD:
+- reset → PASS
+- login new password → PASS
+
+RECOVERY KEY:
+- valid → reset works
+- invalid → blocked
+
+FRONTEND:
+- no empty response
+- no login loop
+- logout clears cache
+
+------------------------------------------------------------
+FINAL OUTPUT:
+------------------------------------------------------------
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CEO AUTH FINAL STABILITY REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LOGIN:           PASS/FAIL
+RESET:           PASS/FAIL
+RECOVERY:        PASS/FAIL
+DB SOURCE:       PASS/FAIL
+FRONTEND:        PASS/FAIL
+EMPTY RESPONSE:  FIXED/BROKEN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OVERALL:         STABLE/DEGRADED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GOAL:
+CEO login must work consistently across restarts, password must never drift, recovery key must only reset password, and PostgreSQL must remain the only source of truth.

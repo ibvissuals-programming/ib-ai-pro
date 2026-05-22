@@ -14,7 +14,8 @@
  *   register  — 5 per 5 minutes per IP
  *   login     — 15 per 60 seconds per IP
  */
-import { Router, type Request, type Response } from "express";
+import { timingSafeEqual } from "crypto";
+import { Router, type Request, type Response, type RequestHandler } from "express";
 import { z } from "zod";
 import {
   createUser,
@@ -26,6 +27,7 @@ import {
   toPublicUser,
   changeUserPassword,
   checkCurrentPassword,
+  checkCurrentPasswordFromDb,
   CREDIT_COSTS,
   FREE_CREDITS,
   RESET_INTERVAL_MS,
@@ -153,17 +155,6 @@ router.post(
   "/auth/login",
   rateLimit(15, 60_000, "login"),
   async (req: Request, res: Response) => {
-    // ── RECOVERY KEY: permanently disabled ─────────────────────────────────────
-    if (req.headers["x-ceo-recovery-key"]) {
-      logger.warn({ ip: req.ip }, "[auth] recovery key login attempted — permanently disabled");
-      res.status(410).json({
-        success: false,
-        code:    "auth_failed",
-        error:   "Recovery key login is disabled. Use password login and reset-password to change credentials.",
-      });
-      return;
-    }
-
     // ── Top-level crash guard — NOTHING in this handler may produce an empty response ──
     try {
       // ── Password login (all users) ────────────────────────────────────────────
@@ -423,27 +414,45 @@ router.post(
 
 // ── POST /api/auth/reset-password ─────────────────────────────────────────────
 //
-// Deterministic, self-service password reset for any authenticated user.
-// Stricter than change-password: normal sessions only, currentPassword always
-// required, newPassword min 8 chars.
+// Two paths, same endpoint:
+//
+//   A) Authenticated reset (normal sessions only):
+//      - Headers: Authorization: Bearer <token>
+//      - Body:    { currentPassword, newPassword }
+//      - currentPassword verified against PostgreSQL hash (not memory cache)
+//
+//   B) CEO recovery reset (no session required):
+//      - Headers: x-ceo-recovery-key: <key>
+//      - Body:    { username, newPassword }
+//      - Recovery key validated via timing-safe compare against CEO_RECOVERY_KEY env var
+//      - Only CEO accounts may use recovery reset
 //
 // Security guarantees:
-//   - requireNormalAuth blocks recovery sessions entirely
-//   - currentPassword verified before any mutation
-//   - Identical old/new passwords rejected
+//   - currentPassword always verified against fresh PostgreSQL hash
+//   - Recovery key never used as a login path — it ONLY resets password_hash
+//   - Identical old/new passwords rejected on normal path
 //   - Only password_hash is updated — id, role, username, createdAt untouched
 //   - No hash values appear in logs at any point
 
 const ResetPasswordSchema = z.object({
-  currentPassword: z.string().min(1, "Current password is required").max(128),
+  currentPassword: z.string().min(1).max(128).optional(),
+  username:        z.string().min(1).max(64).optional(),
   newPassword:     z.string()
     .min(8, "Password must be at least 8 characters")
     .max(128),
 });
 
+/** Allow either a valid normal-session JWT or an x-ceo-recovery-key header. */
+const requireNormalAuthOrRecoveryKey: RequestHandler = (req, res, next) => {
+  if (req.headers["x-ceo-recovery-key"]) {
+    return next(); // validated inside the route handler
+  }
+  return (requireNormalAuth as RequestHandler)(req, res, next);
+};
+
 router.post(
   "/auth/reset-password",
-  requireNormalAuth,
+  requireNormalAuthOrRecoveryKey,
   rateLimit(5, 60_000, "reset_password"),
   async (req: Request, res: Response) => {
     const parsed = ResetPasswordSchema.safeParse(req.body);
@@ -456,9 +465,103 @@ router.post(
       return;
     }
 
-    const { currentPassword, newPassword } = parsed.data;
-    const userId   = req.user!.userId;
-    const username = req.user!.username;
+    const { currentPassword, username: bodyUsername, newPassword } = parsed.data;
+    const recoveryKey = req.headers["x-ceo-recovery-key"] as string | undefined;
+
+    // ── PATH B: CEO recovery key reset ────────────────────────────────────────
+    if (recoveryKey) {
+      const configuredKey = process.env["CEO_RECOVERY_KEY"];
+      if (!configuredKey) {
+        logger.warn({ ip: req.ip }, "[auth] recovery reset attempted — CEO_RECOVERY_KEY not configured");
+        res.status(503).json({
+          success: false,
+          code:    "recovery_disabled",
+          error:   "Recovery key is not configured on this server",
+        });
+        return;
+      }
+
+      if (!bodyUsername) {
+        res.status(400).json({
+          success: false,
+          code:    "invalid_request",
+          error:   "Username is required for recovery reset",
+        });
+        return;
+      }
+
+      // Timing-safe key comparison (guards against length-difference oracle)
+      const keyBufA = Buffer.from(recoveryKey);
+      const keyBufB = Buffer.from(configuredKey);
+      const keyValid =
+        keyBufA.length === keyBufB.length &&
+        timingSafeEqual(keyBufA, keyBufB);
+
+      if (!keyValid) {
+        logger.warn({ ip: req.ip, username: bodyUsername }, "[auth] invalid recovery key attempt");
+        addAuditEntry("recovery_reset_failure", `Invalid recovery key: ${bodyUsername}`, {
+          ip: req.ip ?? undefined,
+        });
+        res.status(401).json({
+          success: false,
+          code:    "invalid_recovery_key",
+          error:   "Invalid recovery key",
+        });
+        return;
+      }
+
+      // Key is valid — target user must be CEO
+      const targetUser = getUserByUsername(bodyUsername.trim().toLowerCase());
+      if (!targetUser || targetUser.role !== "ceo") {
+        // Return same error to avoid username enumeration
+        res.status(401).json({
+          success: false,
+          code:    "invalid_recovery_key",
+          error:   "Invalid recovery key",
+        });
+        return;
+      }
+
+      const ok = await changeUserPassword(targetUser.id, newPassword);
+      if (!ok) {
+        res.status(500).json({ success: false, code: "internal_error", error: "Password update failed" });
+        return;
+      }
+
+      addAuditEntry("recovery_reset_success", `Password reset via recovery key: ${targetUser.username}`, {
+        ip: req.ip ?? undefined,
+      });
+      emit({
+        eventType: "password_reset_success",
+        source:    "auth_route",
+        userId:    targetUser.id,
+        action:    "reset_password",
+        status:    "success",
+        metadata:  { username: targetUser.username, method: "recovery_key" },
+      });
+      logger.info({ username: targetUser.username }, "[auth] password reset via recovery key");
+
+      res.json({ success: true, message: "Password updated successfully" });
+      return;
+    }
+
+    // ── PATH A: Authenticated reset ───────────────────────────────────────────
+    if (!req.user) {
+      res.status(401).json({ success: false, code: "unauthorized", error: "Authentication required" });
+      return;
+    }
+
+    if (!currentPassword) {
+      res.status(400).json({
+        success: false,
+        code:    "invalid_request",
+        error:   "Current password is required",
+      });
+      return;
+    }
+
+    const userId   = req.user.userId;
+    const username = req.user.username;
 
     emit({
       eventType: "password_reset_attempt",
@@ -479,8 +582,9 @@ router.post(
       return;
     }
 
-    // Current password verification — must match stored hash
-    if (!checkCurrentPassword(userId, currentPassword)) {
+    // Current password verification — always against PostgreSQL hash (never memory cache)
+    const passwordValid = await checkCurrentPasswordFromDb(userId, currentPassword);
+    if (!passwordValid) {
       addAuditEntry("password_reset_failure", `Incorrect current password: ${username}`, {
         username,
         ip: req.ip ?? undefined,
@@ -494,7 +598,7 @@ router.post(
         metadata:  { username, reason: "incorrect_current_password" },
         errorCode: "INVALID_CREDENTIALS",
       });
-      res.status(401).json({ success: false, code: "password_mismatch", error: "Current password is incorrect" });
+      res.status(401).json({ success: false, code: "invalid_current_password", error: "Current password is incorrect" });
       return;
     }
 
@@ -524,15 +628,12 @@ router.post(
       userId,
       action:    "reset_password",
       status:    "success",
-      metadata:  { username, role: req.user!.role },
+      metadata:  { username, role: req.user.role },
     });
 
     logger.info({ userId, username }, "[auth] password reset completed");
 
-    res.json({
-      success: true,
-      message: "Password reset successfully.",
-    });
+    res.json({ success: true, message: "Password updated successfully" });
   },
 );
 

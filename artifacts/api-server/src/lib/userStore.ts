@@ -786,6 +786,36 @@ export function checkCurrentPassword(userId: string, password: string): boolean 
 }
 
 /**
+ * checkCurrentPasswordFromDb() — DB-authoritative password check.
+ *
+ * Fetches the user's password_hash FRESH from PostgreSQL and verifies
+ * the supplied password against it.  This is the only correct check to
+ * use inside any mutation route (reset-password, change-password) because
+ * the in-memory copy may lag behind a recent DB update.
+ *
+ * Falls back to the in-memory check only when PostgreSQL is disabled.
+ */
+export async function checkCurrentPasswordFromDb(
+  userId:   string,
+  password: string,
+): Promise<boolean> {
+  if (!isPostgresEnabled()) {
+    return checkCurrentPassword(userId, password);
+  }
+  try {
+    const dbRecord = await pgGetUserById(userId);
+    if (!dbRecord || !dbRecord.passwordHash) return false;
+    return verifyPassword(password, dbRecord.passwordHash);
+  } catch (err) {
+    logger.error(
+      { err, userId },
+      "[userStore] checkCurrentPasswordFromDb — db error, falling back to memory",
+    );
+    return checkCurrentPassword(userId, password);
+  }
+}
+
+/**
  * getCeoUser() — returns the full CEO User record for integrity checks.
  * Used only by startupIntegrityCheck to verify passwordHash is non-null.
  * Never expose passwordHash to clients or logs.
