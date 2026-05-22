@@ -1,0 +1,165 @@
+# 🔒 CEO AUTH LOCK MASTER PROMPT (STABLE SOURCE OF TRUTH PASS)
+
+You are working inside a production full-stack system (Node.js + PostgreSQL + frontend auth).
+
+## 🎯 OBJECTIVE
+Perform a **FINAL AUTH LOCK PASS** to stabilize CEO login and password reset.
+
+Focus ONLY on:
+- fixing real authentication failures
+- enforcing single source of truth (PostgreSQL)
+- removing runtime desync between DB / memory / frontend
+- ensuring CEO login works reliably in browser
+
+DO NOT:
+- redesign architecture
+- add new auth systems
+- add new recovery flows
+- add new providers
+- refactor unrelated modules
+- “over-harden” or rewrite stable logic
+
+---
+
+# 🧠 RULE 1 — SINGLE SOURCE OF TRUTH (MANDATORY)
+
+All authentication MUST use PostgreSQL as the only authority.
+
+### Enforce:
+- login → DB password_hash only
+- password verification → DB only (NEVER memory)
+- role → DB only (never auto-correct in runtime)
+- CEO identity → DB only
+
+### FORBIDDEN:
+- in-memory password checks
+- role mutation anywhere in runtime
+- scheduleSave() or persistStore() affecting passwordHash or role
+- auto-repair of CEO user after boot
+
+---
+
+# 🔐 RULE 2 — CEO ACCOUNT MUST BE IMMUTABLE
+
+The CEO account:
+
+- must NEVER be created in runtime except first bootstrap (repairCeoAccount at startup only)
+- must NEVER be modified after creation except via password reset endpoint
+- must NEVER have role changed in memory
+
+### REQUIRED BEHAVIOR:
+If CEO mismatch is detected:
+- LOG ONLY
+- DO NOT FIX
+- DO NOT SAVE
+- DO NOT mutate memory
+
+---
+
+# 🔑 RULE 3 — PASSWORD RESET MUST BE DB-ONLY
+
+All password updates MUST:
+
+- update PostgreSQL directly
+- never rely on persistStore()
+- never mutate in-memory user objects
+
+### REQUIRED FLOW:
+1. validate current password OR recovery key
+2. hash new password
+3. UPDATE users SET password_hash = $1 WHERE id = $2
+4. return success response
+
+---
+
+# 🚫 RULE 4 — REMOVE DESYNC SOURCES
+
+Search and ensure these DO NOT affect auth correctness:
+
+- authenticateCeoByRecoveryKey (must NOT mutate users or role)
+- scheduleSave() (must NOT affect passwordHash or role)
+- persistStore() (must NEVER overwrite passwordHash)
+- any fallback “memory auth” logic used for login decisions
+
+These are allowed ONLY for non-auth metadata.
+
+---
+
+# 🌐 RULE 5 — FRONTEND CONSISTENCY
+
+Frontend must:
+
+- always call verifySession() before trusting localStorage
+- clear stale token on login page mount
+- never assume localStorage = valid session
+
+If session invalid:
+→ force logout + re-login screen
+
+---
+
+# ⚠️ RULE 6 — DEBUGGING CONSTRAINT
+
+If login fails:
+DO NOT change backend logic immediately.
+
+First verify:
+1. DB row exists for CEO
+2. password_hash is correct format
+3. backend instance matches frontend target port
+4. no duplicate servers running
+
+---
+
+# 🧪 RULE 7 — VALIDATION TESTS (MANDATORY)
+
+After changes, verify ONLY these:
+
+- CEO login success (correct password)
+- CEO login failure (wrong password)
+- password reset updates DB correctly
+- session persists after refresh
+- logout clears session properly
+
+---
+
+# 📦 FINAL OUTPUT FORMAT
+
+Return ONLY:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CEO AUTH LOCK REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LOGIN: PASS / FAIL
+RESET: PASS / FAIL
+DB SOURCE: PASS / FAIL
+SESSION: PASS / FAIL
+FRONTEND SYNC: PASS / FAIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OVERALL: STABLE / DEGRADED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Include ONLY real failures. No simulated PASS results.
+
+---
+
+# 🎯 FINAL GOAL
+
+System must behave like:
+
+✔ PostgreSQL is the only truth  
+✔ CEO account never mutates in runtime  
+✔ Password reset always persists correctly  
+✔ Frontend never trusts stale state  
+✔ No hidden memory-based authentication paths  
+
+---
+
+If anything breaks:
+→ fix ONLY the minimum DB/auth mismatch  
+→ do NOT expand system complexity  
+
+---
+
+If you want next upgrade after this:
+👉 “frontend session hard lock (zero stale login possible)”
