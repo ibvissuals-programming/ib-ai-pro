@@ -44,8 +44,15 @@ export default function Login() {
       const ready = await checkServerReady();
       if (cancelled) return;
       setServerReady(ready);
-      if (!ready) {
-        retryTimer = setTimeout(probe, 3_000);
+      if (ready) {
+        // Server is up — clear any stale "starting up" error so user isn't confused
+        setError(prev =>
+          prev === 'Server is still starting up — please wait a moment and try again'
+            ? ''
+            : prev
+        );
+      } else {
+        retryTimer = setTimeout(probe, 2_500);
       }
     }
 
@@ -276,7 +283,7 @@ export default function Login() {
 
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || serverReady !== true}
                   data-testid="button-login"
                   className="w-full bg-primary text-primary-foreground rounded-xl py-2.5 text-sm font-medium hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed mt-2 shadow-lg shadow-primary/20"
                 >
@@ -288,6 +295,15 @@ export default function Login() {
                         className="w-3.5 h-3.5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full"
                       />
                       Signing in...
+                    </span>
+                  ) : serverReady !== true ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
+                        className="w-3.5 h-3.5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full"
+                      />
+                      Server starting…
                     </span>
                   ) : 'Sign in'}
                 </button>
