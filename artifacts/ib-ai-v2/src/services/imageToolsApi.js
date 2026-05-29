@@ -1,7 +1,7 @@
 import { getAuthHeaders } from '../auth/authService';
 import { safeJson, fetchWithTimeout, IMAGE_GEN_MS } from '../utils/apiClient';
 
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+const BASE = (import.meta.env.BASE_URL ?? '').replace(/\/$/, '');
 const GENERATE_URL         = `${BASE}/api/image/generate`;
 const EDIT_URL             = `${BASE}/api/image/edit`;
 const HISTORY_URL          = `${BASE}/api/image/history`;

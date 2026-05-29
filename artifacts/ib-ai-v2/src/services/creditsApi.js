@@ -1,7 +1,7 @@
 import { getAuthHeaders } from '../auth/authService';
 import { safeJson, fetchWithTimeout, API_TIMEOUT_MS } from '../utils/apiClient';
 
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+const BASE = (import.meta.env.BASE_URL ?? '').replace(/\/$/, '');
 
 /**
  * Fetch the current credit status for the authenticated user.

@@ -1,6 +1,6 @@
 import { getAuthHeaders } from '../auth/authService';
 
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+const BASE = (import.meta.env.BASE_URL ?? '').replace(/\/$/, '');
 const CHAT_URL = `${BASE}/api/chat`;
 
 // Total timeout covers both the initial TCP/TLS connection AND the full SSE

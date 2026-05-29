@@ -11,7 +11,7 @@
 import { getAuthHeaders } from '../auth/authService';
 import { safeJson, fetchWithTimeout } from '../utils/apiClient';
 
-const BASE           = import.meta.env.BASE_URL.replace(/\/$/, '');
+const BASE           = (import.meta.env.BASE_URL ?? '').replace(/\/$/, '');
 const GENERATE_URL   = `${BASE}/api/tts/generate`;
 const VOICES_URL     = `${BASE}/api/tts/voices`;
 const TTS_TIMEOUT_MS = 60_000;

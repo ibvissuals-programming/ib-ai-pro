@@ -59,7 +59,7 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <TooltipProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+          <WouterRouter base={(import.meta.env.BASE_URL ?? '/').replace(/\/$/, "")}>
             <Router />
           </WouterRouter>
           <Toaster />

@@ -1,7 +1,7 @@
 import { getAuthHeaders } from '../auth/authService';
 import { safeJson, fetchWithTimeout, IMAGE_ANALYZE_MS } from '../utils/apiClient';
 
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+const BASE = (import.meta.env.BASE_URL ?? '').replace(/\/$/, '');
 const ANALYZE_URL = `${BASE}/api/analyze-image`;
 
 /**

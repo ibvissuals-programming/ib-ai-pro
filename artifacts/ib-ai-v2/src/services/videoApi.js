@@ -17,7 +17,7 @@
 import { getAuthHeaders } from '../auth/authService';
 import { safeJson, fetchWithTimeout } from '../utils/apiClient';
 
-const BASE              = import.meta.env.BASE_URL.replace(/\/$/, '');
+const BASE              = (import.meta.env.BASE_URL ?? '').replace(/\/$/, '');
 const GENERATE_URL      = `${BASE}/api/video/generate`;
 const CAPABILITY_URL    = `${BASE}/api/video/capability`;
 const MODES_URL         = `${BASE}/api/video/modes`;
