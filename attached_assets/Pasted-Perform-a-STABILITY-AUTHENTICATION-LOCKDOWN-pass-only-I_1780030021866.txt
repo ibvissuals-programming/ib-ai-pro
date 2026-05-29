@@ -1,0 +1,67 @@
+Perform a STABILITY + AUTHENTICATION LOCKDOWN pass only.
+
+IMPORTANT:
+
+- Do NOT redesign the app.
+- Do NOT rewrite the architecture.
+- Do NOT add new features.
+- Do NOT modify frontend styling unless required for stability.
+- Preserve all existing functionality.
+
+Your job is ONLY to audit, repair, and stabilize the current imported Replit state.
+
+Tasks:
+
+1. Environment + Secrets Audit
+
+- Verify all required environment variables exist and are properly referenced.
+- Detect missing, duplicated, unused, or inconsistent secrets/config keys.
+- Ensure admin/CEO recovery secret is correctly wired and persistent.
+- Verify secrets are never exposed client-side.
+
+2. Authentication Stability
+
+- Audit login/auth/session logic.
+- Verify CEO/admin recovery access works correctly.
+- Ensure session persistence survives refresh/restart.
+- Ensure JWT/session secrets are consistent and secure.
+- Detect broken middleware or protected route issues.
+
+3. API + Backend Stability
+
+- Verify all API routes are correctly mounted.
+- Ensure frontend calls correct backend endpoints.
+- Check for fallback handlers, duplicate routes, or broken proxy logic.
+- Detect silent failures or unhandled promise errors.
+
+4. Database Stability
+
+- Verify schema matches application usage.
+- Detect missing migrations or broken relations.
+- Ensure no startup DB errors occur.
+
+5. Dependency + Runtime Audit
+
+- Detect unstable package versions or duplicate packages.
+- Verify no pnpm/workspace corruption exists.
+- Preserve npm-based stability.
+
+6. Logging + Error Reporting
+
+- Improve server-side error visibility.
+- Add concise diagnostic logs for auth/API failures only.
+- Avoid noisy logs.
+
+7. Final Report
+   After stabilization:
+
+- provide a concise report of every issue found and fixed,
+- list remaining risks if any,
+- confirm whether the app is now production-stable.
+
+IMPORTANT:
+
+- Minimize code changes.
+- Prefer surgical fixes over rewrites.
+- Preserve current working systems.
+- Avoid introducing new dependencies unless absolutely necessary.
