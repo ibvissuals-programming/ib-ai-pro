@@ -43,17 +43,29 @@ export default function Login() {
 
     async function probe() {
       const result = await checkServerHealth();
-      if (cancelled) return;
-      setServerReady(result.ready);
+
+      // FIX: Always apply the success state even if cleanup ran (cancelled = true).
+      // In React 18, setState on an unmounted component is a safe no-op.
+      // The old code used a single `if (cancelled) return` that blocked BOTH
+      // the state update AND retry scheduling. The race: cleanup fires while a
+      // retry probe's await is in-flight → cancelled = true → probe resumes,
+      // sees cancelled, returns without calling setServerReady(true) → state
+      // stuck permanently at false with no further retries scheduled.
       if (result.ready) {
+        setServerReady(true);
         setError(prev =>
           prev === 'Server is still starting up — please wait a moment and try again'
             ? ''
             : prev
         );
-      } else {
-        retryTimer = setTimeout(probe, 2_500);
+        return;
       }
+
+      // Backend not ready. Only schedule the next retry if still mounted —
+      // prevents zombie retry loops after the component unmounts.
+      if (cancelled) return;
+      setServerReady(false);
+      retryTimer = setTimeout(probe, 2_500);
     }
 
     probe();

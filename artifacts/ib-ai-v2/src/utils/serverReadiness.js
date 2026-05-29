@@ -26,6 +26,9 @@ const HEALTH_TIMEOUT_MS = 4_000;
  * Returns { ready: false } on any error (network, timeout, bad JSON, wrong status).
  *
  * Informational use only — do NOT use to gate auth attempts.
+ *
+ * cache: 'no-store' prevents the browser returning a cached 304 (no body),
+ * which would cause res.text() to return '' and falsely report not-ready.
  */
 export async function checkServerHealth() {
   try {
@@ -33,7 +36,12 @@ export async function checkServerHealth() {
     const timer = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
     let res;
     try {
-      res = await fetch(HEALTH_URL, { method: 'GET', signal: controller.signal });
+      res = await fetch(HEALTH_URL, {
+        method: 'GET',
+        signal: controller.signal,
+        cache: 'no-store',
+        headers: { 'Accept': 'application/json' },
+      });
     } finally {
       clearTimeout(timer);
     }
