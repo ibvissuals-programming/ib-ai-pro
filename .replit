@@ -63,7 +63,6 @@ timeoutMs = 20000
 CEO_USERNAME = "ibaiceo"
 PORT = "8080"
 USE_POSTGRES_STORAGE = "true"
-JWT_SECRET = "ib-ai-replit-kwdsr14e6j-zpzv0ty5atb-secret"
 
 [nix]
 channel = "stable-25_05"
