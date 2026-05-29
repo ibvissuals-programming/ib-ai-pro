@@ -78,15 +78,6 @@ export default function Login() {
   // ── Login attempt ──────────────────────────────────────────────────────────
 
   const doLogin = async (user, pass) => {
-    // Button is disabled while serverReady !== true, so this is a safety net only.
-    if (!serverReady) {
-      const result = await checkServerHealth();
-      setServerReady(result.ready);
-      if (!result.ready) {
-        setError('Server is still starting up — please wait a moment and try again');
-        return;
-      }
-    }
     setLoading(true);
     setError('');
     const result = await login(user, pass);
@@ -295,7 +286,7 @@ export default function Login() {
 
                 <button
                   type="submit"
-                  disabled={loading || serverReady !== true}
+                  disabled={loading}
                   data-testid="button-login"
                   className="w-full bg-primary text-primary-foreground rounded-xl py-2.5 text-sm font-medium hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed mt-2 shadow-lg shadow-primary/20"
                 >
@@ -307,15 +298,6 @@ export default function Login() {
                         className="w-3.5 h-3.5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full"
                       />
                       Signing in...
-                    </span>
-                  ) : serverReady !== true ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
-                        className="w-3.5 h-3.5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full"
-                      />
-                      Server starting…
                     </span>
                   ) : 'Sign in'}
                 </button>

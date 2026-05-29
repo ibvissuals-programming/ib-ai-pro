@@ -2,10 +2,11 @@
  * serverReadiness.js — IB AI Assistant
  *
  * Informational health check utility only.
- * Used solely for UI status indicators (e.g. "server online/offline" badge).
+ * Used solely for the "server starting" advisory banner on the login page.
  *
  * IMPORTANT: This must NEVER block or gate authentication.
  * Login/signup/recovery attempt immediately without calling this.
+ * The login button must never be disabled due to this check.
  *
  * Public API:
  *   checkServerHealth() → Promise<{ ready: boolean, timestamp?: number }>
