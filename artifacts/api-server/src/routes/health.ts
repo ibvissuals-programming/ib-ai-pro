@@ -176,7 +176,7 @@ router.get(["/health", "/healthz"], async (_req, res) => {
   const bootState = getBootState();
   const bootField = bootState === "degraded" ? "degraded" : "success";
 
-  const sys = checks["systems"] ?? {};
+  const sys = (checks["systems"] ?? {}) as Record<string, { ok?: boolean } | undefined>;
   res.json({
     status:            (degraded || systemsDegraded) ? "degraded" : "ok",
     boot:              bootField,

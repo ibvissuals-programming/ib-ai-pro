@@ -1,0 +1,67 @@
+IB AI MEDIA PIPELINE REPAIR PASS (IMAGE EDITING + GENERATION + IMAGE-TO-VIDEO)
+
+Context:
+Existing IB AI system is already built and partially working. Authentication and core system should NOT be modified. Current focus is fixing broken or unstable media features (image editing, image generation, image-to-video).
+
+IMPORTANT RULES:
+
+- Do NOT modify authentication system
+- Do NOT run full system audit
+- Do NOT refactor architecture
+- Do NOT rebuild frontend or backend from scratch
+- Only fix media pipeline issues
+- Preserve existing working code
+
+GOAL:
+Stabilize all AI media features so they work consistently with Gemini integration.
+
+TASKS:
+
+1. Image Editing System Fix
+
+- Locate existing image editing implementation
+- Verify API route integrity (/api/image/* or equivalent)
+- Fix broken request/response flow only if necessary
+- Ensure request reaches AI service layer
+- Ensure response returns valid structured output
+
+2. Image Generation System Fix
+
+- Trace image generation endpoint
+- Confirm Gemini (or configured provider) is actually used
+- Remove or fix any broken fallback/mock logic
+- Ensure consistent response format to frontend
+
+3. Image-to-Video System Fix
+
+- Locate pipeline for image-to-video conversion
+- Identify broken or incomplete service calls
+- Ensure it returns a valid placeholder or working response if AI not active
+- Do not implement new model logic, only repair flow
+
+4. Shared Media Layer Cleanup
+
+- Ensure all media features use ONE consistent API pattern
+- Fix any broken imports or duplicate service files
+- Ensure no conflicting endpoints exist
+
+5. Failure Handling
+
+- If backend is still starting, ensure all media endpoints fail gracefully
+- No infinite loading states in frontend
+- Always return readable error states instead of hanging requests
+
+6. Output Report:
+
+- List broken media features found
+- Confirm which are fixed
+- Confirm which are still placeholders
+- Confirm if Gemini is actually being used in media pipeline
+- Confirm system stability after repair
+
+IMPORTANT:
+This is a surgical repair pass only.
+No auth changes.
+No full system audit.
+No new feature creation.
+No architecture rewrite.

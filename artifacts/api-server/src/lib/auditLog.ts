@@ -31,6 +31,10 @@ export type AuditEventType =
   | "video_request"
   | "video_success"
   | "video_failure"
+  | "recovery_reset_failure"
+  | "recovery_reset_success"
+  | "password_reset_failure"
+  | "password_reset_success"
   | "auth_error"
   | "system_error";
 

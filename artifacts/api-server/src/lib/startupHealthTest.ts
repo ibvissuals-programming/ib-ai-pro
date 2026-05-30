@@ -130,7 +130,7 @@ async function testProviders(): Promise<SubsystemResult> {
     const token = signToken({
       userId:          testUserId,
       username:        "healthcheck",
-      role:            "user",
+      role:            "free",
       recoverySession: false,
     });
     const payload = verifyToken(token);
@@ -148,7 +148,7 @@ async function testProviders(): Promise<SubsystemResult> {
     const session = createSession({
       userId:   `_ht_sess_${randomUUID().slice(0, 8)}`,
       username: "healthcheck",
-      role:     "user",
+      role:     "free",
     });
     if (!session?.sessionId || !isSessionActive(session.sessionId)) {
       failures.push("Session store: new session not active immediately after creation");
@@ -406,7 +406,7 @@ async function testErrorLayer(): Promise<SubsystemResult> {
     // 5. sanitizeProviderError strips stack traces
     const errWithStack = new Error("Provider key=sk-abc123 invalid");
     errWithStack.stack = "Error: Provider key=sk-abc123 invalid\n    at someFile.ts:42:10";
-    const sanitized = sanitizeProviderError(errWithStack);
+    const sanitized = sanitizeProviderError(errWithStack, "health_test");
     if (typeof sanitized === "string" && !sanitized.includes("at someFile.ts")) {
       details.push("✔ sanitizeProviderError strips stack traces");
     } else {
