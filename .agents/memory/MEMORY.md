@@ -1,0 +1,1 @@
+- [CEO password persistence bug](ceo-password-persistence.md) — UUID divergence between users.json and PG causes recovery-reset to silently fail; two-layer fix in userStore.ts.

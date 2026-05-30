@@ -714,14 +714,19 @@ export async function changeUserPassword(
 }
 
 /**
- * updatePasswordHashInDbOnly() — write a new password hash to PostgreSQL ONLY.
+ * updatePasswordHashInDbOnly() — write a new password hash to PostgreSQL and
+ * sync the in-memory store.
  *
- * The in-memory store is intentionally NOT updated.  All subsequent password
- * verification must go through checkCurrentPasswordFromDb() which fetches the
- * live DB row — making PostgreSQL the single source of truth.
+ * After writing to PG the in-memory record is updated to match.  This prevents
+ * the "stale-hash re-insert" bug: if pgPersistAllUsers() fires after a reset
+ * and the user doesn't yet have a PG row (e.g. fresh-deploy), it would INSERT
+ * using whatever hash is in memory — keeping memory in sync ensures that INSERT
+ * always carries the new hash.
  *
- * Use this function for all mutation routes (reset-password, recovery reset)
- * so that memory can never drift from the DB state silently.
+ * UUID-reconciliation guard: if loadUserStore() fell back to JSON (PG was
+ * briefly unavailable at boot) the in-memory UUID may differ from the PG UUID.
+ * In that case the function looks the user up by username, resyncs the
+ * in-memory entry to the PG UUID, then proceeds with the update.
  *
  * Falls back to changeUserPassword() when PostgreSQL is disabled.
  */
@@ -740,17 +745,52 @@ export async function updatePasswordHashInDbOnly(
   }
 
   try {
-    // Confirm the user exists in DB before writing
-    const existing = await pgGetUserById(userId);
-    if (!existing) {
+    // ── Step 1: resolve the authoritative PG record ────────────────────────
+    let pgRecord = await pgGetUserById(userId);
+    let effectiveUserId = userId;
+
+    if (!pgRecord) {
+      // userId may be from a JSON fallback that has a stale UUID.
+      // Try to find the PG record by username so the reset can still proceed.
+      const memUser = store.get(userId);
+      if (memUser) {
+        const byUsername = await pgGetUserByUsername(memUser.username);
+        if (byUsername) {
+          logger.warn(
+            { memUserId: userId, pgUserId: byUsername.id, username: byUsername.username },
+            "[userStore] updatePasswordHashInDbOnly — UUID mismatch (JSON fallback vs PG); resyncing in-memory entry",
+          );
+          // Replace the stale JSON-sourced entry with the real PG entry
+          store.delete(userId);
+          store.set(byUsername.id, { ...memUser, id: byUsername.id, passwordHash: byUsername.passwordHash });
+          usernameIndex.set(byUsername.username, byUsername.id);
+          scheduleSave(); // flush the corrected state to JSON fallback
+          pgRecord = byUsername;
+          effectiveUserId = byUsername.id;
+        }
+      }
+    }
+
+    if (!pgRecord) {
       logger.warn({ userId }, "[userStore] updatePasswordHashInDbOnly — user not found in DB");
       return false;
     }
+
+    // ── Step 2: write new hash to PG ───────────────────────────────────────
     const newHash = hashPassword(newPassword);
-    await pgUpdatePasswordHashOnly(userId, newHash);
+    await pgUpdatePasswordHashOnly(effectiveUserId, newHash);
+
+    // ── Step 3: sync in-memory record ─────────────────────────────────────
+    // Keeps memory in sync so pgPersistAllUsers() always carries the correct
+    // hash — particularly important if it runs a fresh INSERT (no conflict).
+    const memUser = store.get(effectiveUserId);
+    if (memUser) {
+      memUser.passwordHash = newHash;
+    }
+
     logger.info(
-      { userId, username: existing.username },
-      "[userStore] password_hash updated in PostgreSQL only (memory cache intentionally unchanged)",
+      { userId: effectiveUserId, username: pgRecord.username },
+      "[userStore] password_hash updated in PostgreSQL — memory cache synced",
     );
     return true;
   } catch (err) {
@@ -936,20 +976,49 @@ export async function repairCeoAccount(): Promise<void> {
     return;
   }
 
-  // CEO account exists — READ-ONLY validation only.
-  // Credentials are IMMUTABLE. Password is NEVER touched during boot.
-  // Role is NEVER silently corrected — log and halt boot mutation.
-  // To change CEO password: POST /api/auth/change-password (valid session required).
+  // CEO account exists — check for UUID divergence between JSON fallback and PG.
+  // This can happen when loadUserStore() fell back to JSON (PG briefly unavailable
+  // at boot) and the JSON file contains a stale UUID from a prior bootstrap.
+  // Resyncing here ensures all subsequent operations (including recovery reset)
+  // use the authoritative PG UUID so password updates land on the correct row.
+  if (isPostgresEnabled()) {
+    try {
+      const pgCeo = await pgGetUserByUsername(ceoUsername);
+      if (pgCeo && pgCeo.id !== existing.id) {
+        logger.warn(
+          { memId: existing.id, pgId: pgCeo.id, username: ceoUsername },
+          "[ceoRepair] UUID mismatch: in-memory CEO (from JSON fallback) differs from PG CEO — resyncing",
+        );
+        store.delete(existing.id);
+        store.set(pgCeo.id, {
+          id:           pgCeo.id,
+          username:     pgCeo.username,
+          passwordHash: pgCeo.passwordHash,
+          role:         pgCeo.role,
+          credits:      pgCeo.credits,
+          lastReset:    pgCeo.lastReset,
+          createdAt:    pgCeo.createdAt,
+        });
+        usernameIndex.set(ceoUsername, pgCeo.id);
+        scheduleSave(); // persist corrected UUID to JSON fallback file
+      }
+    } catch (pgErr) {
+      logger.warn({ pgErr }, "[ceoRepair] PG UUID check failed — keeping in-memory CEO as-is");
+    }
+  }
+
   _ceoBootstrapState = { ready: true, autoCreated: false, tempPassword: null };
 
-  if (existing.role !== "ceo") {
+  // Re-fetch after potential resync
+  const resynced = getUserByUsername(ceoUsername);
+  if (!resynced || resynced.role !== "ceo") {
     logger.error(
-      { username: ceoUsername, actual_role: existing.role, ceo_boot_mutation: false },
+      { username: ceoUsername, actual_role: resynced?.role ?? "missing", ceo_boot_mutation: false },
       "[ceoRepair] CEO account has unexpected role — boot mutation BLOCKED (manual DB fix required)",
     );
   } else {
     logger.info(
-      { username: ceoUsername, role: existing.role, ceo_boot_mutation: false },
+      { username: ceoUsername, role: resynced.role, ceo_boot_mutation: false },
       "[ceoRepair] CEO account verified OK",
     );
   }
