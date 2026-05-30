@@ -1,0 +1,75 @@
+ENVIRONMENT STABILITY LOCK PASS — IB AI SYSTEM
+
+Context:
+The application is already working. Authentication, Gemini integration, and core services are functional. The issue is NOT feature-level bugs, but environment instability caused by missing or reset secrets during imports.
+
+GOAL:
+Make the system resilient to future imports so it does NOT break when:
+
+- GEMINI_API_KEY is missing
+- CEO_RECOVERY_KEY is missing
+- JWT_SECRET or SESSION_SECRET is missing
+
+IMPORTANT RULES:
+
+- Do NOT modify business logic
+- Do NOT refactor architecture
+- Do NOT rewrite authentication system
+- Do NOT rebuild backend or frontend
+- ONLY implement environment safety + bootstrap stability layer
+
+TASKS:
+
+1. Environment Validation Layer (Backend Boot Guard)
+
+- On server startup, check for required env variables:
+  - GEMINI_API_KEY
+  - CEO_RECOVERY_KEY
+  - JWT_SECRET (or SESSION_SECRET if used)
+- If any are missing:
+  - Log clear error: "Missing required environment variable: X"
+  - Do NOT crash silently
+  - Do NOT continue AI or auth initialization without warning
+
+2. Graceful Degradation System
+
+- If GEMINI_API_KEY is missing:
+  - Disable AI routes safely
+  - Return structured error: "AI service not configured"
+- If recovery key missing:
+  - Disable recovery login route safely
+  - Return clear message instead of silent failure
+
+3. Centralized Config Loader
+
+- Create a single config module (envConfig or similar)
+- All services must read secrets ONLY from this module
+- No direct process.env usage scattered across services
+- This ensures consistent behavior across imports
+
+4. Startup Safety Banner (Backend logs only)
+
+- On boot, print:
+  - which env vars are loaded
+  - which are missing
+- Must be human-readable and grouped under "IB AI BOOT STATUS"
+
+5. Prevent Future Import Breakage
+
+- Ensure system does NOT rely on runtime Agent state
+- Ensure missing secrets do NOT cause undefined crashes
+- Ensure all missing configs fail gracefully with messages
+
+OUTPUT REQUIREMENTS:
+
+- Confirm list of required env vars
+- Confirm centralized config system created
+- Confirm graceful fallback implemented
+- Confirm system will still boot safely even if secrets are missing
+
+IMPORTANT:
+No feature changes.
+No UI changes.
+No authentication redesign.
+No database migration.
+Only environment stability and boot safety.

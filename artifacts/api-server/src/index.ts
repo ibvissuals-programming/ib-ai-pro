@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { loadUserStore, repairCeoAccount } from "./lib/userStore";
 import { logProviderHealth } from "./lib/env";
+import { validateEnv, printBootStatusBanner } from "./lib/envConfig";
 import { initImageStore } from "./services/imageHistoryStore";
 import { setBootDegraded } from "./lib/bootState";
 import { loadSystemConfig, isPostgresEnabled, getLastMigrationRun } from "./lib/systemConfig";
@@ -33,49 +34,11 @@ process.on("unhandledRejection", (reason: unknown) => {
 
 const port = Number(process.env.PORT) || 8080;
 
-// ── SECRETS GUARD ─────────────────────────────────────────────────────────────
+// ── SECRETS GUARD — delegated to envConfig ────────────────────────────────────
 //
-// Called once before auth loads. Missing critical auth secrets → fail boot.
-// Missing optional secrets → warn/info only, never block.
-
-function validateSecrets(): boolean {
-  let valid = true;
-
-  // JWT_SECRET — auto-generated fallback if missing (never block startup)
-  if (!process.env["JWT_SECRET"]) {
-    logger.warn("[secrets] JWT_SECRET not set — using auto-generated fallback (set secret for stable tokens across restarts)");
-  }
-
-  // SESSION_SECRET — optional; warn only
-  if (!process.env["SESSION_SECRET"]) {
-    logger.warn("[secrets] SESSION_SECRET not set — session integrity may be reduced");
-  }
-
-  // DATABASE_URL — truly critical: auth cannot work without a DB
-  if (!process.env["DATABASE_URL"]) {
-    logger.error("[secrets] DATABASE_URL is not set — cannot connect to PostgreSQL. Set this secret and restart.");
-    valid = false;
-  }
-
-  // CEO_USERNAME — critical: CEO bootstrap and auth identity check require this
-  if (!process.env["CEO_USERNAME"]) {
-    logger.error("[secrets] CEO_USERNAME is not set — CEO account cannot be bootstrapped or verified. Set this secret and restart.");
-    valid = false;
-  }
-
-  // GEMINI_API_KEY — AI-only; missing disables AI features but must NOT block auth startup.
-  // Step 4 of bootstrap() enables safe-mode gracefully when this is absent.
-  if (!process.env["GEMINI_API_KEY"]) {
-    logger.warn("[secrets] GEMINI_API_KEY not set — AI features will be disabled (safe mode). Set secret and restart to enable.");
-  }
-
-  // CEO_RECOVERY_KEY — optional; warn only
-  if (!process.env["CEO_RECOVERY_KEY"]) {
-    logger.warn("[secrets] CEO_RECOVERY_KEY missing — recovery reset disabled");
-  }
-
-  return valid;
-}
+// validateEnv() checks all env vars and returns a typed result.
+// printBootStatusBanner() emits the grouped "IB AI BOOT STATUS" summary.
+// Both are defined in lib/envConfig.ts — the single source of truth.
 
 // ── BOOTSTRAP FUNCTION ────────────────────────────────────────────────────────
 
@@ -89,9 +52,10 @@ async function bootstrap() {
     logger.warn({ err }, "[system] System config load failed — using defaults");
   }
 
-  // STEP 1 — Secrets guard (fail boot only if JWT_SECRET is missing)
-  const secretsOk = validateSecrets();
-  if (!secretsOk) {
+  // STEP 1 — Environment validation + boot status banner
+  const envResult = validateEnv();
+  printBootStatusBanner(envResult);
+  if (!envResult.valid) {
     logger.error("[system] Critical secrets missing — auth system cannot start. Halting.");
     process.exit(1);
   }
