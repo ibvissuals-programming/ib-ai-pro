@@ -33,24 +33,31 @@ export default function Login() {
   useEffect(() => { clearToken(); }, []);
 
   // ── Server readiness probe ─────────────────────────────────────────────────
-  // Checks /api/auth/health once on mount. If the backend is still booting,
-  // shows "Server is starting…" instead of a cryptic network error.
-  // Retries every 3 s until ready.
+  // Polls /api/system/ready on mount. Shows an advisory "Server is starting…"
+  // banner while the backend is booting.
+  //
+  // This banner is PURELY informational — the login button is always enabled.
+  //
+  // Absolute timeout (6s): if the backend doesn't confirm ready within 6s,
+  // the banner is dismissed and the UI proceeds in limited mode. This prevents
+  // any "frozen starting up" state after an import or cold start.
 
   useEffect(() => {
     let cancelled = false;
     let retryTimer = null;
+
+    // ── 6-second absolute cutoff ──────────────────────────────────────────────
+    // After 6s, hide the banner unconditionally. The login button was never
+    // blocked — this just removes the informational spinner.
+    const cutoffTimer = setTimeout(() => {
+      if (!cancelled) setServerReady(true);
+    }, 6_000);
 
     async function probe() {
       const result = await checkServerHealth();
 
       // FIX: Always apply the success state even if cleanup ran (cancelled = true).
       // In React 18, setState on an unmounted component is a safe no-op.
-      // The old code used a single `if (cancelled) return` that blocked BOTH
-      // the state update AND retry scheduling. The race: cleanup fires while a
-      // retry probe's await is in-flight → cancelled = true → probe resumes,
-      // sees cancelled, returns without calling setServerReady(true) → state
-      // stuck permanently at false with no further retries scheduled.
       if (result.ready) {
         setServerReady(true);
         setError(prev =>
@@ -71,6 +78,7 @@ export default function Login() {
     probe();
     return () => {
       cancelled = true;
+      clearTimeout(cutoffTimer);
       if (retryTimer) clearTimeout(retryTimer);
     };
   }, []);

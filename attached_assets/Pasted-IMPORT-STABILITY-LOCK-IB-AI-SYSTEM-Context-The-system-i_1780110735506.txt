@@ -1,0 +1,112 @@
+IMPORT STABILITY LOCK — IB AI SYSTEM
+
+Context:
+The system is already working, but suffers from recurring issues after imports:
+
+- "Server is starting up" UI hang state
+- Missing environment variables across imports
+- Frontend blocking login due to backend boot timing
+- Temporary startup race conditions
+
+GOAL:
+Make system fully resilient across imports so that:
+
+- App NEVER gets stuck in "Server starting" state permanently
+- App ALWAYS boots safely even if backend is still initializing
+- Missing env variables do NOT break UI flow
+- Startup state is non-blocking and self-recovering
+
+IMPORTANT RULES:
+
+- Do NOT modify authentication logic
+- Do NOT refactor architecture
+- Do NOT change database schema
+- Do NOT rewrite frontend UI system
+- ONLY fix boot flow + import resilience
+
+---
+
+TASKS:
+
+1. Non-Blocking Boot State System (CRITICAL FIX)
+
+- Ensure backend exposes a reliable:
+  /api/system/health or /api/auth/health endpoint
+- This endpoint MUST:
+  - Always respond within <2s
+  - Never depend on DB or AI services
+  - Never hang or wait for initialization
+- It must return:
+  {
+  ready: boolean,
+  booting: boolean,
+  services: {
+  db: boolean,
+  ai: boolean,
+  auth: boolean
+  }
+  }
+
+---
+
+2. Frontend Boot State Fix (STOP UI FREEZE)
+
+- Modify frontend server readiness logic so:
+  - "Server is starting up" is MAX 5–8 seconds only
+  - After timeout → UI switches to "Limited mode"
+- Add fallback behavior:
+  - Allow login attempts even if serverReady = false
+  - Do NOT block UI interactions based on boot state
+- Boot state must be informational ONLY
+
+---
+
+3. Import-Safe Env Handling (CRITICAL)
+
+- Extend envConfig.ts:
+  - If GEMINI_API_KEY missing → enable SAFE_MODE_AI
+  - If CEO_RECOVERY_KEY missing → disable recovery ONLY, do not block app
+  - If JWT_SECRET missing → generate ephemeral fallback per session
+- System MUST boot regardless of missing optional secrets
+
+---
+
+4. Boot Timeout Guard (PREVENT INFINITE "STARTING")
+
+- Add global boot timeout:
+  - If backend not "ready" within 10 seconds:
+    → force boot_complete = true
+    → system enters degraded mode
+- Prevent infinite loading UI states
+
+---
+
+5. Single Source Boot Controller
+
+- Create or extend bootController.ts:
+  - Tracks:
+    - backendReady
+    - dbReady
+    - aiReady
+  - Exposes:
+    isSystemOperational()
+    isDegradedMode()
+- Frontend must rely ONLY on this controller
+
+---
+
+OUTPUT REQUIREMENTS:
+
+- Confirm boot NEVER blocks UI permanently
+- Confirm missing env vars do NOT prevent startup
+- Confirm "Server starting" cannot freeze app
+- Confirm degraded mode works safely
+- Confirm login remains accessible in all states
+
+IMPORTANT:
+
+- No auth rewrite
+- No feature additions
+- No UI redesign
+- No database migration
+- ONLY boot + import stability fixes

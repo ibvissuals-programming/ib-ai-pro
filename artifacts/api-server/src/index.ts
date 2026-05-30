@@ -4,7 +4,7 @@ import { loadUserStore, repairCeoAccount } from "./lib/userStore";
 import { logProviderHealth } from "./lib/env";
 import { validateEnv, printBootStatusBanner } from "./lib/envConfig";
 import { initImageStore } from "./services/imageHistoryStore";
-import { setBootDegraded } from "./lib/bootState";
+import { markBootPhase, markBootDegraded } from "./lib/bootController";
 import { loadSystemConfig, isPostgresEnabled, getLastMigrationRun } from "./lib/systemConfig";
 import { runMigration } from "./lib/migrationRunner";
 import { recoverStalledJobs } from "./services/imageJobManager";
@@ -51,6 +51,7 @@ async function bootstrap() {
   } catch (err) {
     logger.warn({ err }, "[system] System config load failed — using defaults");
   }
+  markBootPhase("CONFIG");
 
   // STEP 1 — Environment validation + boot status banner
   const envResult = validateEnv();
@@ -65,7 +66,7 @@ async function bootstrap() {
     await loadUserStore();
     logger.info("[system] Auth loaded");
   } catch (err) {
-    setBootDegraded();
+    markBootDegraded("Auth system failed to load");
     logger.error({ err }, "[system] Auth failed (non-fatal)");
   }
 
@@ -73,7 +74,7 @@ async function bootstrap() {
   try {
     await repairCeoAccount();
   } catch (err) {
-    setBootDegraded();
+    markBootDegraded("CEO account repair failed");
     logger.error({ err }, "[system] CEO repair failed (non-fatal)");
   }
 
@@ -84,19 +85,22 @@ async function bootstrap() {
     logger.warn({ err }, "[system] Startup integrity check threw unexpectedly (non-fatal)");
   }
 
+  markBootPhase("AUTH");
+
   // STEP 4 — AI provider checks (Gemini / safe mode)
   // Runs AFTER auth is fully loaded — AI failures must never block auth boot.
   logProviderHealth();
   if (!isGeminiConfigured()) {
     enableSafeMode("GEMINI_API_KEY is not set — set the secret and restart to enable AI features");
   }
+  markBootPhase("AI");
 
   // STEP 5 — AI subsystem initialization
   try {
     await initImageStore();
     logger.info("[system] Image system ready");
   } catch (err) {
-    setBootDegraded();
+    markBootDegraded("Image subsystem failed to initialize");
     logger.warn({ err }, "[system] Image system disabled");
   }
 
@@ -113,6 +117,8 @@ async function bootstrap() {
   } catch (err) {
     logger.debug({ err }, "[system] TTS audio cleanup failed (non-fatal)");
   }
+
+  markBootPhase("SYSTEMS");
 
   // Auto-migrate JSON → PostgreSQL on first boot with PG enabled
   if (isPostgresEnabled() && getLastMigrationRun() === null) {
@@ -140,6 +146,9 @@ async function bootstrap() {
 
   app.listen(port, "0.0.0.0", () => {
     logger.info({ port }, "[system] Server listening");
+
+    // Mark boot COMPLETE — /api/system/ready will return ready=true from here
+    markBootPhase("COMPLETE");
 
     // STEP 6 — Automated health test suite runs after server is fully up
     runStartupHealthTests().catch((err) => {
