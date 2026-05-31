@@ -74,25 +74,34 @@ export function getAuthHeaders() {
 }
 
 // ── Safe JSON parsing ─────────────────────────────────────────────────────────
+//
+// IMPORTANT: safeParseJson() receives a Response that already exists.
+// It must NEVER return a "Cannot reach server" message — a response was
+// received, so the server WAS reachable.  The caller is responsible for
+// mapping HTTP status codes to user-facing error messages.
+// An empty object {} is returned on any body-read or parse failure so the
+// caller's own status-based fallback (e.g. 'Invalid username or password')
+// fires correctly.
 
 async function safeParseJson(res) {
   let text;
   try {
     text = await res.text();
   } catch {
-    return { error: 'Cannot reach server — please try again' };
+    // Body read failed — return empty object; caller decides message from res.status
+    return {};
   }
 
   if (!text || !text.trim()) {
-    // Empty body — proxy error, cold start, or connection refused
-    return { error: 'Cannot reach server — please try again' };
+    // Empty body — return empty object; caller decides message from res.status
+    return {};
   }
 
   try {
     return JSON.parse(text);
   } catch {
-    // Non-JSON body (e.g. HTML proxy error page)
-    return { error: 'Cannot reach server — please try again' };
+    // Non-JSON body (e.g. HTML proxy error page) — return empty object
+    return {};
   }
 }
 
@@ -110,12 +119,30 @@ async function post(path, body, extraHeaders) {
   );
 }
 
+// ── Error classification ───────────────────────────────────────────────────────
+//
+// Three strictly separate cases:
+//
+//   AbortError  — request was cancelled (timeout or external abort signal)
+//                 → "Request cancelled"  — never retry
+//
+//   TypeError   — fetch() threw before any response arrived (DNS failure,
+//                 connection refused, network offline, CORS block)
+//                 → "Cannot reach server"  — retry once
+//
+//   response exists (4xx / 5xx) — server was reachable; show its error
+//                 → caller maps status → message; NEVER reaches this function
+
 function fetchErrorMessage(err) {
   if (!err) return 'Network error — please try again';
-  if (err.name === 'AbortError') return 'Request timed out — please try again';
+  // AbortError: request was cancelled (our own timeout or an external signal).
+  // Not a network failure — the connection reached the server or was cut.
+  if (err.name === 'AbortError') return 'Request cancelled';
   if (err instanceof SyntaxError || err.name === 'SyntaxError') {
     return 'Invalid server response — please try again';
   }
+  // TypeError: fetch() threw — no response object was ever created.
+  // This is the ONLY case that maps to "Cannot reach server".
   if (
     err.name === 'TypeError' ||
     (typeof err.message === 'string' &&
@@ -129,12 +156,21 @@ function fetchErrorMessage(err) {
   return err.message || 'Network error — please try again';
 }
 
-/** True for errors where a single retry is warranted (network-level only). */
+/**
+ * True only for genuine network-level failures where a single retry is warranted.
+ *
+ * AbortError is intentionally EXCLUDED — it means the request was cancelled
+ * (our own timeout fired or an external signal aborted it).  Retrying an
+ * aborted request immediately would just time out again and double the wait.
+ * AbortError is handled as a terminal "Request cancelled" response instead.
+ */
 function isNetworkError(err) {
+  if (!err) return false;
+  // AbortError is NOT a retryable network error — see comment above.
+  if (err.name === 'AbortError') return false;
   return (
-    err?.name === 'AbortError' ||
-    err?.name === 'TypeError' ||
-    (typeof err?.message === 'string' &&
+    err.name === 'TypeError' ||
+    (typeof err.message === 'string' &&
       (err.message.includes('fetch') ||
        err.message.includes('Failed') ||
        err.message.includes('NetworkError') ||
