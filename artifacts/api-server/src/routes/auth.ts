@@ -263,6 +263,7 @@ router.post(
     } catch (unexpectedErr) {
       // Belt-and-suspenders: catch anything that slips through the inner guards.
       // NEVER let the connection close without a response.
+      console.error("LOGIN ROUTE ERROR:", unexpectedErr);
       logger.error(
         { err: unexpectedErr instanceof Error ? { message: unexpectedErr.message } : String(unexpectedErr), ip: req.ip },
         "[auth] login_crash_prevented — unexpected error in login handler",
