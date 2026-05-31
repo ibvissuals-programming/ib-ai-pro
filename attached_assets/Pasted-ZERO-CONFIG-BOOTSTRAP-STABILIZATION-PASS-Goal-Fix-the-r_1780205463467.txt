@@ -1,0 +1,111 @@
+ZERO-CONFIG BOOTSTRAP STABILIZATION PASS
+
+Goal:
+Fix the recurring issue where environment secrets (GEMINI_API_KEY, CEO_RECOVERY_KEY, SESSION_SECRET, DATABASE_URL) are repeatedly requested on every import and cause partial or degraded boot states.
+
+IMPORTANT RULES:
+- Do NOT modify authentication logic
+- Do NOT modify image generation logic
+- Do NOT redesign frontend UI
+- Do NOT change business logic
+- ONLY modify boot / environment initialization layer
+- No new features beyond boot stabilization
+
+────────────────────────────────────
+
+TASK 1 — Create a persistent bootstrap validator
+
+Create: server/bootstrap/envBootstrap.ts
+
+It must:
+- Load all required env vars once at startup
+- Validate presence of:
+  - DATABASE_URL
+  - GEMINI_API_KEY
+  - SESSION_SECRET
+  - CEO_USERNAME
+  - CEO_RECOVERY_KEY
+- Classify them into:
+  REQUIRED (must exist or system enters SAFE_MODE)
+  OPTIONAL (warn only)
+- Export:
+  - validateEnvBootstrap()
+  - getEnvStatus()
+  - isBootstrapReady()
+
+IMPORTANT:
+- It must NOT crash the server unless DATABASE_URL or CEO_USERNAME is missing
+- Missing AI keys must NOT block boot (must enable SAFE_MODE)
+
+────────────────────────────────────
+
+TASK 2 — Add boot cache layer (prevent re-check loops)
+
+Create: server/bootstrap/bootstrapCache.ts
+
+- Store validation result in-memory:
+  let cachedStatus = null
+- Ensure env validation runs ONLY ONCE per process
+- Add:
+  getCachedBootstrap()
+  clearBootstrapCache() (dev only)
+
+────────────────────────────────────
+
+TASK 3 — Integrate into server startup ONLY ONCE
+
+In index.ts:
+
+- Call validateEnvBootstrap() BEFORE all routes load
+- Replace any duplicate validateSecrets / env checks
+- Ensure boot status is logged exactly once
+
+Add boot log:
+
+=== IB AI BOOT STRAP ===
+DATABASE: ✓/✗
+GEMINI: ✓/✗
+SESSION: ✓/✗
+RECOVERY: ✓/✗
+AI MODE: FULL | SAFE MODE
+========================
+
+────────────────────────────────────
+
+TASK 4 — Fix Replit import repeat secret prompts
+
+Modify env resolution logic so:
+
+- process.env is always read directly
+- NEVER re-request secrets dynamically at runtime
+- No "verify phone / re-request key" loops
+- No fallback prompting logic in frontend or backend
+
+────────────────────────────────────
+
+TASK 5 — Stabilize SAFE MODE behavior
+
+If GEMINI_API_KEY or optional AI keys are missing:
+
+- System MUST boot normally
+- AI routes must degrade gracefully:
+  - return clear error: "AI_DISABLED: Missing API key"
+  - DO NOT crash or loop retries
+
+────────────────────────────────────
+
+FINAL REQUIREMENTS:
+
+After implementation:
+- App must boot cleanly on fresh import
+- No repeated secret prompts
+- No infinite "server starting" state
+- No partial auth failure loops
+- No frontend blocking due to missing env
+- Same behavior across all imports
+
+DO NOT add new features.
+DO NOT touch image generation logic.
+DO NOT modify auth flows.
+
+This is a boot stability layer only.

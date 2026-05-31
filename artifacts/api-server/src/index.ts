@@ -2,7 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { loadUserStore, repairCeoAccount } from "./lib/userStore";
 import { logProviderHealth } from "./lib/env";
-import { validateEnv, printBootStatusBanner } from "./lib/envConfig";
+import { validateEnvBootstrap } from "./bootstrap/envBootstrap";
 import { initImageStore } from "./services/imageHistoryStore";
 import { markBootPhase, markBootDegraded } from "./lib/bootController";
 import { loadSystemConfig, isPostgresEnabled, getLastMigrationRun } from "./lib/systemConfig";
@@ -11,7 +11,6 @@ import { recoverStalledJobs } from "./services/imageJobManager";
 import { cleanOldAudioFiles } from "./services/ttsService";
 import { runStartupIntegrityCheck } from "./lib/startupIntegrityCheck";
 import { enableSafeMode } from "./lib/safeMode";
-import { isGeminiConfigured } from "./lib/geminiEnv";
 import { runStartupHealthTests } from "./lib/startupHealthTest";
 
 // ── Global error handlers ─────────────────────────────────────────────────────
@@ -34,12 +33,6 @@ process.on("unhandledRejection", (reason: unknown) => {
 
 const port = Number(process.env.PORT) || 8080;
 
-// ── SECRETS GUARD — delegated to envConfig ────────────────────────────────────
-//
-// validateEnv() checks all env vars and returns a typed result.
-// printBootStatusBanner() emits the grouped "IB AI BOOT STATUS" summary.
-// Both are defined in lib/envConfig.ts — the single source of truth.
-
 // ── BOOTSTRAP FUNCTION ────────────────────────────────────────────────────────
 
 async function bootstrap() {
@@ -53,13 +46,8 @@ async function bootstrap() {
   }
   markBootPhase("CONFIG");
 
-  // STEP 1 — Environment validation + boot status banner
-  const envResult = validateEnv();
-  printBootStatusBanner(envResult);
-  if (!envResult.valid) {
-    logger.error("[system] Critical secrets missing — auth system cannot start. Halting.");
-    process.exit(1);
-  }
+  // STEP 1 — Environment validation + boot status banner (runs exactly once, cached)
+  const bootStatus = validateEnvBootstrap();
 
   // STEP 2 — Auth system + DB load
   try {
@@ -89,8 +77,9 @@ async function bootstrap() {
 
   // STEP 4 — AI provider checks (Gemini / safe mode)
   // Runs AFTER auth is fully loaded — AI failures must never block auth boot.
+  // Use cached bootstrap result — no re-read of process.env.
   logProviderHealth();
-  if (!isGeminiConfigured()) {
+  if (bootStatus.safeMode) {
     enableSafeMode("GEMINI_API_KEY is not set — set the secret and restart to enable AI features");
   }
   markBootPhase("AI");
