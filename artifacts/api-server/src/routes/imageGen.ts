@@ -9,8 +9,8 @@
  * ISOLATION: These routes are fully independent of /api/chat and the Gemini
  * integration. They share no state, no handlers, and no response logic.
  *
- * Auth: policyEngine enforced — recovery sessions are blocked (must change
- *       password first). Image uploads validated: MIME + 10 MB size limit.
+ * Auth: policyEngine enforced — recovery sessions are allowed (allowRecovery:
+ *       true). Image uploads validated: MIME + 10 MB size limit.
  * Credits: 1 per operation (deducted after success only). CEO role = unlimited.
  * Rate limit: 10 generate / 10 edit per minute per IP (CEO bypassed).
  */

@@ -10,13 +10,19 @@
  *   AUTH_TIMEOUT_MS    = 15 000   login, signup, session checks
  *   API_TIMEOUT_MS     = 30 000   credits, general API calls
  *   IMAGE_ANALYZE_MS   = 60 000   image analysis pipeline
- *   IMAGE_GEN_MS       = 90 000   image generation / editing
+ *   IMAGE_GEN_MS       = 120 000  image generation / editing
+ *
+ * NOTE: IMAGE_GEN_MS must remain > backend PIPELINE_TIMEOUT_MS (90 s).
+ * The backend pipeline timer starts after auth/validation processing,
+ * so with a matching 90 s client timeout the AbortError fires first and
+ * the user sees a generic "timed out" message instead of the backend's
+ * helpful specific error. 120 s ensures the backend always wins the race.
  */
 
 export const AUTH_TIMEOUT_MS  = 15_000;
 export const API_TIMEOUT_MS   = 30_000;
 export const IMAGE_ANALYZE_MS = 60_000;
-export const IMAGE_GEN_MS     = 90_000;
+export const IMAGE_GEN_MS     = 120_000;
 
 /**
  * Safely parse a Response as JSON without throwing.
