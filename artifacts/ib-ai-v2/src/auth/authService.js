@@ -191,6 +191,8 @@ export async function signup(username, password) {
  * Hard auth failures (401/400) are returned immediately without retry.
  */
 export async function login(username, password) {
+  const finalUrl = `${BASE}/api/auth/login`;
+  console.log('LOGIN URL:', finalUrl);
   for (let attempt = 1; attempt <= 2; attempt++) {
     let res, data;
     try {
