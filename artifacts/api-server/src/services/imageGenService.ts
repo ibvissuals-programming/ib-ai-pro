@@ -589,6 +589,17 @@ function isRetryableStatus(status: number): boolean {
   return status === 429 || status === 402 || status === 503;
 }
 
+function isQuotaOrRateLimitError(msg: string): boolean {
+  const lower = msg.toLowerCase();
+  return (
+    lower.includes("quota") ||
+    lower.includes("resource_exhausted") ||
+    lower.includes("rate limit") ||
+    lower.includes("429") ||
+    lower.includes("too many requests")
+  );
+}
+
 async function pollinationsFetch(url: string): Promise<Response> {
   let lastErr: Error = new Error("Unknown error");
 
@@ -1286,6 +1297,9 @@ export async function editImage(
           if (!stageOut) failureReason = "model_rejection";
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
+          // Quota / rate-limit errors cannot succeed on retry — rethrow immediately
+          // so the route layer can classify and surface the real error to the user.
+          if (isQuotaOrRateLimitError(msg)) throw err;
           failureReason = msg.toLowerCase().includes("timeout") ? "timeout" : "model_rejection";
           logger.error({ err, stageNum: stage.stageNum }, "[imageEdit] stage threw — continuing with prior output");
         }
@@ -1386,7 +1400,10 @@ export async function editImage(
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         failJob(job, msg);
-        throw new Error("Image editing failed. Please try again.");
+        // Rethrow the original error so normalizeAIError can classify it
+        // correctly (quota → rate_limit, timeout → timeout, etc.) rather than
+        // replacing it with a generic message that maps to internal_error.
+        throw err;
       }
 
       if (fallbackOut) return succeedEdit(fallbackOut, 2, fallbackMode, buildDebug("partial", 0, fallbackMode));
