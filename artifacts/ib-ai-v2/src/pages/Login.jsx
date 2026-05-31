@@ -44,21 +44,31 @@ export default function Login() {
 
   useEffect(() => {
     let cancelled = false;
+    // resolved = true once the backend confirms ready OR the cutoff fires.
+    // Any in-flight probe that resolves after this must not touch state.
+    let resolved = false;
     let retryTimer = null;
 
     // ── 6-second absolute cutoff ──────────────────────────────────────────────
-    // After 6s, hide the banner unconditionally. The login button was never
-    // blocked — this just removes the informational spinner.
+    // After 6s, dismiss the banner unconditionally and stop all retries.
+    // The login button was never blocked — this just removes the spinner.
     const cutoffTimer = setTimeout(() => {
-      if (!cancelled) setServerReady(true);
+      if (!cancelled) {
+        resolved = true;
+        setServerReady(true);
+      }
     }, 6_000);
 
     async function probe() {
+      // Hard-stop: bail immediately if already resolved (success or cutoff) or unmounted.
+      if (resolved || cancelled) return;
+
       const result = await checkServerHealth();
 
-      // FIX: Always apply the success state even if cleanup ran (cancelled = true).
-      // In React 18, setState on an unmounted component is a safe no-op.
       if (result.ready) {
+        // Mark resolved first so no subsequent probe can call setServerReady(false).
+        resolved = true;
+        clearTimeout(cutoffTimer);
         setServerReady(true);
         setError(prev =>
           prev === 'Server is still starting up — please wait a moment and try again'
@@ -68,9 +78,9 @@ export default function Login() {
         return;
       }
 
-      // Backend not ready. Only schedule the next retry if still mounted —
-      // prevents zombie retry loops after the component unmounts.
-      if (cancelled) return;
+      // Backend not ready. Re-check resolved/cancelled AFTER the async fetch —
+      // the cutoff timer may have fired while the request was in-flight.
+      if (resolved || cancelled) return;
       setServerReady(false);
       retryTimer = setTimeout(probe, 2_500);
     }
@@ -78,6 +88,7 @@ export default function Login() {
     probe();
     return () => {
       cancelled = true;
+      resolved = true; // Stop any in-flight fetch from updating state after unmount.
       clearTimeout(cutoffTimer);
       if (retryTimer) clearTimeout(retryTimer);
     };
