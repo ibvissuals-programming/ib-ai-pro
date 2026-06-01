@@ -5,15 +5,36 @@
  * Reads from /api/tts/history and /api/video/history endpoints.
  */
 import { getAuthHeaders } from '../auth/authService';
+import {
+  safeJson,
+  fetchWithTimeout,
+  classifyFetchError,
+  classifyHttpError,
+  API_TIMEOUT_MS,
+} from '../utils/apiClient';
+
+const BASE = (() => {
+  try { return (import.meta?.env?.BASE_URL ?? '').replace(/\/$/, ''); }
+  catch { return ''; }
+})();
 
 /**
  * Fetch the current user's TTS history (newest first, max 20).
  * @returns {Promise<Array>} Array of TTS history entries
  */
 export async function fetchTtsHistory() {
-  const res = await fetch('/api/tts/history', { headers: getAuthHeaders() });
-  if (!res.ok) throw new Error(`TTS history fetch failed: ${res.status}`);
-  const data = await res.json();
+  let res;
+  try {
+    res = await fetchWithTimeout(
+      `${BASE}/api/tts/history`,
+      { headers: getAuthHeaders() },
+      API_TIMEOUT_MS,
+    );
+  } catch (err) {
+    throw new Error(classifyFetchError(err));
+  }
+  const data = await safeJson(res);
+  if (!res.ok) throw new Error(classifyHttpError(res, data));
   return data.history ?? [];
 }
 
@@ -22,9 +43,18 @@ export async function fetchTtsHistory() {
  * @returns {Promise<Array>} Array of video history entries
  */
 export async function fetchVideoHistory() {
-  const res = await fetch('/api/video/history', { headers: getAuthHeaders() });
-  if (!res.ok) throw new Error(`Video history fetch failed: ${res.status}`);
-  const data = await res.json();
+  let res;
+  try {
+    res = await fetchWithTimeout(
+      `${BASE}/api/video/history`,
+      { headers: getAuthHeaders() },
+      API_TIMEOUT_MS,
+    );
+  } catch (err) {
+    throw new Error(classifyFetchError(err));
+  }
+  const data = await safeJson(res);
+  if (!res.ok) throw new Error(classifyHttpError(res, data));
   return data.history ?? [];
 }
 
@@ -34,9 +64,18 @@ export async function fetchVideoHistory() {
  * @returns {Promise<Array>} Array of preset objects
  */
 export async function fetchPresets(type) {
-  const res = await fetch(`/api/presets/${type}`);
-  if (!res.ok) throw new Error(`Presets fetch failed: ${res.status}`);
-  const data = await res.json();
+  let res;
+  try {
+    res = await fetchWithTimeout(
+      `${BASE}/api/presets/${encodeURIComponent(type)}`,
+      {},
+      API_TIMEOUT_MS,
+    );
+  } catch (err) {
+    throw new Error(classifyFetchError(err));
+  }
+  const data = await safeJson(res);
+  if (!res.ok) throw new Error(classifyHttpError(res, data));
   return data.presets ?? [];
 }
 
@@ -45,7 +84,17 @@ export async function fetchPresets(type) {
  * @returns {Promise<object>} Multimodal analytics payload
  */
 export async function fetchMultimodalStats() {
-  const res = await fetch('/api/admin/multimodal-stats', { headers: getAuthHeaders() });
-  if (!res.ok) throw new Error(`Multimodal stats fetch failed: ${res.status}`);
-  return res.json();
+  let res;
+  try {
+    res = await fetchWithTimeout(
+      `${BASE}/api/admin/multimodal-stats`,
+      { headers: getAuthHeaders() },
+      API_TIMEOUT_MS,
+    );
+  } catch (err) {
+    throw new Error(classifyFetchError(err));
+  }
+  const data = await safeJson(res);
+  if (!res.ok) throw new Error(classifyHttpError(res, data));
+  return data;
 }

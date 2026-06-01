@@ -1,10 +1,29 @@
 /**
  * Shared API client utilities — IB AI Assistant.
  *
- * Provides:
- *   safeJson(res)                        — Response → object, never throws
- *   fetchWithTimeout(url, opts, ms)      — fetch + AbortController timeout
- *   classifyFetchError(err)              — Error → human-readable string
+ * Error taxonomy — three strictly separated categories:
+ *
+ *   ABORT         AbortError — request was cancelled or our timeout fired.
+ *                 → "Request cancelled"
+ *                 Never retry — the timeout will fire again immediately.
+ *
+ *   NETWORK_ERROR fetch() threw TypeError — DNS failure, connection refused,
+ *                 network offline, CORS block.  No response object exists.
+ *                 → "Cannot reach server..."
+ *                 May retry once on genuine transient failures.
+ *
+ *   HTTP_ERROR    Response exists with 4xx/5xx status.
+ *                 HTTP status ALWAYS takes priority over body parsing.
+ *                 → status-specific message (classifyHttpError)
+ *
+ *   PARSE_ERROR   Response exists but body was empty or non-JSON.
+ *                 NEVER treated as a network error — the server was reachable.
+ *                 safeJson() returns {} and the caller handles via classifyHttpError.
+ *
+ * CRITICAL RULE: "Cannot reach server" must ONLY appear when fetch() throws
+ * and no response object exists.  It must NEVER be used when:
+ *   - a status code exists (use classifyHttpError instead)
+ *   - JSON parsing fails (safeJson → {} → classifyHttpError handles it)
  *
  * Timeout constants (ms):
  *   AUTH_TIMEOUT_MS    = 15 000   login, signup, session checks
@@ -13,10 +32,6 @@
  *   IMAGE_GEN_MS       = 120 000  image generation / editing
  *
  * NOTE: IMAGE_GEN_MS must remain > backend PIPELINE_TIMEOUT_MS (90 s).
- * The backend pipeline timer starts after auth/validation processing,
- * so with a matching 90 s client timeout the AbortError fires first and
- * the user sees a generic "timed out" message instead of the backend's
- * helpful specific error. 120 s ensures the backend always wins the race.
  */
 
 export const AUTH_TIMEOUT_MS  = 15_000;
@@ -24,12 +39,25 @@ export const API_TIMEOUT_MS   = 30_000;
 export const IMAGE_ANALYZE_MS = 60_000;
 export const IMAGE_GEN_MS     = 120_000;
 
+// ── Internal debug log ────────────────────────────────────────────────────────
+// Called by classifyFetchError and classifyHttpError so every classified error
+// emits a consistent structured entry in the browser console.
+
+function _apiDebugLog(errorType, status) {
+  console.log('[API DEBUG]', { layer: 'global', status: status ?? null, errorType });
+}
+
+// ── Safe JSON parse ───────────────────────────────────────────────────────────
+
 /**
  * Safely parse a Response as JSON without throwing.
  *
- * Reads the body as text first, validates content-type,
- * then attempts JSON.parse. Returns an empty object on any failure
- * so callers always get a plain object back.
+ * Returns {} on ANY body-read or parse failure.
+ *
+ * IMPORTANT: a response object means the server was reachable.
+ * This function NEVER returns a "Cannot reach server" string — that message
+ * belongs exclusively to classifyFetchError (when fetch() itself throws).
+ * Callers must use classifyHttpError(res, data) for error messages.
  *
  * @param {Response} res
  * @returns {Promise<object>}
@@ -56,11 +84,13 @@ export async function safeJson(res) {
   }
 }
 
+// ── Fetch with timeout ────────────────────────────────────────────────────────
+
 /**
  * fetch() wrapped with an AbortController timeout.
  *
- * The timer is always cleared — whether fetch succeeds, fails,
- * or the timeout fires first. Throws AbortError on timeout.
+ * Throws AbortError if the timeout fires before the response arrives.
+ * All other fetch errors propagate as-is.
  *
  * @param {string} url
  * @param {RequestInit} [options]
@@ -77,24 +107,44 @@ export async function fetchWithTimeout(url, options = {}, timeoutMs = API_TIMEOU
   }
 }
 
+// ── Error classifiers ─────────────────────────────────────────────────────────
+
 /**
- * Classify a caught fetch / network error into a human-readable message.
+ * Classify a thrown fetch error into a human-readable message.
  *
- * Maps:
- *   AbortError   → "Request timed out — please try again"
- *   SyntaxError  → "Invalid server response — please try again"
- *   TypeError    → "Cannot reach server — please check your connection or try again"
- *   otherwise    → err.message or generic fallback
+ * ONLY call this from a catch block where fetch() itself threw — i.e. where
+ * NO response object was ever created.  If a response exists, use
+ * classifyHttpError() instead; calling this function with a response in scope
+ * is a bug (it would map a reachable-server error to "Cannot reach server").
+ *
+ *   AbortError   → "Request cancelled"          (timeout or external abort)
+ *   TypeError    → "Cannot reach server..."     (no network path to server)
+ *   SyntaxError  → "Invalid server response..." (malformed response pre-body)
+ *   other        → err.message or generic fallback
  *
  * @param {unknown} err
  * @returns {string}
  */
 export function classifyFetchError(err) {
-  if (!err) return 'Network error — please try again';
-  if (err.name === 'AbortError') return 'Request timed out — please try again';
+  if (!err) {
+    _apiDebugLog('NETWORK_ERROR', null);
+    return 'Network error — please try again';
+  }
+
+  // AbortError: our timeout fired or an external signal cancelled the request.
+  // NOT a network failure — do not retry, do not say "Cannot reach server".
+  if (err.name === 'AbortError') {
+    _apiDebugLog('ABORT', null);
+    return 'Request cancelled';
+  }
+
   if (err instanceof SyntaxError || err.name === 'SyntaxError') {
+    _apiDebugLog('PARSE_ERROR', null);
     return 'Invalid server response — please try again';
   }
+
+  // TypeError: fetch() threw before any response was received.
+  // This is the ONLY case that maps to "Cannot reach server".
   if (
     err.name === 'TypeError' ||
     (typeof err.message === 'string' &&
@@ -103,7 +153,37 @@ export function classifyFetchError(err) {
        err.message.includes('NetworkError') ||
        err.message.includes('Load failed')))
   ) {
+    _apiDebugLog('NETWORK_ERROR', null);
     return 'Cannot reach server — please check your connection or try again';
   }
+
+  _apiDebugLog('NETWORK_ERROR', null);
   return err.message || 'Network error — please try again';
+}
+
+/**
+ * Classify an HTTP error response (response EXISTS, res.ok === false).
+ *
+ * HTTP status ALWAYS takes priority over body content.
+ * Parsing errors (safeJson returned {}) are handled via the status fallback.
+ *
+ * CRITICAL: Call this whenever res.ok is false and a response object exists.
+ * Never fall through to classifyFetchError when a response exists.
+ *
+ *   401 → Authentication required
+ *   429 → Too many requests
+ *   5xx → Server error (uses body error if present)
+ *   4xx → body error or generic HTTP error
+ *
+ * @param {Response} res  - the Response object (must exist, res.ok === false)
+ * @param {object}   data - parsed body from safeJson (may be {})
+ * @returns {string}
+ */
+export function classifyHttpError(res, data) {
+  const status = res.status;
+  _apiDebugLog('HTTP_ERROR', status);
+  if (status === 401) return data?.error || 'Authentication required — please log in again';
+  if (status === 429) return 'Too many requests — please wait a moment and try again';
+  if (status >= 500)  return data?.error || 'Server error — please try again';
+  return data?.error || `Request failed (${status})`;
 }

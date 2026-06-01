@@ -1,5 +1,11 @@
 import { getAuthHeaders } from '../auth/authService';
-import { safeJson, fetchWithTimeout, API_TIMEOUT_MS } from '../utils/apiClient';
+import {
+  safeJson,
+  fetchWithTimeout,
+  classifyFetchError,
+  classifyHttpError,
+  API_TIMEOUT_MS,
+} from '../utils/apiClient';
 
 const BASE = (import.meta.env.BASE_URL ?? '').replace(/\/$/, '');
 
@@ -23,11 +29,16 @@ export async function fetchCredits(username) {
   const authHeaders = getAuthHeaders();
 
   if (authHeaders.Authorization) {
-    const res = await fetchWithTimeout(
-      `${BASE}/api/auth/me`,
-      { headers: authHeaders },
-      API_TIMEOUT_MS,
-    );
+    let res;
+    try {
+      res = await fetchWithTimeout(
+        `${BASE}/api/auth/me`,
+        { headers: authHeaders },
+        API_TIMEOUT_MS,
+      );
+    } catch (err) {
+      throw new Error(classifyFetchError(err));
+    }
     if (res.ok) {
       const data = await safeJson(res);
       if (!data || !data.user) throw new Error('Invalid response from server');
@@ -40,21 +51,24 @@ export async function fetchCredits(username) {
         nextResetAt: credits.nextResetAt,
       };
     }
+    // Non-OK token response — fall through to username-based fallback below
   }
 
   if (!username) throw new Error('Username required');
 
-  const res = await fetchWithTimeout(
-    `${BASE}/api/credits/${encodeURIComponent(username)}`,
-    { method: 'GET', headers: { 'Content-Type': 'application/json' } },
-    API_TIMEOUT_MS,
-  );
-
-  if (!res.ok) {
-    throw new Error(`Credits API error ${res.status}`);
+  let res;
+  try {
+    res = await fetchWithTimeout(
+      `${BASE}/api/credits/${encodeURIComponent(username)}`,
+      { method: 'GET', headers: { 'Content-Type': 'application/json' } },
+      API_TIMEOUT_MS,
+    );
+  } catch (err) {
+    throw new Error(classifyFetchError(err));
   }
 
   const data = await safeJson(res);
+  if (!res.ok) throw new Error(classifyHttpError(res, data));
   if (!data) throw new Error('Invalid response from credits API');
   return data;
 }
@@ -66,22 +80,23 @@ export async function fetchCredits(username) {
  * @param {'free'|'premium'|'ceo'} plan
  */
 export async function upgradePlan(username, plan) {
-  const res = await fetchWithTimeout(
-    `${BASE}/api/credits/upgrade`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-      body: JSON.stringify({ username, plan }),
-    },
-    API_TIMEOUT_MS,
-  );
-
-  if (!res.ok) {
-    const body = await safeJson(res);
-    throw new Error(body.error || `Upgrade API error ${res.status}`);
+  let res;
+  try {
+    res = await fetchWithTimeout(
+      `${BASE}/api/credits/upgrade`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ username, plan }),
+      },
+      API_TIMEOUT_MS,
+    );
+  } catch (err) {
+    throw new Error(classifyFetchError(err));
   }
 
   const data = await safeJson(res);
+  if (!res.ok) throw new Error(classifyHttpError(res, data));
   if (!data) throw new Error('Invalid response from upgrade API');
   return data;
 }

@@ -1,5 +1,10 @@
 import { getAuthHeaders } from '../auth/authService';
-import { safeJson, fetchWithTimeout, IMAGE_ANALYZE_MS } from '../utils/apiClient';
+import {
+  safeJson,
+  fetchWithTimeout,
+  classifyFetchError,
+  IMAGE_ANALYZE_MS,
+} from '../utils/apiClient';
 
 const BASE = (import.meta.env.BASE_URL ?? '').replace(/\/$/, '');
 const ANALYZE_URL = `${BASE}/api/analyze-image`;
@@ -29,14 +34,14 @@ export async function analyzeImage(imageBase64, mimeType) {
       IMAGE_ANALYZE_MS,
     );
   } catch (err) {
-    if (err.name === 'AbortError') {
-      const te = new Error('Request timed out — please try again');
-      te.name = 'AbortError';
-      throw te;
-    }
-    throw err;
+    // fetch() threw — no response exists. Classify strictly as ABORT or NETWORK_ERROR.
+    const msg = classifyFetchError(err);
+    const e = new Error(msg);
+    if (err.name === 'AbortError') e.name = 'AbortError';
+    throw e;
   }
 
+  // Response exists — HTTP status takes priority over body parsing.
   if (!response.ok) {
     const body = await safeJson(response);
     const err = new Error(body.error || `Image analysis API error ${response.status}`);

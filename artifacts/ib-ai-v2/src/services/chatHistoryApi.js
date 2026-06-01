@@ -1,7 +1,9 @@
 /**
  * chatHistoryApi — frontend client for chat session persistence endpoints.
  *
- * All calls include the JWT auth token. Errors are thrown as plain Error objects.
+ * All calls include the JWT auth token. Network and HTTP errors are classified
+ * through the shared apiClient taxonomy (ABORT / NETWORK_ERROR / HTTP_ERROR).
+ * Errors are thrown as plain Error objects with human-readable messages.
  *
  * Exports:
  *   fetchSessions()              — GET /api/chat/sessions
@@ -10,6 +12,13 @@
  *   deleteSession(id)            — DELETE /api/chat/sessions/:id
  */
 import { getAuthHeaders } from '../auth/authService';
+import {
+  safeJson,
+  fetchWithTimeout,
+  classifyFetchError,
+  classifyHttpError,
+  API_TIMEOUT_MS,
+} from '../utils/apiClient';
 
 const BASE = (() => {
   try { return (import.meta?.env?.BASE_URL ?? '').replace(/\/$/, ''); }
@@ -17,19 +26,35 @@ const BASE = (() => {
 })();
 
 export async function fetchSessions() {
-  const res = await fetch(`${BASE}/api/chat/sessions?limit=50`, {
-    headers: getAuthHeaders(),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  let res;
+  try {
+    res = await fetchWithTimeout(
+      `${BASE}/api/chat/sessions?limit=50`,
+      { headers: getAuthHeaders() },
+      API_TIMEOUT_MS,
+    );
+  } catch (err) {
+    throw new Error(classifyFetchError(err));
+  }
+  const data = await safeJson(res);
+  if (!res.ok) throw new Error(classifyHttpError(res, data));
+  return data;
 }
 
 export async function fetchSessionMessages(sessionId) {
-  const res = await fetch(`${BASE}/api/chat/sessions/${sessionId}/messages`, {
-    headers: getAuthHeaders(),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  let res;
+  try {
+    res = await fetchWithTimeout(
+      `${BASE}/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
+      { headers: getAuthHeaders() },
+      API_TIMEOUT_MS,
+    );
+  } catch (err) {
+    throw new Error(classifyFetchError(err));
+  }
+  const data = await safeJson(res);
+  if (!res.ok) throw new Error(classifyHttpError(res, data));
+  return data;
 }
 
 /**
@@ -38,16 +63,22 @@ export async function fetchSessionMessages(sessionId) {
 export async function fetchLatestSession() {
   const sessions = await fetchSessions();
   if (!sessions?.length) return null;
-
   const latest = sessions[0];
   const messages = await fetchSessionMessages(latest.id);
   return { ...latest, messages };
 }
 
 export async function deleteSession(sessionId) {
-  const res = await fetch(`${BASE}/api/chat/sessions/${sessionId}`, {
-    method: 'DELETE',
-    headers: getAuthHeaders(),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  let res;
+  try {
+    res = await fetchWithTimeout(
+      `${BASE}/api/chat/sessions/${encodeURIComponent(sessionId)}`,
+      { method: 'DELETE', headers: getAuthHeaders() },
+      API_TIMEOUT_MS,
+    );
+  } catch (err) {
+    throw new Error(classifyFetchError(err));
+  }
+  const data = await safeJson(res);
+  if (!res.ok) throw new Error(classifyHttpError(res, data));
 }

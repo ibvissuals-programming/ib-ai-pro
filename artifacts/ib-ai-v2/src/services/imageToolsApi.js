@@ -1,5 +1,11 @@
 import { getAuthHeaders } from '../auth/authService';
-import { safeJson, fetchWithTimeout, IMAGE_GEN_MS } from '../utils/apiClient';
+import {
+  safeJson,
+  fetchWithTimeout,
+  classifyFetchError,
+  classifyHttpError,
+  IMAGE_GEN_MS,
+} from '../utils/apiClient';
 
 const BASE = (import.meta.env.BASE_URL ?? '').replace(/\/$/, '');
 const GENERATE_URL         = `${BASE}/api/image/generate`;
@@ -7,15 +13,30 @@ const EDIT_URL             = `${BASE}/api/image/edit`;
 const HISTORY_URL          = `${BASE}/api/image/history`;
 const CINEMATIC_PROMPT_URL = `${BASE}/api/image/cinematic-prompt`;
 
-function handleErrorResponse(res, data, context) {
+// ── Shared HTTP error handler ─────────────────────────────────────────────────
+// Called only when a response EXISTS and res.ok === false.
+// HTTP status always takes priority — classifyHttpError handles the mapping.
+
+function handleErrorResponse(res, data) {
   if (res.status === 401) throw new Error('Authentication required. Please log in again.');
   if (res.status === 402) {
-    const err = new Error(data.error ?? 'Insufficient credits');
+    const err = new Error(data?.error ?? 'Insufficient credits');
     err.code = 'CREDITS_EXHAUSTED';
     err.statusCode = 402;
     throw err;
   }
-  throw new Error(data.error ?? `Server error ${res.status}`);
+  throw new Error(classifyHttpError(res, data));
+}
+
+// ── Shared fetch-error handler ────────────────────────────────────────────────
+// Called only from catch blocks where fetch() itself threw (no response exists).
+// Preserves AbortError.name so callers can distinguish cancel from failure.
+
+function throwFetchError(err) {
+  const msg = classifyFetchError(err);
+  const e = new Error(msg);
+  if (err.name === 'AbortError') e.name = 'AbortError';
+  throw e;
 }
 
 /**
@@ -36,12 +57,11 @@ export async function generateImage(prompt) {
       IMAGE_GEN_MS,
     );
   } catch (err) {
-    if (err.name === 'AbortError') throw new Error('Request timed out — the model took too long. Please try again.');
-    throw new Error('Network error — could not reach the image service.');
+    throwFetchError(err);
   }
 
   const data = await safeJson(res);
-  if (!res.ok) handleErrorResponse(res, data, 'generate');
+  if (!res.ok) handleErrorResponse(res, data);
   return data;
 }
 
@@ -49,7 +69,7 @@ export async function generateImage(prompt) {
  * Edit an existing image using a natural-language instruction.
  * @param {string} imageBase64 — data URL (data:image/...;base64,...)
  * @param {string} prompt — edit instruction
- * @param {string} [editMode] — "portrait_safe" | "cinematic" | "style_transfer" | "creative" (auto-detected if omitted)
+ * @param {string} [editMode] — "portrait_safe" | "cinematic" | "style_transfer" | "creative"
  * @param {string} [intensity] — optional intensity override ("LOW"|"MEDIUM"|"HIGH"|"EXTREME")
  * @param {boolean} [useCinematicAnalysis] — if true, backend runs Gemini vision pre-analysis
  * @returns {Promise<{ b64Image: string, status: string, mode?: string, intensity?: string, cinematicAnalysisUsed?: boolean }>}
@@ -57,9 +77,9 @@ export async function generateImage(prompt) {
 export async function editImage(imageBase64, prompt, editMode, intensity, useCinematicAnalysis) {
   let res;
   const body = { image: imageBase64, prompt };
-  if (editMode)              body.editMode              = editMode;
-  if (intensity)             body.intensity             = intensity;
-  if (useCinematicAnalysis)  body.useCinematicAnalysis  = true;
+  if (editMode)             body.editMode             = editMode;
+  if (intensity)            body.intensity            = intensity;
+  if (useCinematicAnalysis) body.useCinematicAnalysis = true;
 
   try {
     res = await fetchWithTimeout(
@@ -72,13 +92,11 @@ export async function editImage(imageBase64, prompt, editMode, intensity, useCin
       IMAGE_GEN_MS,
     );
   } catch (err) {
-    if (err.name === 'AbortError') throw new Error('Request timed out — the model took too long. Please try again.');
-    throw new Error('Network error — could not reach the image service.');
+    throwFetchError(err);
   }
 
   const data = await safeJson(res);
-  if (!res.ok) handleErrorResponse(res, data, 'edit');
-
+  if (!res.ok) handleErrorResponse(res, data);
   if (!data.b64Image) throw new Error('Image edit returned no result. Please try again.');
   return data;
 }
@@ -97,23 +115,20 @@ export async function fetchImageHistory(limit = 30) {
       IMAGE_GEN_MS,
     );
   } catch (err) {
-    if (err.name === 'AbortError') throw new Error('Request timed out loading history.');
-    throw new Error('Network error — could not load history.');
+    throwFetchError(err);
   }
 
   const data = await safeJson(res);
   if (!res.ok) {
     if (res.status === 401) throw new Error('Authentication required.');
-    throw new Error(data.error ?? 'Failed to load history.');
+    throw new Error(classifyHttpError(res, data));
   }
-
   return data;
 }
 
 /**
  * Call the Cinematic Insight Engine — analyze an image and return structured
- * professional editing direction: scene description, lighting direction,
- * color grade, exposure guidance, mood target, and a cinematicEditPrompt.
+ * professional editing direction.
  *
  * @param {string} imageDataUrl — data URL (data:image/...;base64,...)
  * @returns {Promise<{
@@ -146,12 +161,11 @@ export async function generateCinematicPrompt(imageDataUrl) {
       IMAGE_GEN_MS,
     );
   } catch (err) {
-    if (err.name === 'AbortError') throw new Error('Cinematic analysis timed out — please try again.');
-    throw new Error('Network error — could not reach the cinematic analysis service.');
+    throwFetchError(err);
   }
 
   const data = await safeJson(res);
-  if (!res.ok) handleErrorResponse(res, data, 'cinematic-prompt');
+  if (!res.ok) handleErrorResponse(res, data);
   return data;
 }
 
@@ -164,19 +178,18 @@ export async function deleteHistoryEntry(entryId) {
   let res;
   try {
     res = await fetchWithTimeout(
-      `${HISTORY_URL}/${entryId}`,
+      `${HISTORY_URL}/${encodeURIComponent(entryId)}`,
       { method: 'DELETE', headers: { ...getAuthHeaders() } },
       IMAGE_GEN_MS,
     );
   } catch (err) {
-    if (err.name === 'AbortError') throw new Error('Request timed out.');
-    throw new Error('Network error — could not delete entry.');
+    throwFetchError(err);
   }
 
   const data = await safeJson(res);
   if (!res.ok) {
     if (res.status === 401) throw new Error('Authentication required.');
     if (res.status === 404) throw new Error('Entry not found.');
-    throw new Error(data.error ?? 'Failed to delete entry.');
+    throw new Error(classifyHttpError(res, data));
   }
 }
