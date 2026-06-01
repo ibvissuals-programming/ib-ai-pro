@@ -123,9 +123,15 @@ export function getVideoResult(jobId: string): VideoResultEntry | undefined {
 }
 
 // ── Provider check ────────────────────────────────────────────────────────────
+//
+// Video requires BOTH a configured Gemini key AND the VIDEO_ENABLED flag set
+// to "true". Checking only isGeminiConfigured() is insufficient — the Veo
+// model requires separate API provisioning. Without VIDEO_ENABLED=true the
+// route returns a clean 501 feature_disabled instead of firing a job that
+// immediately fails with provider_not_configured.
 
 export function isVideoEnabled(): boolean {
-  return isGeminiConfigured();
+  return isGeminiConfigured() && process.env["VIDEO_ENABLED"] === "true";
 }
 
 // ── Error classifier ──────────────────────────────────────────────────────────

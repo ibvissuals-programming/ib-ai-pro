@@ -117,6 +117,9 @@ export function canCreateJob(params: {
   }
 
   // ── Guard 3: video provider availability (injected by caller) ────────────────
+  // When VIDEO_ENABLED is not set, Veo is not provisioned for this API key.
+  // Return feature_disabled (501) so the frontend shows an appropriate message
+  // rather than the misleading "provider not configured" (503).
   if (mode === "video" && isVideoEnabled === false) {
     emit({
       eventType: "provider_blocked",
@@ -124,14 +127,14 @@ export function canCreateJob(params: {
       userId,
       action:    "create_video_job",
       status:    "blocked",
-      metadata:  { mode: "video", provider: "gemini-veo" },
-      errorCode: "provider_not_configured",
+      metadata:  { mode: "video", provider: "gemini-veo", reason: "VIDEO_ENABLED not set" },
+      errorCode: "feature_disabled",
     });
     return {
       allowed:    false,
-      reason:     "provider_not_configured: Gemini API key is required for video generation",
-      code:       "provider_not_configured",
-      httpStatus: 503,
+      reason:     "feature_disabled: Image-to-Video requires Veo API access (VIDEO_ENABLED not set)",
+      code:       "feature_disabled",
+      httpStatus: 501,
     };
   }
 

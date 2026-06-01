@@ -1,0 +1,26 @@
+[
+  {
+    "userId": "e306d4e8-ff8d-4c6d-82f8-b47f4b17cdd6",
+    "type": "video",
+    "prompt": "gentle pan",
+    "mode": "cinematic_motion",
+    "jobId": "job_mpuiel5a_wd2azu",
+    "videoUrl": null,
+    "status": "provider_not_configured",
+    "thumbnailB64": null,
+    "timestamp": 1780276067730,
+    "id": "f2ad4084-d3a3-4b61-b5e3-41a23a6f3d7b"
+  },
+  {
+    "userId": "c5c16a9a-cdba-446d-be10-8cb8de73098c",
+    "type": "video",
+    "prompt": "Camera slowly pushes in with dramatic lens flare",
+    "mode": "cinematic_motion",
+    "jobId": "job_mpui3pb4_wr5x8e",
+    "videoUrl": null,
+    "status": "provider_not_configured",
+    "thumbnailB64": null,
+    "timestamp": 1780275560025,
+    "id": "33a36409-37f8-4db4-a515-c2e9ea8a3d5c"
+  }
+]

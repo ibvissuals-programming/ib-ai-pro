@@ -584,6 +584,14 @@ function parseAndValidateImage(imageDataUrl: string): ParsedImage {
 }
 
 // ── Pollinations (text-to-image only) ────────────────────────────────────────
+//
+// Cooldown: Pollinations blocks rapid consecutive calls from the same server IP
+// (returns 429 or 503 on the second call within ~3 s). The module-level tracker
+// enforces a minimum inter-request gap BEFORE each fetch attempt so queued jobs
+// never hit the provider faster than it allows.
+
+const POLLINATIONS_COOLDOWN_MS = 5_000;   // measured from last COMPLETED request
+let lastPollinationsCallMs    = 0;
 
 function isRetryableStatus(status: number): boolean {
   return status === 429 || status === 402 || status === 503;
@@ -601,7 +609,19 @@ function isQuotaOrRateLimitError(msg: string): boolean {
 }
 
 async function pollinationsFetch(url: string): Promise<Response> {
+  // Enforce minimum inter-request cooldown measured from the last COMPLETED
+  // request. Pollinations rate-limits the server IP on rapid consecutive calls;
+  // waiting 5 s since the last successful completion prevents it.
+  const now = Date.now();
+  const sinceLastCall = now - lastPollinationsCallMs;
+  if (lastPollinationsCallMs > 0 && sinceLastCall < POLLINATIONS_COOLDOWN_MS) {
+    const waitMs = POLLINATIONS_COOLDOWN_MS - sinceLastCall;
+    logger.debug({ waitMs, provider: "pollinations" }, "[imageGen] cooldown wait before fetch");
+    await delay(waitMs);
+  }
+
   let lastErr: Error = new Error("Unknown error");
+  let lastStatus     = 0;
 
   for (let attempt = 0; attempt <= MAX_POLLINATIONS_RETRIES; attempt++) {
     if (attempt > 0) {
@@ -618,7 +638,7 @@ async function pollinationsFetch(url: string): Promise<Response> {
       });
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "TimeoutError") {
-        throw new Error("Image generation temporarily unavailable — please retry in a moment.");
+        throw new Error("Image generation timed out — the provider did not respond in time. Please try again.");
       }
       lastErr = err instanceof Error ? err : new Error(String(err));
       if (attempt < MAX_POLLINATIONS_RETRIES) continue;
@@ -626,15 +646,25 @@ async function pollinationsFetch(url: string): Promise<Response> {
     }
 
     if (isRetryableStatus(response.status)) {
-      lastErr = new Error(`HTTP ${response.status}`);
+      lastStatus = response.status;
+      lastErr    = new Error(`HTTP ${response.status}`);
       if (attempt < MAX_POLLINATIONS_RETRIES) continue;
       break;
     }
 
+    // Record completion time AFTER a successful response so the cooldown is
+    // measured from the moment Pollinations last served a result.
+    lastPollinationsCallMs = Date.now();
     return response;
   }
 
-  logger.warn({ provider: "pollinations" }, "[ai] provider unavailable");
+  logger.warn({ provider: "pollinations", lastStatus }, "[ai] provider unavailable");
+  // Pollinations returns 429 or 503 on rapid consecutive calls from the same IP.
+  // Classify both as rate_limit so normalizeAIError maps to "Too many requests"
+  // rather than "provider_unavailable", giving users the correct retry guidance.
+  if (lastStatus === 429 || lastStatus === 503) {
+    throw new Error("Image generation rate limit — please wait a moment and try again.");
+  }
   throw new Error("Image generation is temporarily unavailable. Please retry.");
 }
 

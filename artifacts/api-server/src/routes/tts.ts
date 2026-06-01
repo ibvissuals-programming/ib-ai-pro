@@ -160,7 +160,18 @@ router.post(
       logger.error({ err, jobId: job.jobId }, "[tts] generation failed");
 
       const errStr = String(err instanceof Error ? err.message : err);
-      const isModelUnsupported = errStr.includes("UNSUPPORTED_MODEL") || errStr.includes("not supported");
+      // Catch all Gemini "audio not supported" variants:
+      //   "UNSUPPORTED_MODEL"
+      //   "not supported"         (legacy pattern)
+      //   "does not support"      (e.g. "Model does not support the requested response modalities: audio")
+      //   "response modalities"   (any responseModalities-related rejection)
+      //   "responseModalities"    (alternate casing)
+      const isModelUnsupported =
+        errStr.includes("UNSUPPORTED_MODEL") ||
+        errStr.includes("not supported") ||
+        errStr.includes("does not support") ||
+        errStr.includes("response modalities") ||
+        errStr.includes("responseModalities");
       if (isModelUnsupported) {
         res.status(501).json({
           success:  false,
