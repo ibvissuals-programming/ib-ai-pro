@@ -35,10 +35,10 @@ const POLLINATIONS_BASE      = "https://image.pollinations.ai/prompt";
 const MAX_IMAGE_BYTES        = 10 * 1024 * 1024;
 const ACCEPTED_MIMES         = ["image/png", "image/jpeg", "image/webp"] as const;
 const RESPONSE_PATTERN       = /^data:image\/(png|jpeg|jpg|webp);base64,/;
-const PIPELINE_TIMEOUT_MS    = 90_000;   // 3 stages × ~25 s + buffer
-const STAGE_TIMEOUT_MS       = 25_000;   // per-stage hard cap
-const ATTEMPT_TIMEOUT_MS     = 25_000;   // kept for non-pipeline callers
-export const REQUEST_TIMEOUT_MS = 28_000;
+const PIPELINE_TIMEOUT_MS    = 120_000;  // 3 stages × ~35 s + buffer
+const STAGE_TIMEOUT_MS       = 35_000;   // per-stage hard cap
+const ATTEMPT_TIMEOUT_MS     = 35_000;   // kept for non-pipeline callers
+export const REQUEST_TIMEOUT_MS = 65_000;
 export const MAX_POLLINATIONS_RETRIES = 1;
 
 type AcceptedMime = (typeof ACCEPTED_MIMES)[number];

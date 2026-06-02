@@ -181,7 +181,7 @@ export function buildStandardResponse<T extends Record<string, unknown>>(
 
 const USER_MESSAGES: Record<AIErrorCode, string> = {
   provider_unavailable:    "The AI provider is temporarily unavailable. Please try again shortly.",
-  provider_not_configured: "This feature requires AI provider access that is not yet enabled for this API key.",
+  provider_not_configured: "This feature requires a Gemini API key with billing enabled. Enable billing at ai.google.dev to use image editing.",
   rate_limit:              "Too many requests. Please wait a moment and try again.",
   feature_disabled:        "This feature is not available in the current environment.",
   timeout:                 "The request timed out. Please try again.",
@@ -196,7 +196,9 @@ export function normalizeAIError(err: unknown, system = "unknown"): NormalizedAI
   let code: AIErrorCode;
   if (lower.includes("timeout") || lower.includes("timed out") || lower.includes("deadline"))
     code = "timeout";
-  else if (lower.includes("rate") || lower.includes("429") || lower.includes("quota"))
+  else if ((lower.includes("quota") || lower.includes("resource_exhausted")) && lower.includes("limit: 0"))
+    code = "provider_not_configured";
+  else if (lower.includes("rate limit") || lower.includes("rate-limit") || lower.includes("ratelimit") || lower.includes("too many requests") || lower.includes("resource_exhausted") || lower.includes("429") || lower.includes("quota"))
     code = "rate_limit";
   else if (
     lower.includes("provider_not_configured") ||

@@ -1,2 +1,3 @@
 - [CEO password persistence bug](ceo-password-persistence.md) — UUID divergence between users.json and PG causes recovery-reset to silently fail; two-layer fix in userStore.ts.
 - [Feature gate & error classification fixes](feature-gate-error-fixes.md) — TTS/Video/ImageGen misclassified errors; root causes and fixes applied.
+- [Gemini image quota and model notes](gemini-image-quota-notes.md) — all image gen models have limit:0 on free tier; normalizeAIError "rate"/"generateContent" false-match bug fixed.
