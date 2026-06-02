@@ -12,19 +12,21 @@
  */
 
 export interface BootstrapStatus {
-  ready:       boolean;
-  safeMode:    boolean;
-  aiMode:      "FULL" | "SAFE_MODE";
+  ready: boolean;
+  safeMode: boolean;
+  aiMode: "FULL" | "SAFE_MODE";
   vars: {
-    DATABASE_URL:     boolean;
-    GEMINI_API_KEY:   boolean;
-    SESSION_SECRET:   boolean;
-    CEO_USERNAME:     boolean;
+    DATABASE_URL: boolean;
+    GEMINI_API_KEY: boolean;
+    GROQ_API_KEY: boolean;
+    JWT_SECRET: boolean;
+    SESSION_SECRET: boolean;
+    CEO_USERNAME: boolean;
     CEO_RECOVERY_KEY: boolean;
   };
-  missing:   string[];
-  warnings:  string[];
-  critical:  string[];
+  missing: string[];
+  warnings: string[];
+  critical: string[];
   checkedAt: number;
 }
 
