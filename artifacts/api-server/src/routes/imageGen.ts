@@ -2,9 +2,9 @@
  * Image generation + editing routes — IB AI Assistant
  *
  * POST /api/image/generate  — text-to-image via FLUX (Pollinations)
- * POST /api/image/edit      — unified cinematic img2img pipeline
- *                             Single model: gemini-2.5-flash-image
- *                             Flow: INPUT → RENDER PROMPT → IMAGE MODEL → SIMPLE RETRY
+ * POST /api/image/edit      — unified cinematic img2img pipeline (free tier)
+ *                             Free pipeline: gemini-2.5-flash (vision→text) + Pollinations FLUX
+ *                             Flow: INPUT → RENDER PROMPT → GEMINI VISION ANALYSIS → POLLINATIONS GENERATION
  *
  * ISOLATION: These routes are fully independent of /api/chat and the Gemini
  * integration. They share no state, no handlers, and no response logic.
@@ -211,7 +211,7 @@ router.post(
         ip: req.ip ?? undefined,
       });
       logger.error({ err }, "[imageGen] generate failed");
-      res.status(503).json(buildErrorResponse("image", err, "gemini-image"));
+      res.status(503).json(buildErrorResponse("image", err, "image"));
     }
   },
 );
@@ -415,7 +415,7 @@ router.post(
         err instanceof Error && (err as Error & { statusCode?: number }).statusCode === 413
           ? 413
           : 503;
-      res.status(status).json(buildErrorResponse("image", err, "gemini-image"));
+      res.status(status).json(buildErrorResponse("image", err, "image"));
     }
   },
 );

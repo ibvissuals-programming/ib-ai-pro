@@ -30,6 +30,7 @@ export type JobStatus =
 
 export type ModelUsed =
   | "gemini-img2img"
+  | "free-img2img"
   | "gemini-vision"
   | "flux"
   | "fallback"

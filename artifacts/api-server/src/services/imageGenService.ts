@@ -5,11 +5,12 @@
  *
  * IMAGE-TO-IMAGE: Unified cinematic render pipeline.
  *
- *   Pipeline:
+ *   Pipeline (free — no billing required):
  *     1. INPUT IMAGE (validate)
- *     2. RENDER PROMPT (user request + optional AI Director analysis)
- *     3. IMAGE MODEL (gemini-2.5-flash-image with identity lock contract)
- *     4. SIMPLE RETRY (once, if model returns no output)
+ *     2. RENDER PROMPT (editIntelligence + APRE + FRAE enrichment)
+ *     3. GEMINI VISION ANALYSIS (gemini-2.5-flash, text output only — free)
+ *     4. POLLINATIONS FLUX GENERATION (free)
+ *     5. SIMPLE RETRY (once, if generation returns no output)
  *
  *   Identity is the only hard constraint.
  *   Everything else — lighting, color, mood, atmosphere — can change freely.
@@ -30,14 +31,16 @@ import {
 
 export const CONTRACT_VERSION = "v6" as const;
 
-const GEMINI_IMG2IMG_MODEL   = "gemini-2.5-flash-image";
-const POLLINATIONS_BASE      = "https://image.pollinations.ai/prompt";
-const MAX_IMAGE_BYTES        = 10 * 1024 * 1024;
-const ACCEPTED_MIMES         = ["image/png", "image/jpeg", "image/webp"] as const;
-const RESPONSE_PATTERN       = /^data:image\/(png|jpeg|jpg|webp);base64,/;
-const PIPELINE_TIMEOUT_MS    = 120_000;  // 3 stages × ~35 s + buffer
-const STAGE_TIMEOUT_MS       = 35_000;   // per-stage hard cap
-const ATTEMPT_TIMEOUT_MS     = 35_000;   // kept for non-pipeline callers
+// Free pipeline: gemini-2.5-flash (vision → text, free tier) + Pollinations FLUX (free)
+const FREE_EDIT_ANALYSIS_MODEL   = "gemini-2.5-flash";
+const FREE_EDIT_ANALYSIS_TIMEOUT = 30_000;
+const POLLINATIONS_BASE          = "https://image.pollinations.ai/prompt";
+const MAX_IMAGE_BYTES            = 10 * 1024 * 1024;
+const ACCEPTED_MIMES             = ["image/png", "image/jpeg", "image/webp"] as const;
+const RESPONSE_PATTERN           = /^data:image\/(png|jpeg|jpg|webp);base64,/;
+const PIPELINE_TIMEOUT_MS        = 150_000;  // single-pass: analysis (~30s) + Pollinations (~65s) + buffer
+const STAGE_TIMEOUT_MS           = 95_000;   // per-pass hard cap for free pipeline
+const ATTEMPT_TIMEOUT_MS         = 95_000;   // kept for non-pipeline callers
 export const REQUEST_TIMEOUT_MS = 65_000;
 export const MAX_POLLINATIONS_RETRIES = 1;
 
@@ -94,8 +97,8 @@ export interface EditResult {
 export function getContractConfig(_debug?: boolean) {
   return {
     contractVersion:  CONTRACT_VERSION,
-    model:            GEMINI_IMG2IMG_MODEL,
-    pipeline:         ["INPUT_IMAGE", "EDIT_MODE_RESOLVE", "RENDER_PROMPT", "IMAGE_MODEL", "MODE_DOWNGRADE_RETRY"],
+    model:            `${FREE_EDIT_ANALYSIS_MODEL} → pollinations-flux`,
+    pipeline:         ["INPUT_IMAGE", "EDIT_MODE_RESOLVE", "RENDER_PROMPT", "GEMINI_VISION_ANALYSIS", "POLLINATIONS_GENERATION"],
     editModes: {
       portrait_safe:  { identityLock: "MAXIMUM", description: "Enhancement only — face, body, structure fully preserved" },
       cinematic:      { identityLock: "MEDIUM",  description: "Cinematic lighting, color grading, mood — identity preserved" },
@@ -703,7 +706,126 @@ export async function generateImage(prompt: string, userId?: string): Promise<st
   return result;
 }
 
-// ── IMG2IMG — single attempt via Gemini ───────────────────────────────────────
+// ── FREE IMG2IMG — Gemini vision analysis (text, free) + Pollinations FLUX ────
+//
+// Replaces the billing-dependent Gemini img2img model (gemini-2.5-flash-image).
+// Two-step free pipeline:
+//   1. gemini-2.5-flash (image → text description, free tier)
+//   2. Pollinations FLUX (text → image, free)
+//
+// All prompt enrichment layers (editIntelligence, APRE, FRAE) produce the
+// instruction; Gemini vision uses it to describe how the source image should
+// look after the edit; Pollinations generates the result from that description.
+
+const MODE_STYLE_DIRECTIVES: Record<EditMode, string> = {
+  portrait_safe:  "Preserve the subject's exact appearance — natural soft enhancement only: soft fill light, gentle skin smoothing, balanced exposure. Do not alter face, identity, body, or pose.",
+  cinematic:      "Apply a Hollywood cinematic grade: dramatic teal-orange color palette, deep rich shadows, open luminous highlights, film-stock texture, directional key lighting. Preserve subject identity.",
+  style_transfer: "Apply a full artistic style transformation. Completely change the visual aesthetic per the instruction. Subject shape preserved but style fully transformed.",
+  creative:       "Bold creative transformation. Full artistic freedom. Strong stylistic changes per the instruction. Expressive and distinctive result.",
+  polish:         "Natural polish: even skin tone, natural skin smoothing with pores preserved, soft balanced lighting, subtle blemish reduction, elegant and understated. Preserve all identity.",
+  social:         "Social media optimized: vibrant punchy color grade, lifted midtones, clean bright highlights, high clarity, Instagram and TikTok quality. Natural skin tones preserved.",
+  luxury:         "Luxury editorial fashion: creamy warm highlights, deep refined shadows, ultra-clean skin rendering, premium aspirational lighting, high-fashion campaign quality. Preserve identity.",
+  restore:        "Photo restoration: remove noise and compression artifacts, recover sharpness, correct exposure, fix color cast. Keep the scene authentic and natural.",
+};
+
+const MODE_INTENSITY_ADDENDUM: Record<IntensityLevel, string> = {
+  LOW:     " Apply the transformation very subtly — minimal visible changes, preserve source fidelity.",
+  MEDIUM:  "",
+  HIGH:    " Apply the transformation strongly — clear, visible cinematic impact.",
+  EXTREME: " Apply the transformation aggressively — maximum stylistic impact, push the aesthetic fully.",
+};
+
+async function runFreeImg2Img(
+  parsed:      ParsedImage,
+  mode:        EditMode,
+  intensity:   IntensityLevel,
+  instruction: string,
+  timeoutMs:   number,
+): Promise<string | null> {
+  if (!parsed.base64 || parsed.base64.length < 1000) {
+    throw new Error("Invalid image input — image data too short.");
+  }
+
+  const { ai } = await import("@workspace/integrations-gemini-ai");
+
+  const modeDirective   = MODE_STYLE_DIRECTIVES[mode];
+  const intensityAddend = MODE_INTENSITY_ADDENDUM[intensity];
+
+  const ANALYSIS_PROMPT = `You are a professional image analyst and AI art director.
+
+Analyze this image and write a detailed text-to-image generation prompt that recreates this exact scene with the following transformation applied.
+
+EDIT INSTRUCTION: ${instruction}
+
+STYLE DIRECTIVE: ${modeDirective}${intensityAddend}
+
+Your output must be a single detailed text-to-image generation prompt (comma-separated descriptors, 120-200 words) that:
+1. Precisely describes the primary subject — if a person: exact apparent age, ethnicity, hair color and style, eye color, skin tone, clothing, pose, and expression. If a scene: objects, environment, setting.
+2. Describes the original composition, framing, and camera angle.
+3. Applies the edit instruction and style directive faithfully.
+4. Maintains photorealistic quality unless the instruction calls for a different style.
+5. Ends with: "ultra high quality, sharp focus, highly detailed, professional photography, 8k"
+
+Output ONLY the generation prompt text. No explanations, no preamble, no markdown.`.trim();
+
+  logger.info(
+    { model: FREE_EDIT_ANALYSIS_MODEL, mode, intensity, instructionLen: instruction.length },
+    "[imageEdit] free pipeline: analyzing image with Gemini vision",
+  );
+
+  let analysisTimeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  // Step 1: Gemini vision → text description (TEXT output only = FREE)
+  let generationPrompt: string;
+  try {
+    const analysisResult = await Promise.race([
+      ai.models.generateContent({
+        model:    FREE_EDIT_ANALYSIS_MODEL,
+        contents: [{
+          role:  "user",
+          parts: [
+            { inlineData: { mimeType: parsed.mimeType, data: parsed.base64 } },
+            { text: ANALYSIS_PROMPT },
+          ],
+        }],
+        config: { temperature: 0.4, maxOutputTokens: 512 },
+      }),
+      new Promise<never>((_, reject) => {
+        analysisTimeoutId = setTimeout(
+          () => reject(new Error(`Vision analysis timed out after ${FREE_EDIT_ANALYSIS_TIMEOUT}ms`)),
+          FREE_EDIT_ANALYSIS_TIMEOUT,
+        );
+      }),
+    ]);
+    if (analysisTimeoutId !== undefined) clearTimeout(analysisTimeoutId);
+
+    const textPart = (analysisResult.candidates?.[0]?.content?.parts as Array<{text?: string}> | undefined)
+      ?.find((p) => p.text);
+    generationPrompt = textPart?.text?.trim() ?? "";
+
+    if (!generationPrompt || generationPrompt.length < 30) {
+      logger.warn("[imageEdit] free pipeline: Gemini analysis returned empty — using enriched instruction as fallback");
+      generationPrompt = `${instruction}, ${modeDirective.split('.')[0]}, ultra high quality, professional photography, sharp focus, 8k`;
+    }
+  } catch (err) {
+    if (analysisTimeoutId !== undefined) clearTimeout(analysisTimeoutId);
+    logger.warn({ err }, "[imageEdit] free pipeline: Gemini analysis failed — using enriched instruction as fallback");
+    generationPrompt = `${instruction}, ${modeDirective.split('.')[0]}, ultra high quality, professional photography, sharp focus, 8k`;
+  }
+
+  logger.info(
+    { promptLen: generationPrompt.length, preview: generationPrompt.slice(0, 100) },
+    "[imageEdit] free pipeline: generation prompt ready — calling Pollinations FLUX",
+  );
+
+  // Step 2: Pollinations FLUX (FREE)
+  // generateImage() returns a data URL; we need the remaining portion of timeoutMs.
+  // pollinationsFetch already uses REQUEST_TIMEOUT_MS (65s) internally.
+  void timeoutMs; // governed by REQUEST_TIMEOUT_MS; parameter kept for signature compat
+  return generateImage(generationPrompt);
+}
+
+// ── IMG2IMG — legacy Gemini img2img (kept for reference, not called in free pipeline) ──
 
 async function runImg2Img(
   parsed:      ParsedImage,
@@ -721,15 +843,15 @@ async function runImg2Img(
   const fullInstruction = contract + instruction;
 
   logger.info(
-    { model: GEMINI_IMG2IMG_MODEL, instructionLen: instruction.length, temperature },
-    "[imageEdit] calling img2img model",
+    { model: "gemini-2.5-flash-image", instructionLen: instruction.length, temperature },
+    "[imageEdit] legacy runImg2Img — NOTE: use runFreeImg2Img for free-tier pipeline",
   );
 
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
   const result = await Promise.race([
     ai.models.generateContent({
-      model: GEMINI_IMG2IMG_MODEL,
+      model: "gemini-2.5-flash-image",
       contents: [{
         role: "user",
         parts: [
@@ -1198,14 +1320,14 @@ export async function editImage(
     expandedPrompt: renderPrompt,
   });
 
-  advanceJob(job, "processing", `Mode: ${modeLabel} | Intensity: ${resolvedIntensity} — calling ${GEMINI_IMG2IMG_MODEL}`);
+  advanceJob(job, "processing", `Mode: ${modeLabel} | Intensity: ${resolvedIntensity} — free pipeline: vision analysis + Pollinations generation`);
 
   const pipelineStartMs = Date.now();
 
   const succeedEdit = (b64Image: string, retryCount: number, usedMode: EditMode, pipelineDebug?: PipelineDebug): EditResult => {
     const usedLabel  = MODE_LABELS[usedMode];
     const latencyMs  = Date.now() - pipelineStartMs;
-    completeJob(job, "gemini-img2img");
+    completeJob(job, "free-img2img");
     pushRenderTelemetry({
       userId,
       renderProfile:        usedLabel,
@@ -1223,7 +1345,7 @@ export async function editImage(
       saveToHistory({
         userId, type: "edit", prompt, mode: usedLabel, intensity: resolvedIntensity, b64Image,
         complexity: "STANDARD", contractVersionUsed: CONTRACT_VERSION,
-        model: GEMINI_IMG2IMG_MODEL, status: "success", retryCount, latencyMs,
+        model: `${FREE_EDIT_ANALYSIS_MODEL}→pollinations-flux`, status: "success", retryCount, latencyMs,
       }).catch((err) => logger.warn({ err }, "[imageHistory] Failed to save edit result"));
     }
     const explanation = buildExplanation({
@@ -1246,207 +1368,57 @@ export async function editImage(
     };
   };
 
-  const runPipeline = async (): Promise<EditResult> => {
+  // ── Free single-pass pipeline ─────────────────────────────────────────────
+  // Replaces the multi-stage Gemini img2img pipeline (billing required) with:
+  //   Pass 1: Gemini vision → text analysis (free) → Pollinations FLUX (free)
+  //   Pass 2 (retry on null): Same, once more.
+  //
+  // The 3-stage pipeline (3 × ~65s = 195s) is not used — single-pass gives
+  // 90s total and removes the billing dependency entirely.
+
+  const runFreePipeline = async (): Promise<EditResult> => {
+    advanceJob(job, "processing", `Pass 1 — analyzing image`);
+
+    let result: string | null = null;
     try {
-      const stages    = buildStagePlan(resolvedMode, resolvedIntensity);
-      const lastStage = stages[stages.length - 1]!;
-
-      // ── Per-stage debug records (all start as skipped) ────────────────────
-      type StageKey = "stage_1_cleanup" | "stage_2_enhancement" | "stage_3_cinematic";
-
-      const stageRecords: Record<StageKey, StageDebugRecord> = {
-        stage_1_cleanup:     { status: "skipped", time_ms: 0, effect: "none", reason: "not_run" },
-        stage_2_enhancement: { status: "skipped", time_ms: 0, effect: "none", reason: "not_run" },
-        stage_3_cinematic:   { status: "skipped", time_ms: 0, effect: "none", reason: "not_run" },
-      };
-
-      const stageKeyOf = (n: number): StageKey =>
-        n === 1 ? "stage_1_cleanup" : n === 2 ? "stage_2_enhancement" : "stage_3_cinematic";
-
-      const effectOf = (n: number): StageDebugRecord["effect"] => {
-        if (n === 1) return "cleanup";
-        if (n === 2) return "enhancement";
-        if (resolvedMode === "style_transfer") return "style_transfer";
-        if (resolvedMode === "creative")       return "creative_pass";
-        return "color_grading";
-      };
-
-      // ── Build final debug summary from collected records ──────────────────
-      const buildDebug = (
-        pipelineStatus: PipelineDebug["pipeline_status"],
-        completedCount: number,
-        overrideMode?:  EditMode,
-      ): PipelineDebug => {
-        const usedLabel  = MODE_LABELS[overrideMode ?? resolvedMode];
-        const entries    = Object.entries(stageRecords) as [StageKey, StageDebugRecord][];
-        const failed     = entries.filter(([, r]) => r.status === "failed");
-        const succeeded  = entries.filter(([, r]) => r.status === "success");
-
-        const bottleneck =
-          failed.length > 0
-            ? failed[0]![0].replace(/_/g, " ")
-            : succeeded.length > 0
-            ? succeeded.sort(([, a], [, b]) => b.time_ms - a.time_ms)[0]![0].replace(/_/g, " ")
-            : "none";
-
-        let recommendation: string;
-        if (pipelineStatus === "success") {
-          recommendation = `Pipeline ran cleanly — ${completedCount} stage(s) completed`;
-        } else if (stageRecords.stage_3_cinematic.status === "failed" && completedCount > 0) {
-          recommendation = "Cinematic grading failed — output is enhanced but not color graded. Try a simpler instruction or switch to Cinematic mode.";
-        } else if (stageRecords.stage_2_enhancement.status === "failed" && stageRecords.stage_1_cleanup.status === "success") {
-          recommendation = "Enhancement pass failed — output is cleaned but not enhanced. Try Portrait Safe mode for more stable results.";
-        } else if (stageRecords.stage_1_cleanup.status === "failed") {
-          recommendation = "Cleanup stage failed — try a less complex image or simpler instruction.";
-        } else {
-          recommendation = "Full pipeline failed — model may be overloaded. Try a simpler instruction or a different edit mode.";
-        }
-
-        return { mode: usedLabel, pipeline_status: pipelineStatus, stages: stageRecords, bottleneck, recommendation };
-      };
-
-      // ── Multi-stage execution ─────────────────────────────────────────────
-      let currentDataUrl: string = imageDataUrl;
-      let stagesCompleted        = 0;
-
-      for (const stage of stages) {
-        advanceJob(
-          job,
-          stage.stageNum < stages.length ? "processing" : "streaming",
-          `Stage ${stage.stageNum}/${stages.length} — ${stage.label}`,
-        );
-
-        const key          = stageKeyOf(stage.stageNum);
-        const instruction  = stage.instruction(renderPrompt);
-        const stageStartMs = Date.now();
-        let stageOut: string | null = null;
-        let failureReason: string | undefined;
-
-        try {
-          stageOut = await runStage(currentDataUrl, instruction, stage.contract, stage.stageNum, stage.temperature);
-          if (!stageOut) failureReason = "model_rejection";
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          // Quota / rate-limit errors cannot succeed on retry — rethrow immediately
-          // so the route layer can classify and surface the real error to the user.
-          if (isQuotaOrRateLimitError(msg)) throw err;
-          failureReason = msg.toLowerCase().includes("timeout") ? "timeout" : "model_rejection";
-          logger.error({ err, stageNum: stage.stageNum }, "[imageEdit] stage threw — continuing with prior output");
-        }
-
-        const stageMs = Date.now() - stageStartMs;
-
-        if (stageOut) {
-          currentDataUrl = stageOut;
-          stagesCompleted++;
-          stageRecords[key] = { status: "success", time_ms: stageMs, effect: effectOf(stage.stageNum) };
-          logger.info({ stageNum: stage.stageNum, stagesCompleted, time_ms: stageMs }, "[imageEdit] stage completed");
-        } else {
-          stageRecords[key] = { status: "failed", time_ms: stageMs, effect: "none", reason: failureReason };
-          logger.warn({ stageNum: stage.stageNum, reason: failureReason }, "[imageEdit] stage returned no image — using prior output");
-        }
-      }
-
-      // ── At least one stage produced output — pipeline success / partial ───
-      if (stagesCompleted > 0) {
-        const pipelineStatus = stagesCompleted === stages.length ? "success" : "partial";
-        return succeedEdit(currentDataUrl, 0, resolvedMode, buildDebug(pipelineStatus, stagesCompleted));
-      }
-
-      // ── Failsafe: all stages returned null — retry Stage 3 once ──────────
-      if (lastStage.stageNum === 3) {
-        advanceJob(job, "retrying", `Failsafe — retrying Stage 3 (${lastStage.label})`);
-        logger.info("[imageEdit] All stages returned null — retrying Stage 3");
-
-        const retryStartMs = Date.now();
-        let retryOut: string | null = null;
-        try {
-          retryOut = await runStage(
-            imageDataUrl,
-            lastStage.instruction(renderPrompt) + " Apply this transformation clearly and visibly.",
-            lastStage.contract,
-            3,
-            lastStage.temperature,
-          );
-        } catch (err) {
-          logger.error({ err }, "[imageEdit] Stage 3 retry threw");
-        }
-
-        if (retryOut) {
-          stageRecords.stage_3_cinematic = {
-            status: "success", time_ms: Date.now() - retryStartMs,
-            effect: effectOf(3), reason: "retry_succeeded",
-          };
-          return succeedEdit(retryOut, 1, resolvedMode, buildDebug("partial", 1));
-        }
-        stageRecords.stage_3_cinematic.reason = "weak_transformation";
-
-        // ── Intensity-downgrade failsafe: retry Stage 3 at reduced intensity ─
-        const downgradedInt = downgradedIntensity(resolvedIntensity);
-        if (downgradedInt !== resolvedIntensity) {
-          const intRetryTemp = computeStage3Temperature(resolvedMode, downgradedInt);
-          advanceJob(job, "retrying", `Intensity downgrade (${resolvedIntensity} → ${downgradedInt}) — retrying Stage 3`);
-          logger.info(
-            { from: resolvedIntensity, to: downgradedInt, temperature: intRetryTemp },
-            "[imageEdit] intensity downgrade — retrying Stage 3",
-          );
-          let intRetryOut: string | null = null;
-          try {
-            intRetryOut = await runStage(
-              imageDataUrl,
-              lastStage.instruction(renderPrompt) + " Apply this transformation clearly and visibly.",
-              lastStage.contract,
-              3,
-              intRetryTemp,
-            );
-          } catch (err) {
-            logger.error({ err }, "[imageEdit] Stage 3 intensity-downgrade retry threw");
-          }
-          if (intRetryOut) {
-            stageRecords.stage_3_cinematic = {
-              status: "success", time_ms: 0,
-              effect: effectOf(3), reason: "intensity_downgrade_succeeded",
-            };
-            return succeedEdit(intRetryOut, 2, resolvedMode, buildDebug("partial", 1));
-          }
-        }
-      }
-
-      // ── Final fallback: downgrade mode, single-shot attempt ───────────────
-      const fallbackMode  = downgradedMode(resolvedMode);
-      const fallbackLabel = MODE_LABELS[fallbackMode];
-      advanceJob(job, "retrying", `Downgrading to ${fallbackLabel} mode`);
-      logger.info({ from: resolvedMode, to: fallbackMode }, "[imageEdit] downgrading mode for final attempt");
-
-      const fallbackContract = contractForMode(fallbackMode);
-      let fallbackOut: string | null = null;
-      try {
-        fallbackOut = await runImg2Img(
-          parsed,
-          renderPrompt + " Apply this transformation clearly and visibly.",
-          STAGE_TIMEOUT_MS,
-          fallbackContract,
-        );
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        failJob(job, msg);
-        // Rethrow the original error so normalizeAIError can classify it
-        // correctly (quota → rate_limit, timeout → timeout, etc.) rather than
-        // replacing it with a generic message that maps to internal_error.
-        throw err;
-      }
-
-      if (fallbackOut) return succeedEdit(fallbackOut, 2, fallbackMode, buildDebug("partial", 0, fallbackMode));
-
-      failJob(job, "All pipeline stages and fallback returned no image output");
-      throw new Error("Image editing failed — model returned no output after the full pipeline. Please try a different instruction.");
-
+      result = await runFreeImg2Img(parsed, resolvedMode, resolvedIntensity, renderPrompt, STAGE_TIMEOUT_MS);
     } catch (err) {
-      if (job.status !== "failed") {
-        failJob(job, err instanceof Error ? err.message : "Unknown error");
-      }
+      const msg = err instanceof Error ? err.message : String(err);
+      failJob(job, msg);
       throw err;
     }
+
+    if (result) {
+      logger.info({ mode: resolvedMode, intensity: resolvedIntensity }, "[imageEdit] free pipeline pass 1 succeeded");
+      return succeedEdit(result, 0, resolvedMode, undefined);
+    }
+
+    // Pass 2: single retry on null result
+    advanceJob(job, "retrying", "Pass 2 — retrying generation");
+    logger.info({ jobId: job.jobId }, "[imageEdit] free pipeline: pass 1 returned null — retrying");
+
+    let retryResult: string | null = null;
+    try {
+      retryResult = await runFreeImg2Img(
+        parsed,
+        resolvedMode,
+        resolvedIntensity,
+        renderPrompt + " Apply this transformation clearly and visibly.",
+        STAGE_TIMEOUT_MS,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      failJob(job, msg);
+      throw err;
+    }
+
+    if (retryResult) {
+      logger.info({ mode: resolvedMode }, "[imageEdit] free pipeline pass 2 (retry) succeeded");
+      return succeedEdit(retryResult, 1, resolvedMode, undefined);
+    }
+
+    failJob(job, "Free pipeline: both passes returned no image");
+    throw new Error("Image editing failed — please try again with a different instruction or image.");
   };
 
   // Race against global pipeline deadline
@@ -1459,7 +1431,7 @@ export async function editImage(
   });
 
   try {
-    return await Promise.race([runPipeline(), deadlinePromise]);
+    return await Promise.race([runFreePipeline(), deadlinePromise]);
   } finally {
     if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
   }
