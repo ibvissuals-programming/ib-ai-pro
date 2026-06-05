@@ -1,7 +1,7 @@
 /**
  * Image Generation + Editing Service — IB AI Image Studio
  *
- * TEXT-TO-IMAGE:  Pollinations.ai (free, FLUX model)
+ * TEXT-TO-IMAGE:  HuggingFace Inference API (FLUX.1-schnell, free tier, HF_API_KEY required)
  *
  * IMAGE-TO-IMAGE: Unified cinematic render pipeline.
  *
@@ -9,7 +9,7 @@
  *     1. INPUT IMAGE (validate)
  *     2. RENDER PROMPT (editIntelligence + APRE + FRAE enrichment)
  *     3. GEMINI VISION ANALYSIS (gemini-2.5-flash, text output only — free)
- *     4. POLLINATIONS FLUX GENERATION (free)
+ *     4. HUGGINGFACE FLUX.1-SCHNELL GENERATION (free tier, HF_API_KEY required)
  *     5. SIMPLE RETRY (once, if generation returns no output)
  *
  *   Identity is the only hard constraint.
@@ -31,18 +31,25 @@ import {
 
 export const CONTRACT_VERSION = "v6" as const;
 
-// Free pipeline: gemini-2.5-flash (vision → text, free tier) + Pollinations FLUX (free)
+// Free pipeline: gemini-2.5-flash (vision → text, free tier) + HuggingFace FLUX.1-schnell (free tier)
 const FREE_EDIT_ANALYSIS_MODEL   = "gemini-2.5-flash";
 const FREE_EDIT_ANALYSIS_TIMEOUT = 30_000;
-const POLLINATIONS_BASE          = "https://image.pollinations.ai/prompt";
+// HuggingFace Inference router — resolves from Replit; api-inference.huggingface.co does not.
+const HF_INFERENCE_BASE          = "https://router.huggingface.co/hf-inference/models";
+const HF_PRIMARY_MODEL           = "black-forest-labs/FLUX.1-schnell";
+const HF_REQUEST_TIMEOUT_MS      = 60_000;   // HF generation timeout per attempt
+const HF_MAX_RETRIES             = 1;        // one retry on 503 (model loading) or timeout
+const HF_RETRY_DELAY_MS          = 10_000;   // wait 10 s before retry (model warm-up)
 const MAX_IMAGE_BYTES            = 10 * 1024 * 1024;
 const ACCEPTED_MIMES             = ["image/png", "image/jpeg", "image/webp"] as const;
 const RESPONSE_PATTERN           = /^data:image\/(png|jpeg|jpg|webp);base64,/;
-const PIPELINE_TIMEOUT_MS        = 150_000;  // single-pass: analysis (~30s) + Pollinations (~65s) + buffer
+const PIPELINE_TIMEOUT_MS        = 150_000;  // single-pass: analysis (~30s) + HF (~60s) + buffer
 const STAGE_TIMEOUT_MS           = 95_000;   // per-pass hard cap for free pipeline
 const ATTEMPT_TIMEOUT_MS         = 95_000;   // kept for non-pipeline callers
-export const REQUEST_TIMEOUT_MS = 65_000;
-export const MAX_POLLINATIONS_RETRIES = 1;
+export const REQUEST_TIMEOUT_MS       = HF_REQUEST_TIMEOUT_MS;
+export const MAX_HF_RETRIES           = HF_MAX_RETRIES;
+/** @deprecated renamed to MAX_HF_RETRIES */
+export const MAX_POLLINATIONS_RETRIES = HF_MAX_RETRIES;
 
 type AcceptedMime = (typeof ACCEPTED_MIMES)[number];
 
@@ -97,8 +104,8 @@ export interface EditResult {
 export function getContractConfig(_debug?: boolean) {
   return {
     contractVersion:  CONTRACT_VERSION,
-    model:            `${FREE_EDIT_ANALYSIS_MODEL} → pollinations-flux`,
-    pipeline:         ["INPUT_IMAGE", "EDIT_MODE_RESOLVE", "RENDER_PROMPT", "GEMINI_VISION_ANALYSIS", "POLLINATIONS_GENERATION"],
+    model:            `${FREE_EDIT_ANALYSIS_MODEL} → huggingface-flux-schnell`,
+    pipeline:         ["INPUT_IMAGE", "EDIT_MODE_RESOLVE", "RENDER_PROMPT", "GEMINI_VISION_ANALYSIS", "HF_FLUX_GENERATION"],
     editModes: {
       portrait_safe:  { identityLock: "MAXIMUM", description: "Enhancement only — face, body, structure fully preserved" },
       cinematic:      { identityLock: "MEDIUM",  description: "Cinematic lighting, color grading, mood — identity preserved" },
@@ -586,18 +593,18 @@ function parseAndValidateImage(imageDataUrl: string): ParsedImage {
   return { mimeType: mimeType as AcceptedMime, base64 };
 }
 
-// ── Pollinations (text-to-image only) ────────────────────────────────────────
+// ── HuggingFace Inference (text-to-image) ─────────────────────────────────────
 //
-// Cooldown: Pollinations blocks rapid consecutive calls from the same server IP
-// (returns 429 or 503 on the second call within ~3 s). The module-level tracker
-// enforces a minimum inter-request gap BEFORE each fetch attempt so queued jobs
-// never hit the provider faster than it allows.
+// Uses HuggingFace's inference router (router.huggingface.co) which resolves
+// from Replit. The legacy api-inference.huggingface.co subdomain has no IPv4
+// A record and is unreachable from this environment.
+//
+// Model: FLUX.1-schnell (black-forest-labs) — free tier, fast, high quality.
+// Auth:  Bearer HF_API_KEY. Without key → 401 → image generation disabled.
+// 503:   Model is loading (cold start) — retry once after HF_RETRY_DELAY_MS.
 
-const POLLINATIONS_COOLDOWN_MS = 5_000;   // measured from last COMPLETED request
-let lastPollinationsCallMs    = 0;
-
-function isRetryableStatus(status: number): boolean {
-  return status === 429 || status === 402 || status === 503;
+function isHfConfigured(): boolean {
+  return !!(process.env["HF_API_KEY"]?.trim());
 }
 
 function isQuotaOrRateLimitError(msg: string): boolean {
@@ -611,63 +618,79 @@ function isQuotaOrRateLimitError(msg: string): boolean {
   );
 }
 
-async function pollinationsFetch(url: string): Promise<Response> {
-  // Enforce minimum inter-request cooldown measured from the last COMPLETED
-  // request. Pollinations rate-limits the server IP on rapid consecutive calls;
-  // waiting 5 s since the last successful completion prevents it.
-  const now = Date.now();
-  const sinceLastCall = now - lastPollinationsCallMs;
-  if (lastPollinationsCallMs > 0 && sinceLastCall < POLLINATIONS_COOLDOWN_MS) {
-    const waitMs = POLLINATIONS_COOLDOWN_MS - sinceLastCall;
-    logger.debug({ waitMs, provider: "pollinations" }, "[imageGen] cooldown wait before fetch");
-    await delay(waitMs);
+async function hfFetch(prompt: string): Promise<Response> {
+  const apiKey = process.env["HF_API_KEY"]?.trim();
+  if (!apiKey) {
+    throw new Error("Image generation requires HF_API_KEY — add it to Replit Secrets to enable this feature.");
   }
 
-  let lastErr: Error = new Error("Unknown error");
-  let lastStatus     = 0;
+  const url = `${HF_INFERENCE_BASE}/${HF_PRIMARY_MODEL}`;
+  const headers: Record<string, string> = {
+    "Authorization": `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+    "Accept":        "image/jpeg,image/png,image/*",
+    "X-Wait-For-Model": "true",
+  };
+  const body = JSON.stringify({
+    inputs:     prompt,
+    parameters: { width: 1024, height: 1024, num_inference_steps: 4, guidance_scale: 0 },
+  });
 
-  for (let attempt = 0; attempt <= MAX_POLLINATIONS_RETRIES; attempt++) {
+  let lastErr: Error = new Error("Unknown error");
+
+  for (let attempt = 0; attempt <= HF_MAX_RETRIES; attempt++) {
     if (attempt > 0) {
-      await delay(1500 * 2 ** (attempt - 1));
-      logger.warn({ attempt, provider: "pollinations" }, "[ai] retry attempt");
+      logger.warn({ attempt, provider: "huggingface", model: HF_PRIMARY_MODEL }, "[imageGen] HF retry");
+      await delay(HF_RETRY_DELAY_MS);
     }
 
     let response: Response;
     try {
       response = await fetch(url, {
-        method: "GET",
-        headers: { Accept: "image/*" },
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        method:  "POST",
+        headers,
+        body,
+        signal:  AbortSignal.timeout(HF_REQUEST_TIMEOUT_MS),
       });
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "TimeoutError") {
         throw new Error("Image generation timed out — the provider did not respond in time. Please try again.");
       }
       lastErr = err instanceof Error ? err : new Error(String(err));
-      if (attempt < MAX_POLLINATIONS_RETRIES) continue;
+      if (attempt < HF_MAX_RETRIES) continue;
       break;
     }
 
-    if (isRetryableStatus(response.status)) {
-      lastStatus = response.status;
-      lastErr    = new Error(`HTTP ${response.status}`);
-      if (attempt < MAX_POLLINATIONS_RETRIES) continue;
+    // 401 — bad or missing key, do not retry
+    if (response.status === 401) {
+      throw new Error("Image generation is not configured — HF_API_KEY is invalid. Please check Replit Secrets.");
+    }
+
+    // 429 — rate limited
+    if (response.status === 429) {
+      throw new Error("Image generation rate limit — please wait a moment and try again.");
+    }
+
+    // 503 — model loading (cold start) — retry once
+    if (response.status === 503) {
+      lastErr = new Error("HF model loading (503)");
+      logger.warn({ attempt, provider: "huggingface" }, "[imageGen] HF model loading — will retry");
+      if (attempt < HF_MAX_RETRIES) continue;
       break;
     }
 
-    // Record completion time AFTER a successful response so the cooldown is
-    // measured from the moment Pollinations last served a result.
-    lastPollinationsCallMs = Date.now();
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      logger.warn({ status: response.status, body: errText.slice(0, 200), provider: "huggingface" }, "[imageGen] HF non-OK");
+      lastErr = new Error(`HTTP ${response.status}`);
+      if (attempt < HF_MAX_RETRIES) continue;
+      break;
+    }
+
     return response;
   }
 
-  logger.warn({ provider: "pollinations", lastStatus }, "[ai] provider unavailable");
-  // Pollinations returns 429 or 503 on rapid consecutive calls from the same IP.
-  // Classify both as rate_limit so normalizeAIError maps to "Too many requests"
-  // rather than "provider_unavailable", giving users the correct retry guidance.
-  if (lastStatus === 429 || lastStatus === 503) {
-    throw new Error("Image generation rate limit — please wait a moment and try again.");
-  }
+  logger.warn({ provider: "huggingface", model: HF_PRIMARY_MODEL, err: lastErr.message }, "[imageGen] HF provider unavailable");
   throw new Error("Image generation is temporarily unavailable. Please retry.");
 }
 
@@ -675,15 +698,14 @@ async function pollinationsFetch(url: string): Promise<Response> {
 
 export async function generateImage(prompt: string, userId?: string): Promise<string> {
   const enhanced = enhancePrompt(prompt);
-  const seed     = Math.floor(Math.random() * 2_000_000_000);
-  const url      = `${POLLINATIONS_BASE}/${encodeURIComponent(enhanced)}?model=flux&width=1024&height=1024&nologo=true&seed=${seed}&enhance=false`;
 
-  logger.info({ provider: "pollinations", seed, prompt: enhanced.slice(0, 100) }, "[imageGen] generating");
-
-  const response = await pollinationsFetch(url);
-  if (!response.ok) {
-    throw new Error("Image generation is temporarily unavailable. Please retry.");
+  if (!isHfConfigured()) {
+    throw new Error("Image generation requires HF_API_KEY — add it to Replit Secrets to enable this feature.");
   }
+
+  logger.info({ provider: "huggingface", model: HF_PRIMARY_MODEL, prompt: enhanced.slice(0, 100) }, "[imageGen] generating");
+
+  const response = await hfFetch(enhanced);
 
   const buffer = await response.arrayBuffer();
   if (buffer.byteLength < 500) {
@@ -696,7 +718,7 @@ export async function generateImage(prompt: string, userId?: string): Promise<st
   const result = `data:${mime};base64,${base64}`;
   validateImageResponse(result);
 
-  logger.info({ bytes: buffer.byteLength, mime }, "[imageGen] generation complete");
+  logger.info({ bytes: buffer.byteLength, mime, provider: "huggingface" }, "[imageGen] generation complete");
 
   if (userId) {
     saveToHistory({ userId, type: "generate", prompt, mode: "IMAGE_GENERATION", intensity: "HIGH", b64Image: result })
@@ -706,16 +728,16 @@ export async function generateImage(prompt: string, userId?: string): Promise<st
   return result;
 }
 
-// ── FREE IMG2IMG — Gemini vision analysis (text, free) + Pollinations FLUX ────
+// ── FREE IMG2IMG — Gemini vision analysis (text, free) + HuggingFace FLUX.1-schnell ──
 //
 // Replaces the billing-dependent Gemini img2img model (gemini-2.5-flash-image).
 // Two-step free pipeline:
 //   1. gemini-2.5-flash (image → text description, free tier)
-//   2. Pollinations FLUX (text → image, free)
+//   2. HuggingFace FLUX.1-schnell (text → image, free tier, HF_API_KEY required)
 //
 // All prompt enrichment layers (editIntelligence, APRE, FRAE) produce the
 // instruction; Gemini vision uses it to describe how the source image should
-// look after the edit; Pollinations generates the result from that description.
+// look after the edit; HuggingFace generates the result from that description.
 
 const MODE_STYLE_DIRECTIVES: Record<EditMode, string> = {
   portrait_safe:  "Preserve the subject's exact appearance — natural soft enhancement only: soft fill light, gentle skin smoothing, balanced exposure. Do not alter face, identity, body, or pose.",
@@ -815,13 +837,12 @@ Output ONLY the generation prompt text. No explanations, no preamble, no markdow
 
   logger.info(
     { promptLen: generationPrompt.length, preview: generationPrompt.slice(0, 100) },
-    "[imageEdit] free pipeline: generation prompt ready — calling Pollinations FLUX",
+    "[imageEdit] free pipeline: generation prompt ready — calling HuggingFace FLUX.1-schnell",
   );
 
-  // Step 2: Pollinations FLUX (FREE)
-  // generateImage() returns a data URL; we need the remaining portion of timeoutMs.
-  // pollinationsFetch already uses REQUEST_TIMEOUT_MS (65s) internally.
-  void timeoutMs; // governed by REQUEST_TIMEOUT_MS; parameter kept for signature compat
+  // Step 2: HuggingFace FLUX.1-schnell (free tier, HF_API_KEY required)
+  // generateImage() calls hfFetch() which handles timeout + retry internally.
+  void timeoutMs; // governed by HF_REQUEST_TIMEOUT_MS; parameter kept for signature compat
   return generateImage(generationPrompt);
 }
 
@@ -1320,7 +1341,7 @@ export async function editImage(
     expandedPrompt: renderPrompt,
   });
 
-  advanceJob(job, "processing", `Mode: ${modeLabel} | Intensity: ${resolvedIntensity} — free pipeline: vision analysis + Pollinations generation`);
+  advanceJob(job, "processing", `Mode: ${modeLabel} | Intensity: ${resolvedIntensity} — free pipeline: Gemini vision analysis + HuggingFace FLUX.1-schnell`);
 
   const pipelineStartMs = Date.now();
 
@@ -1345,7 +1366,7 @@ export async function editImage(
       saveToHistory({
         userId, type: "edit", prompt, mode: usedLabel, intensity: resolvedIntensity, b64Image,
         complexity: "STANDARD", contractVersionUsed: CONTRACT_VERSION,
-        model: `${FREE_EDIT_ANALYSIS_MODEL}→pollinations-flux`, status: "success", retryCount, latencyMs,
+        model: `${FREE_EDIT_ANALYSIS_MODEL}→huggingface-flux-schnell`, status: "success", retryCount, latencyMs,
       }).catch((err) => logger.warn({ err }, "[imageHistory] Failed to save edit result"));
     }
     const explanation = buildExplanation({
@@ -1370,7 +1391,7 @@ export async function editImage(
 
   // ── Free single-pass pipeline ─────────────────────────────────────────────
   // Replaces the multi-stage Gemini img2img pipeline (billing required) with:
-  //   Pass 1: Gemini vision → text analysis (free) → Pollinations FLUX (free)
+  //   Pass 1: Gemini vision → text analysis (free) → HuggingFace FLUX.1-schnell
   //   Pass 2 (retry on null): Same, once more.
   //
   // The 3-stage pipeline (3 × ~65s = 195s) is not used — single-pass gives

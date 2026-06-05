@@ -75,6 +75,15 @@ export const REQUIRED_SECRETS: SecretDefinition[] = [
       "Add SESSION_SECRET to Replit Secrets — any long random string.",
     example: "session-secret-string",
   },
+  {
+    key: "HF_API_KEY",
+    tier: "OPTIONAL",
+    description:
+      "HuggingFace API token. Powers image generation (FLUX.1-schnell). Image generation is disabled if absent.",
+    setup:
+      "Add HF_API_KEY to Replit Secrets (huggingface.co → Settings → Access Tokens → New token, role: Read).",
+    example: "hf_...",
+  },
 ];
 
 export const CRITICAL_SECRETS = REQUIRED_SECRETS.filter(

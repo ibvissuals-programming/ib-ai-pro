@@ -47,6 +47,7 @@ export const ENV = {
   CEO_PASSWORD:     (): string | undefined => process.env["CEO_PASSWORD"]?.trim(),
   GROQ_API_KEY:     (): string | undefined => process.env["GROQ_API_KEY"],
   REDIS_URL:        (): string | undefined => process.env["REDIS_URL"],
+  HF_API_KEY:       (): string | undefined => process.env["HF_API_KEY"],
 
   // ── Feature flags ─────────────────────────────────────────────────────────
   VIDEO_ENABLED:    (): boolean => process.env["VIDEO_ENABLED"]?.toLowerCase() === "true",

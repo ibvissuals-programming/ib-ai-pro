@@ -1,10 +1,10 @@
 /**
  * Image generation + editing routes — IB AI Assistant
  *
- * POST /api/image/generate  — text-to-image via FLUX (Pollinations)
+ * POST /api/image/generate  — text-to-image via FLUX.1-schnell (HuggingFace)
  * POST /api/image/edit      — unified cinematic img2img pipeline (free tier)
- *                             Free pipeline: gemini-2.5-flash (vision→text) + Pollinations FLUX
- *                             Flow: INPUT → RENDER PROMPT → GEMINI VISION ANALYSIS → POLLINATIONS GENERATION
+ *                             Free pipeline: gemini-2.5-flash (vision→text) + HuggingFace FLUX.1-schnell
+ *                             Flow: INPUT → RENDER PROMPT → GEMINI VISION ANALYSIS → HF FLUX GENERATION
  *
  * ISOLATION: These routes are fully independent of /api/chat and the Gemini
  * integration. They share no state, no handlers, and no response logic.

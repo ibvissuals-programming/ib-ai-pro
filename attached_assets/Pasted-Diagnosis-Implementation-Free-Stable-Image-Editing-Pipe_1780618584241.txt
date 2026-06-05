@@ -1,0 +1,94 @@
+Diagnosis + Implementation — Free Stable Image Editing Pipeline
+
+I want you to restore and stabilize the IMAGE EDITING system in IB AI using ONLY free, reliable providers. Do not use Pollinations or any provider returning 402/x402. Do not use Gemini image generation models that require billing or return limit: 0.
+
+STEP 1 — FULL AUDIT (NO CHANGES YET)
+Scan and map:
+- image editing pipeline (runImg2Img, editImage, imageGenService)
+- all provider calls for image editing and generation
+- all fallback logic and error handling
+- all quota/tier logic (CEO vs free users)
+
+Identify:
+- every failing dependency
+- every paid/billing-locked dependency
+- every unreachable provider
+
+STEP 2 — ONLY FREE STACK ALLOWED
+
+You are ONLY allowed to use:
+
+1. Gemini 2.5 Flash (TEXT + VISION ONLY)
+   - for image analysis
+   - for prompt enhancement
+   - NOT for image generation
+
+2. HuggingFace Inference API (FREE TIER ONLY)
+   - SDXL or FLUX Schnell models only
+   - this is the ONLY image generation provider allowed
+
+If HuggingFace requires a key:
+- implement optional HF_API_KEY env var
+- system must still work in degraded/free mode if missing
+
+NO OTHER PROVIDERS ALLOWED.
+
+STEP 3 — REBUILD IMAGE EDITING PIPELINE
+
+Replace current editing flow with:
+
+INPUT:
+- user image (base64)
+- user prompt
+- edit mode (cinematic, wallpaper, portrait, etc.)
+
+PIPELINE:
+1. Gemini 2.5 Flash:
+   - analyze image
+   - extract subject, lighting, composition
+   - generate cinematic edit prompt
+
+2. Existing prompt enhancement layers (keep if available):
+   - editIntelligence
+   - APRE
+   - FRAE
+
+3. HuggingFace SDXL / FLUX:
+   - generate final edited image from enhanced prompt
+   - return image output
+
+REMOVE ALL POLLINATIONS AND ALL GEMINI IMAGE GENERATION CALLS.
+
+STEP 4 — ROUTING FIXES
+
+- POST /api/image/edit → must use new pipeline
+- POST /api/image/generate → must use HuggingFace-based generation
+- DELETE all Pollinations usage completely
+
+STEP 5 — ERROR HANDLING
+
+- NEVER show raw provider errors (402, 429, etc.)
+- Map all failures to:
+  "Image generation temporarily unavailable"
+
+STEP 6 — TIER SYSTEM (MUST NOT CHANGE)
+
+- CEO users → unlimited requests
+- Free users → existing limits remain unchanged
+- Do NOT modify auth or user system
+
+STEP 7 — FINAL TESTS
+
+After implementation:
+- run image generation test
+- run image editing test
+- confirm valid image output (not errors)
+- log which provider was used
+
+IMPORTANT RULES:
+- No paid APIs
+- No billing-required Gemini image models
+- No Pollinations
+- Must be stable in Replit environment
+- Must not break chat system
+- Must remain modular and clean architecture
