@@ -628,7 +628,7 @@ async function hfFetch(prompt: string): Promise<Response> {
   const headers: Record<string, string> = {
     "Authorization": `Bearer ${apiKey}`,
     "Content-Type": "application/json",
-    "Accept":        "image/jpeg,image/png,image/*",
+    "Accept":        "image/png",
     "X-Wait-For-Model": "true",
   };
   const body = JSON.stringify({
