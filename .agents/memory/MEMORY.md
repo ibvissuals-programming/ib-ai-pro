@@ -2,3 +2,4 @@
 - [Feature gate & error classification fixes](feature-gate-error-fixes.md) — TTS/Video/ImageGen misclassified errors; root causes and fixes applied.
 - [Gemini image quota and model notes](gemini-image-quota-notes.md) — all image gen models have limit:0 on free tier; normalizeAIError "rate"/"generateContent" false-match bug fixed.
 - [HuggingFace image pipeline](hf-image-pipeline.md) — HF router endpoint quirks, Accept header, model params, and why api-inference.huggingface.co is unreachable from Replit.
+- [Free image editing pipeline](free-img2img-pipeline.md) — HF inference API does not support img2img (all models 400). Two-path: Fal.ai FLUX.1-dev img2img (FAL_KEY, identity preserved) or HF FLUX.1-schnell t2i fallback (identity drifts).

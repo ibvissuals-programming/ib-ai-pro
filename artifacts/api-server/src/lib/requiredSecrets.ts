@@ -84,6 +84,15 @@ export const REQUIRED_SECRETS: SecretDefinition[] = [
       "Add HF_API_KEY to Replit Secrets (huggingface.co → Settings → Access Tokens → New token, role: Read).",
     example: "hf_...",
   },
+  {
+    key: "FAL_KEY",
+    tier: "OPTIONAL",
+    description:
+      "Fal.ai API key. Enables true img2img (FLUX.1-dev image-to-image) so the original subject identity is preserved during image editing. Without this, editing falls back to text-to-image regeneration which cannot guarantee identity preservation.",
+    setup:
+      "Sign up free at fal.ai (includes $10 credit ≈ 3000+ edits). Add FAL_KEY to Replit Secrets (fal.ai → Account → API Keys).",
+    example: "your-fal-api-key",
+  },
 ];
 
 export const CRITICAL_SECRETS = REQUIRED_SECRETS.filter(

@@ -48,6 +48,7 @@ export const ENV = {
   GROQ_API_KEY:     (): string | undefined => process.env["GROQ_API_KEY"],
   REDIS_URL:        (): string | undefined => process.env["REDIS_URL"],
   HF_API_KEY:       (): string | undefined => process.env["HF_API_KEY"],
+  FAL_KEY:          (): string | undefined => process.env["FAL_KEY"],
 
   // ── Feature flags ─────────────────────────────────────────────────────────
   VIDEO_ENABLED:    (): boolean => process.env["VIDEO_ENABLED"]?.toLowerCase() === "true",

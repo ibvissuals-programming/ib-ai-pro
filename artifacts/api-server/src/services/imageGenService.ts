@@ -46,6 +46,28 @@ const RESPONSE_PATTERN           = /^data:image\/(png|jpeg|jpg|webp);base64,/;
 const PIPELINE_TIMEOUT_MS        = 150_000;  // single-pass: analysis (~30s) + HF (~60s) + buffer
 const STAGE_TIMEOUT_MS           = 95_000;   // per-pass hard cap for free pipeline
 const ATTEMPT_TIMEOUT_MS         = 95_000;   // kept for non-pipeline callers
+
+// Fal.ai — true img2img engine (identity-preserving). Requires FAL_KEY.
+// HF inference API does not support image-to-image tasks on any model.
+// Fal.ai FLUX.1-dev img2img: accepts original image + style prompt + strength.
+// strength = how much of the original image is preserved (0=identical, 1=full regeneration).
+const FAL_API_BASE          = "https://fal.run";
+const FAL_IMG2IMG_MODEL     = "fal-ai/flux/dev/image-to-image";
+const FAL_IMG2IMG_TIMEOUT   = 120_000;   // FLUX dev is slower than schnell (~45–90 s)
+
+// Conditioning strength per edit mode.
+// Lower strength → more original image preserved → identity safer.
+// Higher strength → more creative deviation.
+const FAL_STRENGTH: Record<EditMode, number> = {
+  restore:        0.15,  // restoration — minimal change, preserve authenticity
+  portrait_safe:  0.20,  // enhancement only — face/body/structure maximally preserved
+  polish:         0.20,  // subtle polish — identity lock MAXIMUM
+  social:         0.30,  // color/clarity grade — identity intact
+  cinematic:      0.35,  // lighting & color grade — identity preserved
+  luxury:         0.35,  // editorial lighting & grade — identity intact
+  style_transfer: 0.55,  // artistic — subject shape preserved, style transformed
+  creative:       0.65,  // bold — structure preserved, style fully changed
+};
 export const REQUEST_TIMEOUT_MS       = HF_REQUEST_TIMEOUT_MS;
 export const MAX_HF_RETRIES           = HF_MAX_RETRIES;
 /** @deprecated renamed to MAX_HF_RETRIES */
@@ -607,6 +629,10 @@ function isHfConfigured(): boolean {
   return !!(process.env["HF_API_KEY"]?.trim());
 }
 
+function isFalConfigured(): boolean {
+  return !!(process.env["FAL_KEY"]?.trim());
+}
+
 function isQuotaOrRateLimitError(msg: string): boolean {
   const lower = msg.toLowerCase();
   return (
@@ -728,16 +754,122 @@ export async function generateImage(prompt: string, userId?: string): Promise<st
   return result;
 }
 
-// ── FREE IMG2IMG — Gemini vision analysis (text, free) + HuggingFace FLUX.1-schnell ──
+// ── FAL.AI IMG2IMG — true identity-preserving image editing ──────────────────
 //
-// Replaces the billing-dependent Gemini img2img model (gemini-2.5-flash-image).
-// Two-step free pipeline:
-//   1. gemini-2.5-flash (image → text description, free tier)
-//   2. HuggingFace FLUX.1-schnell (text → image, free tier, HF_API_KEY required)
+// Uses FLUX.1-dev image-to-image via Fal.ai (fal.run).
+// Accepts the original image + a style prompt + a conditioning strength.
+// strength = fraction of the image that is "regenerated"; the rest is anchored
+//   to the original via image conditioning in the FLUX latent space.
+//   0.0 → identical to input | 1.0 → full regeneration (identity lost).
 //
-// All prompt enrichment layers (editIntelligence, APRE, FRAE) produce the
-// instruction; Gemini vision uses it to describe how the source image should
-// look after the edit; HuggingFace generates the result from that description.
+// This is the only free-tier img2img engine reachable from Replit.
+// HuggingFace inference provider returns 400 for ALL image-to-image tasks.
+// Requires FAL_KEY — sign up at fal.ai for free ($10 credit on signup).
+
+async function falImg2ImgFetch(
+  imageBase64: string,
+  mimeType:    string,
+  stylePrompt: string,
+  strength:    number,
+): Promise<string> {
+  const apiKey = process.env["FAL_KEY"]?.trim();
+  if (!apiKey) throw new Error("FAL_KEY not configured — image editing requires Fal.ai.");
+
+  const imageUrl = `data:${mimeType};base64,${imageBase64}`;
+
+  const requestBody = JSON.stringify({
+    prompt:             stylePrompt,
+    image_url:          imageUrl,
+    strength,
+    num_inference_steps: 28,       // FLUX dev standard
+    guidance_scale:      3.5,      // FLUX dev recommended
+    seed:                Math.floor(Math.random() * 2_000_000_000),
+    output_format:       "jpeg",
+    image_size:          "landscape_4_3",  // Fal.ai preset; actual size follows input aspect
+  });
+
+  const ctrl = new AbortController();
+  const tid  = setTimeout(() => ctrl.abort(), FAL_IMG2IMG_TIMEOUT);
+
+  let response: Response;
+  try {
+    response = await fetch(`${FAL_API_BASE}/${FAL_IMG2IMG_MODEL}`, {
+      method:  "POST",
+      headers: {
+        "Authorization": `Key ${apiKey}`,
+        "Content-Type":  "application/json",
+        "Accept":        "application/json",
+      },
+      body:   requestBody,
+      signal: ctrl.signal,
+    });
+  } catch (err: unknown) {
+    clearTimeout(tid);
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("Image editing timed out — Fal.ai did not respond in time. Please try again.");
+    }
+    throw err;
+  }
+  clearTimeout(tid);
+
+  if (response.status === 401) {
+    throw new Error("Image editing is not configured — FAL_KEY is invalid or expired. Check Replit Secrets.");
+  }
+  if (response.status === 402) {
+    throw new Error("Image editing credits exhausted — please top up at fal.ai to continue editing.");
+  }
+  if (response.status === 429) {
+    throw new Error("Image editing rate limit reached — please wait a moment and try again.");
+  }
+  if (!response.ok) {
+    const body = await response.text().catch(() => "(no body)");
+    logger.warn({ status: response.status, body: body.slice(0, 300) }, "[imageEdit] Fal.ai img2img error");
+    throw new Error(`Image editing failed (Fal.ai ${response.status}) — please try again.`);
+  }
+
+  type FalResponse = { images?: Array<{ url: string; content_type?: string }> };
+  const json = await response.json() as FalResponse;
+  const imgUrl = json.images?.[0]?.url;
+  if (!imgUrl) {
+    logger.warn({ json }, "[imageEdit] Fal.ai img2img: unexpected response shape (no images[0].url)");
+    throw new Error("Image editing returned an unexpected response — please try again.");
+  }
+
+  logger.info({ imgUrl: imgUrl.slice(0, 80) }, "[imageEdit] Fal.ai img2img complete — fetching result");
+
+  // Fal.ai returns a CDN URL (v3b.fal.media). Fetch and convert to base64 data URI.
+  const cdnResp = await fetch(imgUrl, { signal: AbortSignal.timeout(30_000) });
+  if (!cdnResp.ok) {
+    throw new Error("Image editing: failed to download result from Fal.ai CDN — please try again.");
+  }
+  const cdnBuf = await cdnResp.arrayBuffer();
+  if (cdnBuf.byteLength < 500) {
+    throw new Error("Image editing returned an empty result — please try again.");
+  }
+
+  const ct   = json.images?.[0]?.content_type ?? cdnResp.headers.get("content-type") ?? "image/jpeg";
+  const mime = ct.split(";")[0].trim();
+  const b64  = Buffer.from(cdnBuf).toString("base64");
+
+  logger.info({ bytes: cdnBuf.byteLength, mime, strength, provider: "fal-ai" }, "[imageEdit] img2img result ready");
+
+  return `data:${mime};base64,${b64}`;
+}
+
+// ── FREE IMG2IMG — Two-path pipeline ─────────────────────────────────────────
+//
+// PATH A — TRUE IMG2IMG (when FAL_KEY is configured):
+//   1. Gemini vision → SHORT style prompt (text, free tier)
+//   2. Fal.ai FLUX.1-dev image-to-image (original image conditioned, identity preserved)
+//      strength = 0.15–0.65 by mode; original image anchors the output in latent space.
+//
+// PATH B — TEXT-TO-IMAGE FALLBACK (HF_API_KEY only, no FAL_KEY):
+//   1. Gemini vision → FULL scene description (text, free tier)
+//   2. HuggingFace FLUX.1-schnell text-to-image (identity NOT guaranteed — no image conditioning)
+//
+// ROOT CAUSE of identity loss: HF inference API does not support image-to-image tasks
+// on any model (returns 400 for all img2img endpoints including SD, SDXL, IP2P, FLUX Redux).
+// The only free img2img engine reachable from Replit is Fal.ai via fal.run.
 
 const MODE_STYLE_DIRECTIVES: Record<EditMode, string> = {
   portrait_safe:  "Preserve the subject's exact appearance — natural soft enhancement only: soft fill light, gentle skin smoothing, balanced exposure. Do not alter face, identity, body, or pose.",
@@ -757,23 +889,29 @@ const MODE_INTENSITY_ADDENDUM: Record<IntensityLevel, string> = {
   EXTREME: " Apply the transformation aggressively — maximum stylistic impact, push the aesthetic fully.",
 };
 
-async function runFreeImg2Img(
-  parsed:      ParsedImage,
-  mode:        EditMode,
-  intensity:   IntensityLevel,
-  instruction: string,
-  timeoutMs:   number,
-): Promise<string | null> {
-  if (!parsed.base64 || parsed.base64.length < 1000) {
-    throw new Error("Invalid image input — image data too short.");
-  }
+// ─── Gemini prompt: PATH A (img2img) — style direction only, 15–40 words ─────
+// The original image is passed DIRECTLY to the generation model for conditioning.
+// Gemini provides only the style transformation direction. Subject must NOT be described.
+function buildStylePrompt(instruction: string, modeDirective: string, intensityAddend: string): string {
+  return `You are a professional colorist and lighting director.
 
-  const { ai } = await import("@workspace/integrations-gemini-ai");
+The original image will be processed with AI image-to-image editing that preserves the subject's exact appearance via direct image conditioning. Your task is to write ONLY the style transformation direction — NOT a description of the subject.
 
-  const modeDirective   = MODE_STYLE_DIRECTIVES[mode];
-  const intensityAddend = MODE_INTENSITY_ADDENDUM[intensity];
+EDIT INSTRUCTION: ${instruction}
+STYLE DIRECTIVE: ${modeDirective}${intensityAddend}
 
-  const ANALYSIS_PROMPT = `You are a professional image analyst and AI art director.
+Write a short style instruction (15–40 words) describing ONLY the visual transformation to apply.
+Focus exclusively on: lighting quality and direction, color grade and palette, contrast and mood, texture and film look.
+DO NOT describe the person, face, body, clothing, or scene content — the model sees those directly.
+Output ONLY the style instruction. Example: "cinematic teal-orange color grade, deep rich shadows, directional key lighting, film grain, warm golden highlights"`.trim();
+}
+
+// ─── Gemini prompt: PATH B (text-to-image) — full scene description ───────────
+// Original image is NOT passed to the generator. Gemini must describe everything
+// including the subject so the model can attempt reconstruction.
+// NOTE: Identity cannot be guaranteed with text-to-image alone.
+function buildDescriptionPrompt(instruction: string, modeDirective: string, intensityAddend: string): string {
+  return `You are a professional image analyst and AI art director.
 
 Analyze this image and write a detailed text-to-image generation prompt that recreates this exact scene with the following transformation applied.
 
@@ -782,23 +920,52 @@ EDIT INSTRUCTION: ${instruction}
 STYLE DIRECTIVE: ${modeDirective}${intensityAddend}
 
 Your output must be a single detailed text-to-image generation prompt (comma-separated descriptors, 120-200 words) that:
-1. Precisely describes the primary subject — if a person: exact apparent age, ethnicity, hair color and style, eye color, skin tone, clothing, pose, and expression. If a scene: objects, environment, setting.
+1. Precisely describes the primary subject — if a person: exact apparent age, ethnicity, hair color and style, eye color, skin tone, facial features, clothing, pose, and expression.
 2. Describes the original composition, framing, and camera angle.
 3. Applies the edit instruction and style directive faithfully.
 4. Maintains photorealistic quality unless the instruction calls for a different style.
 5. Ends with: "ultra high quality, sharp focus, highly detailed, professional photography, 8k"
 
 Output ONLY the generation prompt text. No explanations, no preamble, no markdown.`.trim();
+}
+
+async function runFreeImg2Img(
+  parsed:      ParsedImage,
+  mode:        EditMode,
+  intensity:   IntensityLevel,
+  instruction: string,
+  timeoutMs:   number,
+): Promise<string | null> {
+  void timeoutMs; // internal timeouts govern each step; parameter kept for signature compat
+
+  if (!parsed.base64 || parsed.base64.length < 1000) {
+    throw new Error("Invalid image input — image data too short.");
+  }
+
+  const useFalImg2Img = isFalConfigured();
+  const path          = useFalImg2Img ? "img2img (Fal.ai FLUX.1-dev)" : "text-to-image (HF FLUX.1-schnell)";
+
+  const { ai } = await import("@workspace/integrations-gemini-ai");
+
+  const modeDirective   = MODE_STYLE_DIRECTIVES[mode];
+  const intensityAddend = MODE_INTENSITY_ADDENDUM[intensity];
+
+  // Build the correct Gemini prompt based on which generation path we will use.
+  const analysisPrompt = useFalImg2Img
+    ? buildStylePrompt(instruction, modeDirective, intensityAddend)
+    : buildDescriptionPrompt(instruction, modeDirective, intensityAddend);
+
+  const maxTokens = useFalImg2Img ? 100 : 512; // style prompt is short; description needs more
 
   logger.info(
-    { model: FREE_EDIT_ANALYSIS_MODEL, mode, intensity, instructionLen: instruction.length },
-    "[imageEdit] free pipeline: analyzing image with Gemini vision",
+    { model: FREE_EDIT_ANALYSIS_MODEL, mode, intensity, path, instructionLen: instruction.length },
+    "[imageEdit] analyzing image with Gemini vision",
   );
 
   let analysisTimeoutId: ReturnType<typeof setTimeout> | undefined;
+  let geminiPrompt: string;
 
-  // Step 1: Gemini vision → text description (TEXT output only = FREE)
-  let generationPrompt: string;
+  // ── Step 1: Gemini vision analysis (text output only — free tier) ────────────
   try {
     const analysisResult = await Promise.race([
       ai.models.generateContent({
@@ -807,10 +974,10 @@ Output ONLY the generation prompt text. No explanations, no preamble, no markdow
           role:  "user",
           parts: [
             { inlineData: { mimeType: parsed.mimeType, data: parsed.base64 } },
-            { text: ANALYSIS_PROMPT },
+            { text: analysisPrompt },
           ],
         }],
-        config: { temperature: 0.4, maxOutputTokens: 512 },
+        config: { temperature: 0.3, maxOutputTokens: maxTokens },
       }),
       new Promise<never>((_, reject) => {
         analysisTimeoutId = setTimeout(
@@ -823,27 +990,49 @@ Output ONLY the generation prompt text. No explanations, no preamble, no markdow
 
     const textPart = (analysisResult.candidates?.[0]?.content?.parts as Array<{text?: string}> | undefined)
       ?.find((p) => p.text);
-    generationPrompt = textPart?.text?.trim() ?? "";
+    geminiPrompt = textPart?.text?.trim() ?? "";
 
-    if (!generationPrompt || generationPrompt.length < 30) {
-      logger.warn("[imageEdit] free pipeline: Gemini analysis returned empty — using enriched instruction as fallback");
-      generationPrompt = `${instruction}, ${modeDirective.split('.')[0]}, ultra high quality, professional photography, sharp focus, 8k`;
+    if (!geminiPrompt || geminiPrompt.length < 10) {
+      logger.warn("[imageEdit] Gemini analysis returned empty — using mode-based fallback prompt");
+      geminiPrompt = useFalImg2Img
+        ? `${modeDirective.split('.')[0].split('—')[0].trim()}, ${intensityAddend.trim() || "professional quality"}`
+        : `${instruction}, ${modeDirective.split('.')[0]}, ultra high quality, professional photography, sharp focus, 8k`;
     }
   } catch (err) {
     if (analysisTimeoutId !== undefined) clearTimeout(analysisTimeoutId);
-    logger.warn({ err }, "[imageEdit] free pipeline: Gemini analysis failed — using enriched instruction as fallback");
-    generationPrompt = `${instruction}, ${modeDirective.split('.')[0]}, ultra high quality, professional photography, sharp focus, 8k`;
+    logger.warn({ err }, "[imageEdit] Gemini analysis failed — using mode-based fallback prompt");
+    geminiPrompt = useFalImg2Img
+      ? `${modeDirective.split('.')[0].split('—')[0].trim()}, professional quality`
+      : `${instruction}, ${modeDirective.split('.')[0]}, ultra high quality, professional photography, sharp focus, 8k`;
   }
 
   logger.info(
-    { promptLen: generationPrompt.length, preview: generationPrompt.slice(0, 100) },
-    "[imageEdit] free pipeline: generation prompt ready — calling HuggingFace FLUX.1-schnell",
+    { path, promptLen: geminiPrompt.length, preview: geminiPrompt.slice(0, 120) },
+    "[imageEdit] analysis complete — starting generation",
   );
 
-  // Step 2: HuggingFace FLUX.1-schnell (free tier, HF_API_KEY required)
-  // generateImage() calls hfFetch() which handles timeout + retry internally.
-  void timeoutMs; // governed by HF_REQUEST_TIMEOUT_MS; parameter kept for signature compat
-  return generateImage(generationPrompt);
+  // ── Step 2: Image generation ─────────────────────────────────────────────────
+  if (useFalImg2Img) {
+    // PATH A — TRUE IMG2IMG
+    // Original image is passed to FLUX.1-dev as a conditioning input.
+    // strength controls how much of the original is preserved vs regenerated.
+    // Identity is preserved structurally by the img2img conditioning, not by prompt.
+    const strength = FAL_STRENGTH[mode] ?? 0.35;
+    logger.info(
+      { model: FAL_IMG2IMG_MODEL, mode, strength, promptPreview: geminiPrompt.slice(0, 80) },
+      "[imageEdit] calling Fal.ai FLUX.1-dev img2img",
+    );
+    return falImg2ImgFetch(parsed.base64, parsed.mimeType, geminiPrompt, strength);
+  }
+
+  // PATH B — TEXT-TO-IMAGE FALLBACK
+  // HF inference API does not support image-to-image tasks — all img2img models return 400.
+  // Identity preservation is best-effort via detailed prompt; it CANNOT be guaranteed.
+  logger.info(
+    { model: HF_PRIMARY_MODEL, note: "no FAL_KEY — identity may drift" },
+    "[imageEdit] calling HuggingFace FLUX.1-schnell text-to-image (fallback)",
+  );
+  return generateImage(geminiPrompt);
 }
 
 // ── IMG2IMG — legacy Gemini img2img (kept for reference, not called in free pipeline) ──
