@@ -1,0 +1,61 @@
+IMAGE EDITING SYSTEM — CRITICAL FIX (TRUE IMG2IMG + IDENTITY LOCK)
+
+FOCUS ONLY ON FIXING THE IMAGE EDITING PIPELINE. DO NOT IMPROVE PROMPTS OR STYLING.
+
+CURRENT PROBLEM:
+- Image editing changes the person (face/gender/identity drift)
+- System is behaving like text-to-image generation
+- Original image is not being preserved correctly
+
+GOAL:
+Build a TRUE image-to-image editing system where:
+- Original image is ALWAYS the primary conditioning input
+- Only lighting, color grading, background, and cinematic effects change
+- Face, identity, gender, and structure MUST NOT change
+
+TASKS:
+
+1. TRACE PIPELINE END-TO-END
+   - Follow runFreeImg2Img from input to final output
+   - Identify where the original image stops influencing generation
+   - Confirm if final model is actually image-conditioned or text-only generation
+
+2. FORCE TRUE IMG2IMG BEHAVIOR
+   - Ensure the final generation step uses the ORIGINAL IMAGE as direct conditioning input
+   - Remove any architecture where Gemini vision description replaces image identity
+   - The model must edit the image, not recreate it
+
+3. IDENTITY LOCK ENFORCEMENT (NON-PROMPT BASED)
+   - Implement or enforce denoise/strength control (default 0.20–0.35)
+   - Ensure edits are constrained to:
+     - lighting
+     - color grading
+     - cinematic style
+     - background enhancement
+   - Explicitly prevent face reconstruction or subject regeneration
+
+4. REMOVE BROKEN APPROACHES
+   - Any pipeline: image → Gemini description → text → generation MUST be removed or bypassed for editing
+   - Any system where prompt defines identity instead of image MUST be removed
+
+5. FREE-TIER CONSTRAINT ONLY:
+   - Must use only free or existing integrated providers
+   - No paid APIs
+
+6. FINAL OUTPUT REQUIRED:
+   - Correct final pipeline architecture (step-by-step)
+   - Exact model used for true img2img
+   - How image conditioning is applied technically
+   - Strength/denoise values per mode
+   - What was changed vs current system
+
+SUCCESS CRITERIA:
+- Input: Snapchat/portrait image
+- Prompt: "cinematic wallpaper enhancement"
+
+OUTPUT MUST:
+- Keep SAME person exactly
+- No face changes
+- No gender swaps
+- No identity drift
+- Only cinematic visual enhancement applied

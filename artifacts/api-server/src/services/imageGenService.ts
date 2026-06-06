@@ -856,20 +856,29 @@ async function falImg2ImgFetch(
   return `data:${mime};base64,${b64}`;
 }
 
-// ── FREE IMG2IMG — Two-path pipeline ─────────────────────────────────────────
+// ── IMG2IMG PIPELINE — TRUE IMAGE-TO-IMAGE (identity-preserving) ─────────────
 //
-// PATH A — TRUE IMG2IMG (when FAL_KEY is configured):
-//   1. Gemini vision → SHORT style prompt (text, free tier)
-//   2. Fal.ai FLUX.1-dev image-to-image (original image conditioned, identity preserved)
-//      strength = 0.15–0.65 by mode; original image anchors the output in latent space.
+// STEP 1 — Gemini 2.5 Flash vision (text output only, free tier):
+//   Analyzes the image and produces a SHORT STYLE PROMPT (15–40 words).
+//   Contains ONLY lighting, color grade, mood, texture direction.
+//   Must NOT describe the subject — the generator sees the original image directly.
 //
-// PATH B — TEXT-TO-IMAGE FALLBACK (HF_API_KEY only, no FAL_KEY):
-//   1. Gemini vision → FULL scene description (text, free tier)
-//   2. HuggingFace FLUX.1-schnell text-to-image (identity NOT guaranteed — no image conditioning)
+// STEP 2 — Fal.ai FLUX.1-dev image-to-image (FAL_KEY required, free tier):
+//   Endpoint: https://fal.run/fal-ai/flux/dev/image-to-image
+//   Input: original image (base64 data URI) + style prompt + strength
+//   Mechanism: FLUX encodes the original image into latent space; denoising starts
+//     from that latent representation. strength controls how far from the original
+//     the denoising runs (0.0 = no change, 1.0 = full generation from noise).
+//   Result: edited image where identity, face, gender, and structure are preserved
+//     by image conditioning — NOT by prompt.
 //
-// ROOT CAUSE of identity loss: HF inference API does not support image-to-image tasks
-// on any model (returns 400 for all img2img endpoints including SD, SDXL, IP2P, FLUX Redux).
-// The only free img2img engine reachable from Replit is Fal.ai via fal.run.
+// NO TEXT-TO-IMAGE FALLBACK — the pipeline image → Gemini description → text → FLUX
+// is removed because it cannot preserve identity. Without FAL_KEY, editing throws
+// a clear error instead of silently producing identity-drifted results.
+//
+// WHY NOT HuggingFace: HF inference API returns 400 "Model not supported by provider
+// hf-inference" for EVERY image-to-image model (SD v1.5, SDXL, InstructPix2Pix,
+// FLUX.1-Redux-dev). Only text-to-image is supported. Confirmed exhaustively.
 
 const MODE_STYLE_DIRECTIVES: Record<EditMode, string> = {
   portrait_safe:  "Preserve the subject's exact appearance — natural soft enhancement only: soft fill light, gentle skin smoothing, balanced exposure. Do not alter face, identity, body, or pose.",
@@ -1013,10 +1022,9 @@ async function runFreeImg2Img(
 
   // ── Step 2: Image generation ─────────────────────────────────────────────────
   if (useFalImg2Img) {
-    // PATH A — TRUE IMG2IMG
-    // Original image is passed to FLUX.1-dev as a conditioning input.
-    // strength controls how much of the original is preserved vs regenerated.
-    // Identity is preserved structurally by the img2img conditioning, not by prompt.
+    // TRUE IMG2IMG — original image passed directly as conditioning input to FLUX.1-dev.
+    // Strength anchors the output to the original in latent space — identity preserved
+    // by image conditioning, not by prompt.
     const strength = FAL_STRENGTH[mode] ?? 0.35;
     logger.info(
       { model: FAL_IMG2IMG_MODEL, mode, strength, promptPreview: geminiPrompt.slice(0, 80) },
@@ -1025,14 +1033,18 @@ async function runFreeImg2Img(
     return falImg2ImgFetch(parsed.base64, parsed.mimeType, geminiPrompt, strength);
   }
 
-  // PATH B — TEXT-TO-IMAGE FALLBACK
-  // HF inference API does not support image-to-image tasks — all img2img models return 400.
-  // Identity preservation is best-effort via detailed prompt; it CANNOT be guaranteed.
-  logger.info(
-    { model: HF_PRIMARY_MODEL, note: "no FAL_KEY — identity may drift" },
-    "[imageEdit] calling HuggingFace FLUX.1-schnell text-to-image (fallback)",
+  // NO FALLBACK — text-to-image regeneration is explicitly removed.
+  //
+  // HuggingFace inference API does not support image-to-image on any model.
+  // Falling back to text-to-image (image → Gemini description → text → FLUX generate)
+  // causes identity drift: face, gender, and subject are reconstructed from text alone.
+  // This pipeline is architecturally broken for editing — it regenerates, not edits.
+  //
+  // To enable image editing, configure FAL_KEY (free at fal.ai — $10 credit on signup).
+  throw new Error(
+    "Image editing requires FAL_KEY to preserve subject identity. " +
+    "Sign up free at fal.ai (includes $10 credit ≈ 3000+ edits), then add FAL_KEY to Replit Secrets."
   );
-  return generateImage(geminiPrompt);
 }
 
 // ── IMG2IMG — legacy Gemini img2img (kept for reference, not called in free pipeline) ──
