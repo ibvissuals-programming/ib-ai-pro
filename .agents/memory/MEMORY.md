@@ -3,3 +3,4 @@
 - [Gemini image quota and model notes](gemini-image-quota-notes.md) — all image gen models have limit:0 on free tier; normalizeAIError "rate"/"generateContent" false-match bug fixed.
 - [HuggingFace image pipeline](hf-image-pipeline.md) — HF router endpoint quirks, Accept header, model params, and why api-inference.huggingface.co is unreachable from Replit.
 - [Free image editing pipeline](free-img2img-pipeline.md) — HF inference API does not support img2img (all models 400). Two-path: Fal.ai FLUX.1-dev img2img (FAL_KEY, identity preserved) or HF FLUX.1-schnell t2i fallback (identity drifts).
+- [Safe Enhancement Mode](safe-enhancement-mode.md) — When Fal.ai is absent or fails (403/402/$0 balance), runFreeImg2Img catches all errors and returns EnhancementData instead of throwing; frontend shows EnhancementPanel instead of OutputCard; never emits "unexpected error".

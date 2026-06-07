@@ -208,6 +208,9 @@ export function normalizeAIError(err: unknown, system = "unknown"): NormalizedAI
     (lower.includes("401") && lower.includes("api"))
   )
     code = "provider_not_configured";
+  else if (lower.includes("exhausted balance") || lower.includes("user is locked") ||
+    (lower.includes("fal") && (lower.includes("402") || lower.includes("403") || lower.includes("credit"))))
+    code = "feature_disabled";
   else if (lower.includes("feature_disabled") || lower.includes("not available") || lower.includes("unsupported_model") || lower.includes("not supported"))
     code = "feature_disabled";
   else if (lower.includes("invalid") || lower.includes("bad request") || lower.includes("malformed"))

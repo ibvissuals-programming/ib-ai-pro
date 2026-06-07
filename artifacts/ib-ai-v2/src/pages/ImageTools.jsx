@@ -475,6 +475,93 @@ function AiDirectorPanel({ sourceImage, onApplyPrompt }) {
   );
 }
 
+// ── Enhancement Panel — Safe Enhancement Mode output ──────────────────────────
+function EnhancementPanel({ result, sourceImage, onClear }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      className="space-y-4 rounded-2xl border border-primary/20 bg-primary/5 p-4"
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Sparkles size={13} className="text-primary" />
+          <span className="text-sm font-semibold text-foreground">Enhancement Suggestions</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/20 font-medium flex items-center gap-1">
+            <Shield size={8} />
+            Safe Mode
+          </span>
+        </div>
+        <button onClick={onClear} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
+          <X size={12} />
+        </button>
+      </div>
+
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        Fal.ai image editing is temporarily unavailable. Your original image is unchanged. Here are professional cinematic suggestions powered by Gemini AI:
+      </p>
+
+      {/* Original image preview */}
+      {sourceImage && (
+        <div className="rounded-xl overflow-hidden border border-border/50">
+          <img src={sourceImage} alt="Original" className="w-full max-h-48 object-contain bg-black/10" />
+          <div className="px-3 py-1.5 bg-secondary/50 text-[10px] text-muted-foreground flex items-center gap-1.5">
+            <Shield size={9} />
+            Original preserved — no modifications applied
+          </div>
+        </div>
+      )}
+
+      {/* Suggestions list */}
+      {result.suggestions?.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+            <Lightbulb size={9} />Enhancement Steps
+          </p>
+          <div className="space-y-1.5">
+            {result.suggestions.map((s, i) => (
+              <div key={i} className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-background/60 border border-border/40">
+                <span className="text-[10px] font-bold text-primary/60 shrink-0 mt-0.5 tabular-nums w-4">{i + 1}.</span>
+                <span className="text-xs text-foreground leading-relaxed">{s}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Color, lighting, composition cards */}
+      <div className="grid grid-cols-1 gap-2">
+        {result.colorGrade && (
+          <div className="px-3 py-2.5 rounded-xl bg-background/60 border border-border/40 space-y-1">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+              <Palette size={9} />Color Grade
+            </div>
+            <p className="text-xs text-foreground leading-relaxed">{result.colorGrade}</p>
+          </div>
+        )}
+        {result.lightingNotes && (
+          <div className="px-3 py-2.5 rounded-xl bg-background/60 border border-border/40 space-y-1">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+              <Sun size={9} />Lighting Notes
+            </div>
+            <p className="text-xs text-foreground leading-relaxed">{result.lightingNotes}</p>
+          </div>
+        )}
+        {result.compositionNotes && (
+          <div className="px-3 py-2.5 rounded-xl bg-background/60 border border-border/40 space-y-1">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+              <Aperture size={9} />Composition
+            </div>
+            <p className="text-xs text-foreground leading-relaxed">{result.compositionNotes}</p>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
 // ── Edit tab ──────────────────────────────────────────────────────────────────
 function EditTab({ initialPrompt = '', initialMode = '', initialIntensity = '' }) {
   const [sourceImage, setSourceImage] = useState(null);
@@ -488,6 +575,7 @@ function EditTab({ initialPrompt = '', initialMode = '', initialIntensity = '' }
   const [intensityLevel, setIntensityLevel] = useState(initialIntensity);
   const [useDirectorAnalysis, setUseDirectorAnalysis] = useState(false);
   const [showBeforeAfter, setShowBeforeAfter] = useState(false);
+  const [enhancementResult, setEnhancementResult] = useState(null);
   const fileInputRef = useRef(null);
   const checkRate = useRateLimit();
 
@@ -523,6 +611,7 @@ function EditTab({ initialPrompt = '', initialMode = '', initialIntensity = '' }
     setError(null);
     setOutput(null);
     setOutputMeta(null);
+    setEnhancementResult(null);
     try {
       const res = await editImage(
         sourceImage,
@@ -531,13 +620,17 @@ function EditTab({ initialPrompt = '', initialMode = '', initialIntensity = '' }
         intensityLevel       || undefined,
         useDirectorAnalysis  || undefined,
       );
-      setOutput(res.b64Image);
-      setOutputMeta({
-        mode:                  res.mode          ?? null,
-        intensity:             res.intensity      ?? null,
-        cinematicAnalysisUsed: res.cinematicAnalysisUsed ?? false,
-        pipelineDebug:         res.pipelineDebug  ?? null,
-      });
+      if (res.enhancementMode) {
+        setEnhancementResult(res);
+      } else {
+        setOutput(res.b64Image);
+        setOutputMeta({
+          mode:                  res.mode          ?? null,
+          intensity:             res.intensity      ?? null,
+          cinematicAnalysisUsed: res.cinematicAnalysisUsed ?? false,
+          pipelineDebug:         res.pipelineDebug  ?? null,
+        });
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -868,6 +961,15 @@ function EditTab({ initialPrompt = '', initialMode = '', initialIntensity = '' }
 
             <OutputCard src={output} onClear={() => { setOutput(null); setOutputMeta(null); }} mode={outputMeta?.mode} intensity={outputMeta?.intensity} />
           </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {enhancementResult && !loading && (
+          <EnhancementPanel
+            result={enhancementResult}
+            sourceImage={sourceImage}
+            onClear={() => setEnhancementResult(null)}
+          />
         )}
       </AnimatePresence>
     </div>

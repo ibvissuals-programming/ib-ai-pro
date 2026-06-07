@@ -97,7 +97,7 @@ export async function editImage(imageBase64, prompt, editMode, intensity, useCin
 
   const data = await safeJson(res);
   if (!res.ok) handleErrorResponse(res, data);
-  if (!data.b64Image) throw new Error('Image edit returned no result. Please try again.');
+  if (!data.b64Image && !data.enhancementMode) throw new Error('Image edit returned no result. Please try again.');
   return data;
 }
 

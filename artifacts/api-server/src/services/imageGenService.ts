@@ -3,17 +3,19 @@
  *
  * TEXT-TO-IMAGE:  HuggingFace Inference API (FLUX.1-schnell, free tier, HF_API_KEY required)
  *
- * IMAGE-TO-IMAGE: Unified cinematic render pipeline.
+ * IMAGE-TO-IMAGE: Unified cinematic render pipeline with Safe Enhancement Mode fallback.
  *
- *   Pipeline (free — no billing required):
+ *   Primary pipeline (requires FAL_KEY with Fal.ai credits):
  *     1. INPUT IMAGE (validate)
  *     2. RENDER PROMPT (editIntelligence + APRE + FRAE enrichment)
  *     3. GEMINI VISION ANALYSIS (gemini-2.5-flash, text output only — free)
- *     4. HUGGINGFACE FLUX.1-SCHNELL GENERATION (free tier, HF_API_KEY required)
- *     5. SIMPLE RETRY (once, if generation returns no output)
+ *     4. FAL.AI FLUX.1-dev IMAGE-TO-IMAGE (preserves subject identity via image conditioning)
  *
- *   Identity is the only hard constraint.
- *   Everything else — lighting, color, mood, atmosphere — can change freely.
+ *   Safe Enhancement Mode (automatic fallback — free, never regenerates):
+ *     Activates when FAL_KEY is absent or Fal.ai call fails for any reason.
+ *     Uses Gemini vision to analyze the image and return structured cinematic
+ *     suggestions — lighting, color grade, composition notes — without modifying
+ *     the original image. Never throws. Never emits "An unexpected error occurred."
  */
 import { logger } from "../lib/logger";
 import { saveToHistory } from "./imageHistoryStore";
@@ -110,7 +112,7 @@ export interface ExplanationResult {
 }
 
 export interface EditResult {
-  b64Image:            string;
+  b64Image:            string;           // empty string ("") when enhancementMode is true
   job:                 ReturnType<typeof jobSummary>;
   mode:                string;
   intensity:           string;
@@ -119,7 +121,26 @@ export interface EditResult {
   contractVersionUsed: string;
   pipelineDebug?:      PipelineDebug;
   explanation?:        ExplanationResult;
+  // Safe Enhancement Mode fields — populated when no img2img provider is available
+  enhancementMode?:    boolean;
+  suggestions?:        string[];
+  colorGrade?:         string;
+  lightingNotes?:      string;
+  compositionNotes?:   string;
 }
+
+// ── Enhancement mode types (used internally by Safe Enhancement Mode) ─────────
+
+export interface EnhancementData {
+  suggestions:      string[];
+  colorGrade:       string;
+  lightingNotes:    string;
+  compositionNotes: string;
+}
+
+type FreeImg2ImgResult =
+  | { kind: "image";       b64: string }
+  | { kind: "enhancement"; data: EnhancementData };
 
 // ── Contract config (diagnostic endpoint) ────────────────────────────────────
 
@@ -938,13 +959,122 @@ Your output must be a single detailed text-to-image generation prompt (comma-sep
 Output ONLY the generation prompt text. No explanations, no preamble, no markdown.`.trim();
 }
 
+// ── Safe Enhancement Mode helpers ─────────────────────────────────────────────
+
+function buildDefaultSuggestions(mode: EditMode): string[] {
+  const base = [
+    "Adjust white balance for a clean, natural look",
+    "Enhance shadows and highlights for better dynamic range",
+    "Apply subtle skin smoothing while preserving natural texture",
+  ];
+  const modeExtras: Partial<Record<EditMode, string[]>> = {
+    cinematic:      ["Apply teal-orange color grade for cinematic depth", "Add subtle film grain for a premium look"],
+    portrait_safe:  ["Apply gentle exposure correction to bring out natural detail", "Soften background while keeping subject sharp"],
+    luxury:         ["Apply warm, creamy highlight treatment for editorial luxury", "Enhance midtones for an aspirational campaign look"],
+    social:         ["Boost vibrancy and punch for social media impact", "Lift midtones for a fresh, energetic aesthetic"],
+    polish:         ["Reduce blemishes and even skin tone naturally", "Enhance eye clarity and sharpness"],
+    style_transfer: ["Apply the requested artistic style transformation", "Reimagine the color palette to match the style reference"],
+    creative:       ["Fully transform the scene to the requested aesthetic", "Apply bold color and lighting changes for a dramatic new look"],
+    restore:        ["Remove noise, grain, and compression artifacts", "Sharpen detail and restore natural color balance"],
+  };
+  return [...base, ...(modeExtras[mode] ?? [])].slice(0, 5);
+}
+
+function buildDefaultColorGrade(mode: EditMode): string {
+  const grades: Partial<Record<EditMode, string>> = {
+    cinematic:      "Teal-orange Hollywood color grade with deep, rich shadows and warm golden highlights",
+    portrait_safe:  "Neutral-warm natural grade with soft contrast and preserved skin tones",
+    luxury:         "Creamy warm highlights with refined, muted shadows for an editorial luxury look",
+    social:         "Vibrant punchy grade with lifted midtones and high saturation for Instagram/TikTok",
+    polish:         "Clean natural grade with balanced exposure and subtle contrast lift",
+    style_transfer: "Dramatic artistic grade matching the requested visual style",
+    creative:       "Bold transformative color treatment tuned to the creative direction",
+    restore:        "Neutral correction — remove color cast, restore accurate white balance and natural tones",
+  };
+  return grades[mode] ?? "Professional balanced color grade with enhanced contrast and clarity";
+}
+
+function buildDefaultEnhancement(mode: EditMode): EnhancementData {
+  return {
+    suggestions:      buildDefaultSuggestions(mode),
+    colorGrade:       buildDefaultColorGrade(mode),
+    lightingNotes:    "Apply soft directional lighting to enhance depth and dimension",
+    compositionNotes: "Maintain existing composition — focus on subject enhancement only",
+  };
+}
+
+async function generateEnhancementSuggestions(
+  parsed:      ParsedImage,
+  mode:        EditMode,
+  instruction: string,
+): Promise<EnhancementData> {
+  if (!parsed.base64 || parsed.base64.length < 100) {
+    return buildDefaultEnhancement(mode);
+  }
+
+  const modeDirective  = MODE_STYLE_DIRECTIVES[mode];
+  const analysisPrompt = `You are a professional photo retoucher and colorist.
+Analyze this image and provide expert enhancement guidance for the following edit request.
+
+EDIT REQUEST: ${instruction}
+STYLE DIRECTIVE: ${modeDirective}
+
+Return ONLY a JSON object in this exact format with no markdown, no explanation:
+{
+  "suggestions": ["actionable suggestion 1", "actionable suggestion 2", "actionable suggestion 3"],
+  "colorGrade": "one-line color grading recommendation for this specific image",
+  "lightingNotes": "one-line lighting adjustment note specific to this image",
+  "compositionNotes": "one-line composition or framing observation for this image"
+}`;
+
+  try {
+    const { ai } = await import("@workspace/integrations-gemini-ai");
+    const geminiResult = await Promise.race([
+      ai.models.generateContent({
+        model:    FREE_EDIT_ANALYSIS_MODEL,
+        contents: [{
+          role:  "user",
+          parts: [
+            { inlineData: { mimeType: parsed.mimeType, data: parsed.base64 } },
+            { text: analysisPrompt },
+          ],
+        }],
+        config: { temperature: 0.4, maxOutputTokens: 350 },
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Enhancement analysis timeout")), FREE_EDIT_ANALYSIS_TIMEOUT),
+      ),
+    ]);
+
+    const text = (geminiResult.candidates?.[0]?.content?.parts as Array<{ text?: string }> | undefined)
+      ?.find((p) => p.text)?.text?.trim() ?? "";
+
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed2 = JSON.parse(jsonMatch[0]) as Partial<EnhancementData>;
+      return {
+        suggestions:      Array.isArray(parsed2.suggestions) && parsed2.suggestions.length > 0
+          ? parsed2.suggestions.slice(0, 5).map(String)
+          : buildDefaultSuggestions(mode),
+        colorGrade:       typeof parsed2.colorGrade       === "string" ? parsed2.colorGrade       : buildDefaultColorGrade(mode),
+        lightingNotes:    typeof parsed2.lightingNotes    === "string" ? parsed2.lightingNotes    : "Adjust lighting balance for professional quality",
+        compositionNotes: typeof parsed2.compositionNotes === "string" ? parsed2.compositionNotes : "Maintain existing composition and framing",
+      };
+    }
+  } catch (err) {
+    logger.warn({ err }, "[imageEdit] Enhancement analysis failed — using mode defaults");
+  }
+
+  return buildDefaultEnhancement(mode);
+}
+
 async function runFreeImg2Img(
   parsed:      ParsedImage,
   mode:        EditMode,
   intensity:   IntensityLevel,
   instruction: string,
   timeoutMs:   number,
-): Promise<string | null> {
+): Promise<FreeImg2ImgResult> {
   void timeoutMs; // internal timeouts govern each step; parameter kept for signature compat
 
   if (!parsed.base64 || parsed.base64.length < 1000) {
@@ -1020,7 +1150,7 @@ async function runFreeImg2Img(
     "[imageEdit] analysis complete — starting generation",
   );
 
-  // ── Step 2: Image generation ─────────────────────────────────────────────────
+  // ── Step 2: Image generation (Fal.ai) or Safe Enhancement Mode ──────────────
   if (useFalImg2Img) {
     // TRUE IMG2IMG — original image passed directly as conditioning input to FLUX.1-dev.
     // Strength anchors the output to the original in latent space — identity preserved
@@ -1030,21 +1160,21 @@ async function runFreeImg2Img(
       { model: FAL_IMG2IMG_MODEL, mode, strength, promptPreview: geminiPrompt.slice(0, 80) },
       "[imageEdit] calling Fal.ai FLUX.1-dev img2img",
     );
-    return falImg2ImgFetch(parsed.base64, parsed.mimeType, geminiPrompt, strength);
+    try {
+      const b64 = await falImg2ImgFetch(parsed.base64, parsed.mimeType, geminiPrompt, strength);
+      if (b64) return { kind: "image", b64 };
+      logger.warn({ mode }, "[imageEdit] Fal.ai returned null — entering Safe Enhancement Mode");
+    } catch (falErr) {
+      const msg = falErr instanceof Error ? falErr.message : String(falErr);
+      logger.warn({ mode, reason: msg.slice(0, 140) }, "[imageEdit] Fal.ai call failed — entering Safe Enhancement Mode");
+    }
   }
 
-  // NO FALLBACK — text-to-image regeneration is explicitly removed.
-  //
-  // HuggingFace inference API does not support image-to-image on any model.
-  // Falling back to text-to-image (image → Gemini description → text → FLUX generate)
-  // causes identity drift: face, gender, and subject are reconstructed from text alone.
-  // This pipeline is architecturally broken for editing — it regenerates, not edits.
-  //
-  // To enable image editing, configure FAL_KEY (free at fal.ai — $10 credit on signup).
-  throw new Error(
-    "Image editing requires FAL_KEY to preserve subject identity. " +
-    "Sign up free at fal.ai (includes $10 credit ≈ 3000+ edits), then add FAL_KEY to Replit Secrets."
-  );
+  // Safe Enhancement Mode — no img2img provider available or Fal.ai call failed.
+  // Original image is never modified. Gemini vision generates cinematic suggestions instead.
+  logger.info({ mode, instructionPreview: instruction.slice(0, 80) }, "[imageEdit] Safe Enhancement Mode — generating suggestions");
+  const enhancementData = await generateEnhancementSuggestions(parsed, mode, instruction);
+  return { kind: "enhancement", data: enhancementData };
 }
 
 // ── IMG2IMG — legacy Gemini img2img (kept for reference, not called in free pipeline) ──
@@ -1598,49 +1728,48 @@ export async function editImage(
   // The 3-stage pipeline (3 × ~65s = 195s) is not used — single-pass gives
   // 90s total and removes the billing dependency entirely.
 
+  const succeedEnhancement = (data: EnhancementData, usedMode: EditMode): EditResult => {
+    const usedLabel = MODE_LABELS[usedMode];
+    const latencyMs = Date.now() - pipelineStartMs;
+    completeJob(job, "enhancement-mode");
+    logger.info({ mode: usedMode, latencyMs, suggestionCount: data.suggestions.length }, "[imageEdit] Safe Enhancement Mode complete");
+    return {
+      b64Image:            "",
+      job:                 jobSummary(job),
+      mode:                usedLabel,
+      intensity:           resolvedIntensity,
+      qualityVerified:     false,
+      qualityIssues:       [],
+      contractVersionUsed: CONTRACT_VERSION,
+      enhancementMode:     true,
+      suggestions:         data.suggestions,
+      colorGrade:          data.colorGrade,
+      lightingNotes:       data.lightingNotes,
+      compositionNotes:    data.compositionNotes,
+    };
+  };
+
   const runFreePipeline = async (): Promise<EditResult> => {
-    advanceJob(job, "processing", `Pass 1 — analyzing image`);
+    advanceJob(job, "processing", "Analyzing image");
 
-    let result: string | null = null;
+    let pipelineResult: FreeImg2ImgResult;
     try {
-      result = await runFreeImg2Img(parsed, resolvedMode, resolvedIntensity, renderPrompt, STAGE_TIMEOUT_MS);
+      pipelineResult = await runFreeImg2Img(parsed, resolvedMode, resolvedIntensity, renderPrompt, STAGE_TIMEOUT_MS);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       failJob(job, msg);
       throw err;
     }
 
-    if (result) {
-      logger.info({ mode: resolvedMode, intensity: resolvedIntensity }, "[imageEdit] free pipeline pass 1 succeeded");
-      return succeedEdit(result, 0, resolvedMode, undefined);
+    if (pipelineResult.kind === "image") {
+      logger.info({ mode: resolvedMode, intensity: resolvedIntensity }, "[imageEdit] pipeline succeeded — image generated");
+      return succeedEdit(pipelineResult.b64, 0, resolvedMode, undefined);
     }
 
-    // Pass 2: single retry on null result
-    advanceJob(job, "retrying", "Pass 2 — retrying generation");
-    logger.info({ jobId: job.jobId }, "[imageEdit] free pipeline: pass 1 returned null — retrying");
-
-    let retryResult: string | null = null;
-    try {
-      retryResult = await runFreeImg2Img(
-        parsed,
-        resolvedMode,
-        resolvedIntensity,
-        renderPrompt + " Apply this transformation clearly and visibly.",
-        STAGE_TIMEOUT_MS,
-      );
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      failJob(job, msg);
-      throw err;
-    }
-
-    if (retryResult) {
-      logger.info({ mode: resolvedMode }, "[imageEdit] free pipeline pass 2 (retry) succeeded");
-      return succeedEdit(retryResult, 1, resolvedMode, undefined);
-    }
-
-    failJob(job, "Free pipeline: both passes returned no image");
-    throw new Error("Image editing failed — please try again with a different instruction or image.");
+    // Safe Enhancement Mode — Gemini analysis succeeded, no img2img provider available.
+    // Return suggestions immediately. No retry needed — enhancement never produces null.
+    logger.info({ mode: resolvedMode }, "[imageEdit] Safe Enhancement Mode result returned");
+    return succeedEnhancement(pipelineResult.data, resolvedMode);
   };
 
   // Race against global pipeline deadline

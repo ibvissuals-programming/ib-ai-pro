@@ -374,7 +374,12 @@ router.post(
       });
       res.json(buildStandardResponse("image", {
         b64Image:               result.b64Image,
-        status:                 "success",
+        status:                 result.enhancementMode ? "enhanced" : "success",
+        enhancementMode:        result.enhancementMode ?? false,
+        suggestions:            result.suggestions      ?? [],
+        colorGrade:             result.colorGrade       ?? null,
+        lightingNotes:          result.lightingNotes    ?? null,
+        compositionNotes:       result.compositionNotes ?? null,
         job:                    result.job,
         editMode:               result.mode,
         intensity:              result.intensity,
