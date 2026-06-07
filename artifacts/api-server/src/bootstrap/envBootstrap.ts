@@ -54,6 +54,8 @@ function buildStatus(): BootstrapStatus {
   const session  = checkVar("SESSION_SECRET");
   const ceoUser  = checkVar("CEO_USERNAME");
   const recovery = checkVar("CEO_RECOVERY_KEY");
+  const hfKey    = checkVar("HF_API_KEY");
+  const falKey   = checkVar("FAL_KEY");
 
   const missing:  string[] = [];
   const warnings: string[] = [];
@@ -73,6 +75,8 @@ function buildStatus(): BootstrapStatus {
   // OPTIONAL — feature degraded if missing
   if (!session)  warnings.push("SESSION_SECRET");
   if (!recovery) warnings.push("CEO_RECOVERY_KEY");
+  if (!hfKey)    warnings.push("HF_API_KEY");
+  if (!falKey)   warnings.push("FAL_KEY");
 
   const ready    = db && ceoUser;
   const safeMode = !gemini;
@@ -116,6 +120,9 @@ function printBootstrapBanner(s: BootstrapStatus): void {
   const tick = (v: boolean) => (v ? "✓" : "✗");
   const LINE = "========================";
 
+  const hfKey  = checkVar("HF_API_KEY");
+  const falKey = checkVar("FAL_KEY");
+
   logger.info(LINE);
   logger.info("=== IB AI BOOT STRAP ===");
   logger.info(LINE);
@@ -125,6 +132,8 @@ function printBootstrapBanner(s: BootstrapStatus): void {
   logger.info(`JWT:       ${tick(s.vars.JWT_SECRET)}`);
   logger.info(`SESSION:   ${tick(s.vars.SESSION_SECRET)}`);
   logger.info(`RECOVERY:  ${tick(s.vars.CEO_RECOVERY_KEY)}`);
+  logger.info(`HF_API_KEY:${tick(hfKey)}  ${hfKey ? "image generation enabled" : "image generation disabled"}`);
+  logger.info(`FAL_KEY:   ${tick(falKey)}  ${falKey ? "image editing enabled" : "image editing disabled"}`);
   logger.info(`AI MODE:   ${s.aiMode}`);
   logger.info(LINE);
 

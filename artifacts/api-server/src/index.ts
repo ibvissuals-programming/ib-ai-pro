@@ -1,3 +1,4 @@
+import "./bootstrap/loadEnv.js";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { loadUserStore, repairCeoAccount } from "./lib/userStore";
