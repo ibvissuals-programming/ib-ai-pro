@@ -305,7 +305,7 @@ export default function Login() {
 
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || serverReady === false}
                   data-testid="button-login"
                   className="w-full bg-primary text-primary-foreground rounded-xl py-2.5 text-sm font-medium hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed mt-2 shadow-lg shadow-primary/20"
                 >
@@ -318,13 +318,14 @@ export default function Login() {
                       />
                       Signing in...
                     </span>
-                  ) : 'Sign in'}
+                  ) : serverReady === false ? 'Server Starting...' : 'Sign In'}
                 </button>
 
                 <button
                   type="button"
+                  disabled={serverReady === false}
                   onClick={() => { setMode('recovery'); setError(''); }}
-                  className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-1.5"
+                  className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <KeyRound size={11} />
                   CEO recovery access
@@ -394,7 +395,7 @@ export default function Login() {
 
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || serverReady === false}
                   className="w-full bg-amber-500 text-white rounded-xl py-2.5 text-sm font-medium hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-lg"
                 >
                   {loading ? (
@@ -406,7 +407,7 @@ export default function Login() {
                       />
                       Verifying…
                     </span>
-                  ) : 'Access with recovery key'}
+                  ) : serverReady === false ? 'Server Starting...' : 'Access with recovery key'}
                 </button>
 
                 <button
