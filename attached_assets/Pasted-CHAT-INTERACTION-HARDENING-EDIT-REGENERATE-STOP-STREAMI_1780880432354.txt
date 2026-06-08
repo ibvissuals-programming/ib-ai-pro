@@ -1,0 +1,97 @@
+CHAT INTERACTION HARDENING — EDIT + REGENERATE + STOP STREAMING (CEO SAFETY LOCK)
+
+OBJECTIVE:
+Implement chat UX upgrades ONLY:
+1. Edit user messages and regenerate assistant response from selected point
+2. Stop/cancel streaming response safely
+3. Ensure CEO mode remains completely untouched (♾️ unlimited credits + bypass logic preserved)
+
+DO NOT modify:
+- credit system logic
+- provider logic
+- AI models
+- backend architecture beyond chat flow handling
+
+---
+
+TASK 1 — EDIT + REGENERATE CHAT FLOW
+
+Frontend requirements:
+- Allow user to click any previous USER message
+- Enable edit mode (inline text edit)
+- On confirm:
+  - rebuild conversation from message index 0 → edited message
+  - resend request to /api/chat
+  - replace downstream assistant responses (no duplicates)
+
+Rules:
+- Do NOT append new thread
+- Do NOT keep old assistant responses after regen point
+- Ensure deterministic replay from selected index
+
+Backend requirements:
+- Accept full message array OR trimmed context
+- Ensure stateless regeneration works cleanly
+
+---
+
+TASK 2 — STOP GENERATION (STREAM ABORT)
+
+Frontend:
+- Add AbortController for streaming requests
+- Add "Stop" button during response generation
+- On click:
+  - immediately abort fetch request
+  - stop UI stream rendering
+  - ensure no partial assistant message is committed
+
+Backend:
+- Must safely handle aborted request (no error logs, no crashes)
+- Ignore cancelled request gracefully
+
+---
+
+TASK 3 — CEO MODE SAFETY LOCK (CRITICAL)
+
+Ensure:
+- CEO role bypass logic remains EXACTLY unchanged
+- CEO users:
+  - never consume credits
+  - never hit abort restrictions
+  - never affected by daily resets
+  - always have unlimited access (♾️)
+- Do NOT modify or refactor CEO condition blocks
+
+If any credit logic touches CEO role → revert immediately
+
+---
+
+CONSTRAINTS:
+- NO new AI providers
+- NO credit system changes
+- NO architecture refactor
+- ONLY chat UX layer changes
+- MUST preserve streaming stability
+
+---
+
+EXPECTED OUTPUT:
+
+A. Features implemented:
+- edit & regenerate working
+- stop generation working
+- CEO mode unaffected
+
+B. Files modified
+C. Proof:
+- no duplicate assistant messages
+- abort cleanly stops stream
+- regeneration replaces prior thread correctly
+
+D. FINAL STATUS:
+CHAT SYSTEM READY: YES/NO
+CEO SAFETY VERIFIED: YES/NO
+
+---
+
+DO NOT TOUCH ANYTHING OUTSIDE CHAT UX LAYER.

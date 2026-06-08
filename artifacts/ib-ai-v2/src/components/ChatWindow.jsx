@@ -145,7 +145,7 @@ function SelectionBar({
 
 const NEAR_BOTTOM_PX = 120;
 
-export function ChatWindow({ messages, isTyping }) {
+export function ChatWindow({ messages, isTyping, onEditMessage }) {
   const scrollRef = useRef(null);
   const bottomRef = useRef(null);
   const isNearBottomRef = useRef(true);
@@ -230,10 +230,12 @@ export function ChatWindow({ messages, isTyping }) {
               message={message}
               index={index}
               isTyping={isTyping && index === messages.length - 1}
+              isStreaming={isTyping}
               selectionMode={selectionMode}
               isSelected={selectedIds.has(message.id)}
               onToggleSelect={toggleSelect}
               onEnterSelection={enterSelectionMode}
+              onEditMessage={onEditMessage}
             />
           ))}
 

@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowUp, Trash2, ImagePlus, X, AlertCircle, Wand2, Mic, MicOff } from 'lucide-react';
+import { ArrowUp, Trash2, ImagePlus, X, AlertCircle, Wand2, Mic, MicOff, Square } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { readImageFile, validateImageFile } from '../services/imageApi';
 import { hasEditIntent } from '../services/aiEngine';
 
-export function InputBox({ onSend, onSendImage, onSendImageEdit, onClear, disabled }) {
+export function InputBox({ onSend, onSendImage, onSendImageEdit, onClear, onStop, disabled }) {
   const [value, setValue] = useState('');
   const [focused, setFocused] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -348,19 +348,30 @@ export function InputBox({ onSend, onSendImage, onSendImageEdit, onClear, disabl
               )}
             </button>
 
-            {/* Send button */}
-            <button
-              onClick={handleSend}
-              disabled={!canSend}
-              data-testid="button-send"
-              className={`p-2 rounded-xl transition-all ${
-                canSend
-                  ? 'bg-primary text-primary-foreground hover:opacity-90 active:scale-95'
-                  : 'bg-secondary text-muted-foreground/30 cursor-not-allowed'
-              }`}
-            >
-              <ArrowUp size={16} />
-            </button>
+            {/* Stop / Send button */}
+            {disabled && onStop ? (
+              <button
+                onClick={onStop}
+                data-testid="button-stop"
+                title="Stop generation"
+                className="p-2 rounded-xl transition-all bg-destructive/15 text-destructive hover:bg-destructive/25 active:scale-95"
+              >
+                <Square size={14} />
+              </button>
+            ) : (
+              <button
+                onClick={handleSend}
+                disabled={!canSend}
+                data-testid="button-send"
+                className={`p-2 rounded-xl transition-all ${
+                  canSend
+                    ? 'bg-primary text-primary-foreground hover:opacity-90 active:scale-95'
+                    : 'bg-secondary text-muted-foreground/30 cursor-not-allowed'
+                }`}
+              >
+                <ArrowUp size={16} />
+              </button>
+            )}
           </div>
         </motion.div>
 

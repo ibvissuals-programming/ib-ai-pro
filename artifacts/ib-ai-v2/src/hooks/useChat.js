@@ -76,6 +76,7 @@ export function useChat(username, { onCreditExhausted } = {}) {
   const [isTyping, setIsTyping] = useState(false);
   const [rateLimitState, setRateLimitState] = useState(null);
   const streamAbortRef = useRef(null);
+  const userStopRef   = useRef(false); // true when user explicitly clicks Stop
 
   useEffect(() => {
     if (!username) return;
@@ -287,8 +288,13 @@ export function useChat(username, { onCreditExhausted } = {}) {
         console.error('[IB AI Assistant] AI request failed:', err.message);
         finalContent = classifyStreamError(err);
       }
+      // If user clicked Stop (wasAborted + userStopRef), finalContent keeps
+      // whatever was streamed — no error message, partial content is committed.
     } finally {
-      if (!wasAborted) {
+      // Commit when: normal finish OR user explicitly stopped (not unmount/timeout abort)
+      const shouldCommit = !wasAborted || userStopRef.current;
+      userStopRef.current = false;
+      if (shouldCommit) {
         try {
           const finalChatState = {
             ...withUserMsg,
@@ -307,6 +313,126 @@ export function useChat(username, { onCreditExhausted } = {}) {
           persist(finalChatState);
         } catch (persistErr) {
           console.error('[IB AI Assistant] Failed to persist message state:', persistErr);
+        }
+        setIsTyping(false);
+      }
+    }
+  }, [chatData, activeChatId, persist]);
+
+  // ── Stop generation (user-initiated) ──────────────────────────────────────
+  // Aborts the active stream and commits whatever partial content was streamed.
+  const stopGeneration = useCallback(() => {
+    if (!streamAbortRef.current) return;
+    userStopRef.current = true;
+    streamAbortRef.current.abort();
+  }, []);
+
+  // ── Regenerate from a message index (edit + re-send) ──────────────────────
+  // Trims the conversation to messages[0..index] with the edited user message,
+  // then streams a new assistant response. Everything after the edit point is
+  // discarded — no duplicate messages, no appended threads.
+  const regenerateFrom = useCallback(async (index, newText) => {
+    if (!chatData || !activeChatId) return;
+
+    streamAbortRef.current?.abort();
+    userStopRef.current = false;
+
+    const streamController = new AbortController();
+    streamAbortRef.current = streamController;
+    let wasAborted = false;
+    streamController.signal.addEventListener('abort', () => { wasAborted = true; }, { once: true });
+
+    const currentMessages = chatData.chats[activeChatId]?.messages ?? [];
+
+    const editedUserMsg = {
+      ...(currentMessages[index] ?? {}),
+      id:        currentMessages[index]?.id ?? Date.now(),
+      role:      'user',
+      content:   newText,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Keep messages before the edited point, then add the edited user message
+    const trimmedMessages = [...currentMessages.slice(0, index), editedUserMsg];
+
+    const withTrimmed = {
+      ...chatData,
+      chats: {
+        ...chatData.chats,
+        [activeChatId]: {
+          ...chatData.chats[activeChatId],
+          messages: trimmedMessages,
+        },
+      },
+    };
+    persist(withTrimmed);
+    setIsTyping(true);
+
+    const aiMsgId   = Date.now() + 1;
+    const timestamp = new Date().toISOString();
+
+    const buildState = (content) => ({
+      ...withTrimmed,
+      chats: {
+        ...withTrimmed.chats,
+        [activeChatId]: {
+          ...withTrimmed.chats[activeChatId],
+          messages: [
+            ...trimmedMessages,
+            { id: aiMsgId, role: 'assistant', content, timestamp },
+          ],
+        },
+      },
+    });
+
+    const contextMessages = trimmedMessages
+      .filter((m) => !m.type || m.type === 'text')
+      .slice(-20)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    const chatSessionId    = chatData.chats[activeChatId]?.sessionId;
+    let resolvedSessionId  = chatSessionId;
+    let finalContent       = '';
+
+    try {
+      for await (const chunk of streamChat(contextMessages, {
+        sessionId:   chatSessionId,
+        onSessionId: (id) => { resolvedSessionId = id; },
+        signal:      streamController.signal,
+        onRateLimit: (limit, remaining, resetAt) => {
+          setRateLimitState({ limit, remaining, resetAt });
+        },
+      })) {
+        finalContent += chunk;
+        setChatData(buildState(finalContent));
+      }
+      if (!finalContent) throw new Error('Empty response from AI');
+    } catch (err) {
+      if (!wasAborted) {
+        console.error('[IB AI Assistant] Regeneration failed:', err.message);
+        finalContent = classifyStreamError(err);
+      }
+    } finally {
+      const shouldCommit = !wasAborted || userStopRef.current;
+      userStopRef.current = false;
+      if (shouldCommit) {
+        try {
+          persist({
+            ...withTrimmed,
+            chats: {
+              ...withTrimmed.chats,
+              [activeChatId]: {
+                ...withTrimmed.chats[activeChatId],
+                sessionId: resolvedSessionId,
+                messages: [
+                  ...trimmedMessages,
+                  { id: aiMsgId, role: 'assistant', content: finalContent, timestamp },
+                ],
+              },
+            },
+          });
+        } catch (persistErr) {
+          console.error('[IB AI Assistant] Failed to persist regenerated state:', persistErr);
         }
         setIsTyping(false);
       }
@@ -512,6 +638,8 @@ export function useChat(username, { onCreditExhausted } = {}) {
     isTyping,
     rateLimitState,
     sendMessage,
+    stopGeneration,
+    regenerateFrom,
     sendImageAnalysis,
     sendImageEdit,
     clearChat,

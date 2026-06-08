@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Copy, Check, Cpu, User, Square, CheckSquare, Image as ImageIcon, Download, Wand2 } from 'lucide-react';
+import { Copy, Check, Cpu, User, Square, CheckSquare, Image as ImageIcon, Download, Wand2, Pencil, X } from 'lucide-react';
 import { ImageAnalysisCard } from './ImageAnalysisCard';
 
 // ─── Reliable clipboard helper ────────────────────────────────────────────────
@@ -313,8 +313,13 @@ export function MessageBubble({
   onToggleSelect,
   onEnterSelection,
   isTyping = false,
+  onEditMessage,
+  isStreaming = false,
 }) {
   const [copied, setCopied] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editText, setEditText] = useState('');
+  const editRef = useRef(null);
   const longPressTimer = useRef(null);
   const didLongPress = useRef(false);
 
@@ -324,6 +329,35 @@ export function MessageBubble({
   const isImageMsg = message.type === 'image';
   const isEditRequest = message.type === 'image-edit-request';
   const isEditResult = message.type === 'image-edit-result';
+
+  // Edit is available only for plain user text messages, not while streaming
+  const canEdit = isUser && !selectionMode && !isStreaming && !!onEditMessage
+    && !isImageMsg && !isEditRequest;
+
+  const handleEditStart = useCallback((e) => {
+    e.stopPropagation();
+    setEditText(message.content);
+    setEditMode(true);
+    setTimeout(() => editRef.current?.focus(), 0);
+  }, [message.content]);
+
+  const handleEditConfirm = useCallback(() => {
+    const trimmed = editText.trim();
+    if (trimmed && trimmed !== message.content) {
+      onEditMessage(index, trimmed);
+    }
+    setEditMode(false);
+  }, [editText, message.content, onEditMessage, index]);
+
+  const handleEditCancel = useCallback(() => {
+    setEditMode(false);
+    setEditText('');
+  }, []);
+
+  const handleEditKeyDown = useCallback((e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleEditConfirm(); }
+    else if (e.key === 'Escape') { handleEditCancel(); }
+  }, [handleEditConfirm, handleEditCancel]);
 
   // Full-width for analysis cards and edit result images
   const bubbleMaxWidth = (isAnalysis || isEditResult) ? 'max-w-full w-full' : 'max-w-[78%]';
@@ -445,30 +479,82 @@ export function MessageBubble({
               : `glass-card text-foreground rounded-tl-sm ${isSelected ? 'ring-1 ring-primary/30' : ''}`
           }`}
         >
-          {isPromptEngineering && !isUser && !isAnalysis && (
-            <div className="text-xs text-purple-400 font-medium mb-2 pb-2 border-b border-purple-500/20 tracking-wide uppercase">
-              Prompt Engineering
+          {editMode ? (
+            <div className="flex flex-col gap-2 min-w-[180px]">
+              <textarea
+                ref={editRef}
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={handleEditKeyDown}
+                rows={Math.max(2, editText.split('\n').length)}
+                className="w-full bg-white/10 text-primary-foreground text-sm leading-relaxed resize-none outline-none rounded-lg px-3 py-2 border border-white/20 focus:border-white/40 placeholder:text-white/40"
+                style={{ maxHeight: '180px' }}
+                placeholder="Edit your message…"
+              />
+              <div className="flex items-center gap-1.5 justify-end">
+                <button
+                  onClick={handleEditCancel}
+                  className="flex items-center gap-1 text-xs text-white/60 hover:text-white px-2 py-1 rounded-lg hover:bg-white/10 transition-colors"
+                >
+                  <X size={11} />
+                  Cancel
+                </button>
+                <button
+                  onClick={handleEditConfirm}
+                  disabled={!editText.trim()}
+                  className="flex items-center gap-1 text-xs text-white bg-white/20 hover:bg-white/30 px-2.5 py-1 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Check size={11} />
+                  Send
+                </button>
+              </div>
             </div>
+          ) : (
+            <>
+              {isPromptEngineering && !isUser && !isAnalysis && (
+                <div className="text-xs text-purple-400 font-medium mb-2 pb-2 border-b border-purple-500/20 tracking-wide uppercase">
+                  Prompt Engineering
+                </div>
+              )}
+              <MessageContent message={message} />
+            </>
           )}
-          <MessageContent message={message} />
         </div>
 
-        {/* Single-message copy */}
-        {!selectionMode && !isTyping && !isImageMsg && !isEditRequest && !isEditResult && (
-          <button
-            onClick={handleCopy}
-            data-testid={`button-copy-${message.id}`}
-            className={`
-              flex items-center gap-1 text-xs text-muted-foreground
-              hover:text-foreground px-1.5 py-0.5 rounded transition-all self-end
-              opacity-40 hover:opacity-100
-              [@media(pointer:fine)]:opacity-0 [@media(pointer:fine)]:group-hover:opacity-100
-            `}
-            aria-label="Copy message"
-          >
-            {copied ? <Check size={11} /> : <Copy size={11} />}
-            <span>{copied ? 'Copied!' : 'Copy'}</span>
-          </button>
+        {/* Per-message action bar: copy + edit */}
+        {!selectionMode && !isTyping && !editMode && !isImageMsg && !isEditRequest && !isEditResult && (
+          <div className="flex items-center gap-0.5 self-end">
+            {canEdit && (
+              <button
+                onClick={handleEditStart}
+                data-testid={`button-edit-${message.id}`}
+                className={`
+                  flex items-center gap-1 text-xs text-muted-foreground
+                  hover:text-foreground px-1.5 py-0.5 rounded transition-all
+                  opacity-40 hover:opacity-100
+                  [@media(pointer:fine)]:opacity-0 [@media(pointer:fine)]:group-hover:opacity-100
+                `}
+                aria-label="Edit message"
+              >
+                <Pencil size={11} />
+                <span>Edit</span>
+              </button>
+            )}
+            <button
+              onClick={handleCopy}
+              data-testid={`button-copy-${message.id}`}
+              className={`
+                flex items-center gap-1 text-xs text-muted-foreground
+                hover:text-foreground px-1.5 py-0.5 rounded transition-all
+                opacity-40 hover:opacity-100
+                [@media(pointer:fine)]:opacity-0 [@media(pointer:fine)]:group-hover:opacity-100
+              `}
+              aria-label="Copy message"
+            >
+              {copied ? <Check size={11} /> : <Copy size={11} />}
+              <span>{copied ? 'Copied!' : 'Copy'}</span>
+            </button>
+          </div>
         )}
       </div>
     </motion.div>

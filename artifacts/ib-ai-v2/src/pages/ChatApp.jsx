@@ -49,6 +49,8 @@ export default function ChatApp() {
     isTyping,
     rateLimitState,
     sendMessage,
+    stopGeneration,
+    regenerateFrom,
     sendImageAnalysis,
     sendImageEdit,
     clearChat,
@@ -170,7 +172,7 @@ export default function ChatApp() {
           </div>
         )}
 
-        <ChatWindow key={activeChatId} messages={messages} isTyping={isTyping} />
+        <ChatWindow key={activeChatId} messages={messages} isTyping={isTyping} onEditMessage={regenerateFrom} />
 
         {rateLimitState && rateLimitState.remaining <= 5 && (
           <RateLimitBadge remaining={rateLimitState.remaining} resetAt={rateLimitState.resetAt} />
@@ -181,6 +183,7 @@ export default function ChatApp() {
           onSendImage={sendImageAnalysis}
           onSendImageEdit={sendImageEdit}
           onClear={clearChat}
+          onStop={stopGeneration}
           disabled={isTyping}
         />
       </div>
