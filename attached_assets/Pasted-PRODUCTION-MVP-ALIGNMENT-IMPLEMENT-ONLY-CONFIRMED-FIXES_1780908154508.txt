@@ -1,0 +1,105 @@
+PRODUCTION MVP ALIGNMENT — IMPLEMENT ONLY CONFIRMED FIXES
+
+OBJECTIVE:
+Apply the final MVP readiness fixes identified by the validation reports.
+
+DO NOT add new features.
+DO NOT add new providers.
+DO NOT refactor architecture.
+DO NOT modify CEO logic.
+
+Implement only the tasks below.
+
+---
+
+TASK 1 — ACTIVATE HUGGINGFACE IMAGE GENERATION
+
+Verify:
+
+- HF_API_KEY is loaded into the running backend process
+- Restart any backend workflow/process necessary
+- Confirm image generation succeeds after restart
+
+Test prompt:
+"cinematic luxury portrait wallpaper, ultra detailed, soft lighting, professional photography"
+
+Output:
+status:
+provider:
+image returned:
+
+---
+
+TASK 2 — HIDE VOICE STUDIO
+
+Reason:
+Current Gemini tier does not support audio generation.
+
+Requirements:
+
+- Remove Voice Studio from sidebar navigation
+- Prevent public navigation to Voice Studio page
+- Preserve all Voice Studio code for future reactivation
+- Do NOT delete backend routes
+- Do NOT delete frontend components
+
+Result:
+Voice Studio should be hidden, not removed.
+
+---
+
+TASK 3 — ENHANCEMENT MODE UX CLEANUP
+
+Update user-facing wording only.
+
+Replace misleading labels:
+
+"Enhancement Suggestions"
+→ "Suggested Edit Prompts"
+
+"Safe Mode"
+→ remove OR replace with
+"Prompt Suggestions"
+
+"Generate Enhance Direction"
+→ "Generate Edit Idea"
+
+"Apply to Enhance Instruction"
+→ "Use This Prompt"
+
+"Auto-enhance with AI Director"
+→ "Auto-expand my prompt with AI"
+
+Do not change enhancement logic.
+
+Goal:
+Users must clearly understand that no image was modified when prompt suggestions are returned.
+
+---
+
+TASK 4 — FINAL VERIFICATION
+
+Verify:
+
+- Chat works
+- Stop generation works
+- Edit & regenerate works
+- Image generation works
+- Image analysis route responds
+- Voice Studio hidden
+- CEO account still has unlimited access
+
+---
+
+OUTPUT:
+
+A. Changes Applied
+B. Files Modified
+C. HF Image Generation Result
+D. Voice Studio Hidden: YES/NO
+E. Enhancement Labels Updated: YES/NO
+F. CEO Unlimited Access Preserved: YES/NO
+G. MVP READY: YES/NO
+
+DO NOT PERFORM ANY OTHER CHANGES.
+KEEP IMPLEMENTATION MINIMAL AND PRODUCTION-FOCUSED.

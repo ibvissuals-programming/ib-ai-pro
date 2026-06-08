@@ -35,9 +35,7 @@ function Router() {
         </ProtectedRoute>
       </Route>
       <Route path="/voice">
-        <ProtectedRoute>
-          <VoiceStudio />
-        </ProtectedRoute>
+        <Redirect to="/chat" />
       </Route>
       <Route path="/video">
         <ProtectedRoute>

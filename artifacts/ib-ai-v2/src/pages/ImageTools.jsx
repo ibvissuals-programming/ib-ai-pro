@@ -378,7 +378,7 @@ function AiDirectorPanel({ sourceImage, onApplyPrompt }) {
               >
                 {loading
                   ? <><Loader2 size={12} className="animate-spin" />Analyzing scene…</>
-                  : <><Sparkles size={12} />Generate Enhance Direction</>}
+                  : <><Sparkles size={12} />Generate Edit Idea</>}
               </button>
 
               {/* Error */}
@@ -463,7 +463,7 @@ function AiDirectorPanel({ sourceImage, onApplyPrompt }) {
                     className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-violet-600/90 text-white hover:bg-violet-600 transition-all font-medium"
                   >
                     <Wand2 size={11} />
-                    Apply to Enhance Instruction
+                    Use This Prompt
                   </button>
                 </motion.div>
               )}
@@ -488,10 +488,10 @@ function EnhancementPanel({ result, sourceImage, onClear }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 flex-wrap">
           <Sparkles size={13} className="text-primary" />
-          <span className="text-sm font-semibold text-foreground">Enhancement Suggestions</span>
+          <span className="text-sm font-semibold text-foreground">Suggested Edit Prompts</span>
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/20 font-medium flex items-center gap-1">
             <Shield size={8} />
-            Safe Mode
+            Prompt Suggestions
           </span>
         </div>
         <button onClick={onClear} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
@@ -767,7 +767,7 @@ function EditTab({ initialPrompt = '', initialMode = '', initialIntensity = '' }
               <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${useDirectorAnalysis ? 'translate-x-4' : 'translate-x-0.5'}`} />
             </div>
             <span className="text-[11px] text-muted-foreground group-hover:text-foreground transition-colors">
-              Auto-enhance with AI Director
+              Auto-expand my prompt with AI
               {useDirectorAnalysis && <span className="ml-1.5 text-violet-400 font-medium">(+15–20s)</span>}
             </span>
           </label>
