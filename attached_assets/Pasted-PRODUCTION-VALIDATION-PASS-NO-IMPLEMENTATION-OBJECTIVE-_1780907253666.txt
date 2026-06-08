@@ -1,0 +1,170 @@
+PRODUCTION VALIDATION PASS — NO IMPLEMENTATION
+
+OBJECTIVE:
+Verify every major user-facing feature in the fresh Replit deployment.
+
+DO NOT MODIFY CODE.
+DO NOT REFACTOR.
+DO NOT INSTALL ANYTHING.
+
+ONLY TEST AND REPORT.
+
+---
+
+TEST 1 — AI CHAT
+
+Send:
+"Hello, tell me who you are."
+
+Verify:
+
+- response streams correctly
+- no frontend errors
+- no backend errors
+- conversation saves to history
+
+Output:
+status:
+provider used:
+history saved:
+
+---
+
+TEST 2 — STOP GENERATION
+
+Send a long prompt.
+
+Verify:
+
+- Stop button appears
+- Stop button immediately halts generation
+- UI remains responsive
+- no duplicate assistant messages
+- partial response saved correctly
+
+Output:
+status:
+duplicates:
+partial saved:
+
+---
+
+TEST 3 — EDIT + REGENERATE
+
+Send:
+"Write 5 facts about space."
+
+Edit message to:
+"Write 5 facts about artificial intelligence."
+
+Verify:
+
+- edited message persists
+- previous assistant response removed
+- new response generated
+- no duplicated thread
+
+Output:
+status:
+message replaced:
+duplicates:
+
+---
+
+TEST 4 — IMAGE GENERATION
+
+Prompt:
+"cinematic luxury portrait wallpaper, ultra detailed, soft lighting, professional photography"
+
+Verify:
+
+- request succeeds
+- image returned
+- no 404
+- no API errors
+
+Output:
+status:
+provider:
+image generated:
+
+---
+
+TEST 5 — IMAGE ENHANCEMENT
+
+Upload image and use:
+"enhance into cinematic wallpaper, luxury aesthetic"
+
+Verify:
+
+- enhancement mode works
+- no crashes
+- response returned
+- fallback behavior correct
+
+Output:
+status:
+enhancement mode:
+user-facing result:
+
+---
+
+TEST 6 — IMAGE ANALYSIS
+
+Upload image.
+
+Verify:
+
+- Gemini Vision responds
+- analysis returned
+- no errors
+
+Output:
+status:
+analysis returned:
+
+---
+
+TEST 7 — VOICE STUDIO
+
+Generate voice from:
+"Welcome to IB AI Studio."
+
+Verify:
+
+- audio file created OR
+- clean fallback message shown
+
+Output:
+status:
+audio generated:
+fallback used:
+
+---
+
+TEST 8 — CEO ACCOUNT
+
+Verify:
+
+- CEO role recognized
+- credits not deducted
+- bypass still active
+
+Output:
+status:
+credits bypass:
+role:
+
+---
+
+FINAL REPORT
+
+A. Working Features
+B. Partially Working Features
+C. Broken Features
+D. Any 404 Routes
+E. Any Missing Secrets
+F. Production Ready: YES/NO
+
+DO NOT CHANGE CODE.
+DIAGNOSIS ONLY.
