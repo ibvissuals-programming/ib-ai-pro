@@ -328,7 +328,7 @@ export default function VoiceStudio() {
       } else if (msg.includes('503') || msg.includes('network')) {
         setError('The voice service is temporarily unavailable. Please try again in a few seconds.');
       } else {
-        setError(msg || 'Something went wrong. Please try again.');
+        setError('Voice generation temporarily unavailable. Please try again.');
       }
     } finally {
       setLoading(false);

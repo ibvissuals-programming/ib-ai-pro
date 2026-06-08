@@ -54,7 +54,7 @@ export interface PublicUser {
 
 // ── Credit constants ──────────────────────────────────────────────────────────
 
-export const FREE_CREDITS = 7;
+export const FREE_CREDITS = 100;
 export const RESET_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export const CREDIT_COSTS = {

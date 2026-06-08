@@ -183,7 +183,7 @@ export async function expandPrompt(
     "gemini-prompt-expander",
   );
 
-  const expanded = (response.text ?? "").trim();
+  const expanded = ((response as { text?: string }).text ?? "").trim();
 
   if (!expanded) {
     throw new Error("Prompt expander returned empty result — using original");

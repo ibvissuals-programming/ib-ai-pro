@@ -35,7 +35,8 @@ export type ModelUsed =
   | "flux"
   | "fallback"
   | "gemini-tts"
-  | "video-provider";
+  | "video-provider"
+  | "enhancement-mode";
 
 export type RequestComplexity = "SIMPLE" | "STANDARD" | "HEAVY";
 

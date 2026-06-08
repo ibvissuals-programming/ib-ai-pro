@@ -163,7 +163,7 @@ function BeforeAfterSlider({ before, after }) {
 }
 
 // ── Processing stage indicator ────────────────────────────────────────────────
-const PROC_STAGES = ['Uploading', 'Analyzing', 'Editing', 'Validating', 'Finalizing'];
+const PROC_STAGES = ['Uploading', 'Analyzing', 'Enhancing', 'Validating', 'Finalizing'];
 function ProcessingStageIndicator({ active }) {
   const [idx, setIdx] = useState(0);
   useEffect(() => {
@@ -378,7 +378,7 @@ function AiDirectorPanel({ sourceImage, onApplyPrompt }) {
               >
                 {loading
                   ? <><Loader2 size={12} className="animate-spin" />Analyzing scene…</>
-                  : <><Sparkles size={12} />Generate Edit Direction</>}
+                  : <><Sparkles size={12} />Generate Enhance Direction</>}
               </button>
 
               {/* Error */}
@@ -463,7 +463,7 @@ function AiDirectorPanel({ sourceImage, onApplyPrompt }) {
                     className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-violet-600/90 text-white hover:bg-violet-600 transition-all font-medium"
                   >
                     <Wand2 size={11} />
-                    Apply to Edit Instruction
+                    Apply to Enhance Instruction
                   </button>
                 </motion.div>
               )}
@@ -677,7 +677,7 @@ function EditTab({ initialPrompt = '', initialMode = '', initialIntensity = '' }
       {/* Edit prompt */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Edit Instruction</label>
+          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Enhance Instruction</label>
           <CopyButton text={prompt} />
         </div>
         <textarea
@@ -778,8 +778,8 @@ function EditTab({ initialPrompt = '', initialMode = '', initialIntensity = '' }
           className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/20 w-fit"
         >
           {loading
-            ? <><Loader2 size={14} className="animate-spin" />{useDirectorAnalysis ? 'Analyzing + Editing…' : 'Editing…'}</>
-            : <><Wand2 size={14} />Edit Image</>}
+            ? <><Loader2 size={14} className="animate-spin" />{useDirectorAnalysis ? 'Analyzing + Enhancing…' : 'Enhancing…'}</>
+            : <><Wand2 size={14} />Enhance Image</>}
         </button>
       </div>
 
@@ -1060,7 +1060,7 @@ function HistoryTab() {
           </div>
           <div className="text-center">
             <p className="text-sm font-medium text-foreground">No images yet</p>
-            <p className="text-xs text-muted-foreground mt-1">Generate or edit an image and it'll appear here.</p>
+            <p className="text-xs text-muted-foreground mt-1">Generate or enhance an image and it'll appear here.</p>
           </div>
         </div>
       )}
@@ -1201,7 +1201,7 @@ export default function ImageTools() {
 
   const TABS = [
     { id: 'generate', icon: Sparkles, label: 'Generate' },
-    { id: 'edit',     icon: Wand2,    label: 'Edit' },
+    { id: 'edit',     icon: Wand2,    label: 'Enhance' },
     { id: 'history',  icon: History,  label: 'History' },
   ];
 
