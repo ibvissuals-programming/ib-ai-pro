@@ -224,6 +224,12 @@ function GenerateTab({ initialPrompt = '', savedResult = null, onResult = null }
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, [loading]);
 
+  useEffect(() => {
+    if (savedResult?.b64Image && !loading) {
+      setOutput(savedResult.b64Image);
+    }
+  }, [savedResult?.b64Image, loading]);
+
   const EXAMPLES = [
     'Cinematic sunset over a futuristic cityscape',
     'Studio portrait of a golden retriever in soft light',
