@@ -208,12 +208,21 @@ function ErrorBox({ message }) {
 }
 
 // ── Generate tab ──────────────────────────────────────────────────────────────
-function GenerateTab({ initialPrompt = '' }) {
-  const [prompt, setPrompt] = useState(initialPrompt);
-  const [output, setOutput] = useState(null);
+function GenerateTab({ initialPrompt = '', savedResult = null, onResult = null }) {
+  const [prompt, setPrompt] = useState(initialPrompt || savedResult?.prompt || '');
+  const [output, setOutput] = useState(savedResult?.b64Image ?? null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [loadingMsg, setLoadingMsg] = useState('');
   const checkRate = useRateLimit();
+
+  useEffect(() => {
+    if (!loading) { setLoadingMsg(''); return; }
+    const t1 = setTimeout(() => setLoadingMsg('Generation is taking longer than usual…'),    15_000);
+    const t2 = setTimeout(() => setLoadingMsg('Model may be warming up. Your image is still processing.'), 30_000);
+    const t3 = setTimeout(() => setLoadingMsg('Still working… please keep this tab open.'),  60_000);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [loading]);
 
   const EXAMPLES = [
     'Cinematic sunset over a futuristic cityscape',
@@ -228,16 +237,30 @@ function GenerateTab({ initialPrompt = '' }) {
     if (wait > 0) { setError(`Please wait ${wait}s before generating again.`); return; }
     setLoading(true);
     setError(null);
-    setOutput(null);
     try {
       const res = await generateImage(prompt.trim());
+      const result = {
+        b64Image:       res.b64Image,
+        prompt:         prompt.trim(),
+        status:         res.status         ?? null,
+        promptExpanded: res.promptExpanded ?? false,
+        timestamp:      Date.now(),
+      };
       setOutput(res.b64Image);
+      onResult?.(result);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
+
+  const handleClear = () => {
+    setOutput(null);
+    onResult?.(null);
+  };
+
+  const showRestoredBadge = !!(savedResult?.b64Image && output === savedResult.b64Image && !loading);
 
   return (
     <div className="space-y-4">
@@ -273,9 +296,33 @@ function GenerateTab({ initialPrompt = '' }) {
       </button>
 
       <AnimatePresence>{error && <ErrorBox message={error} />}</AnimatePresence>
-      <AnimatePresence>{loading && <ImageSkeleton label="Generating your image…" />}</AnimatePresence>
+
       <AnimatePresence>
-        {output && !loading && <OutputCard src={output} onClear={() => setOutput(null)} />}
+        {loading && (
+          <motion.div key="skeleton-wrap" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <ImageSkeleton label={loadingMsg || 'Generating your image…'} />
+            {loadingMsg && (
+              <p className="mt-2 text-center text-xs text-muted-foreground/70 animate-pulse">{loadingMsg}</p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {output && !loading && (
+          <motion.div key="output-wrap" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            {showRestoredBadge && savedResult?.timestamp && (
+              <div className="mb-2 flex items-center gap-1.5 text-[10px] text-muted-foreground/60">
+                <Clock size={10} />
+                <span>Last generated {new Date(savedResult.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                {savedResult.prompt && (
+                  <span className="truncate max-w-[200px] opacity-70">· {savedResult.prompt}</span>
+                )}
+              </div>
+            )}
+            <OutputCard src={output} onClear={handleClear} />
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );
@@ -1198,6 +1245,7 @@ export default function ImageTools() {
     : null;
 
   const [tab, setTab] = useState(initialTab);
+  const [generateResult, setGenerateResult] = useState(null);
 
   const TABS = [
     { id: 'generate', icon: Sparkles, label: 'Generate' },
@@ -1273,7 +1321,7 @@ export default function ImageTools() {
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.15 }}
               >
-                {tab === 'generate' && <GenerateTab initialPrompt={urlPrompt} />}
+                {tab === 'generate' && <GenerateTab initialPrompt={urlPrompt} savedResult={generateResult} onResult={setGenerateResult} />}
                 {tab === 'edit'     && <EditTab initialPrompt={urlPrompt} initialMode={urlMode} initialIntensity={urlIntensity} />}
                 {tab === 'history'  && <HistoryTab />}
               </motion.div>

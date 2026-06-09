@@ -1,0 +1,128 @@
+IMAGE UX PERSISTENCE HARDENING
+
+OBJECTIVE:
+
+Make Image Studio behave like ChatGPT image generation.
+
+Users should never lose visibility of generated images when navigating between tabs.
+
+DO NOT change providers.
+DO NOT change generation logic.
+DO NOT modify backend routes.
+DO NOT modify database schema.
+
+Implement only the UX persistence improvements below.
+
+---
+
+TASK 1 — PERSIST GENERATED IMAGE
+
+Current issue:
+
+GenerateTab stores output in local component state.
+
+When user switches tabs:
+
+GenerateTab unmounts
+→ output state is destroyed
+→ generated image disappears
+
+Required behavior:
+
+- Last generated image remains visible when user returns to Generate tab
+- Survives switching between:
+  - Generate
+  - Enhance
+  - History
+- Does NOT require a new generation
+
+Implement using existing frontend architecture.
+
+---
+
+TASK 2 — PERSIST GENERATION METADATA
+
+Preserve:
+
+- generated image
+- prompt
+- generation settings
+- provider information
+- timestamp
+
+When user returns to Generate tab:
+
+show the last successful result immediately.
+
+---
+
+TASK 3 — LOADING UX IMPROVEMENT
+
+Current issue:
+
+User sees spinner for up to 120 seconds.
+
+Improve feedback:
+
+After 15 seconds:
+
+Show:
+"Generation is taking longer than usual..."
+
+After 30 seconds:
+
+Show:
+"Model may be warming up. Your image is still processing."
+
+After 60 seconds:
+
+Show:
+"Still working... please keep this tab open."
+
+Do not change timeout behavior.
+
+---
+
+TASK 4 — RESULT SAFETY
+
+If generation succeeds:
+
+Never clear existing image until a new generation succeeds.
+
+If a new generation fails:
+
+Keep showing previous successful image.
+
+Display error separately.
+
+---
+
+TASK 5 — VERIFICATION
+
+Verify:
+
+- Generate image
+- Switch to History
+- Switch to Enhance
+- Return to Generate
+
+Result should still be visible.
+
+Verify:
+
+- Failed generation does not remove previous image.
+
+---
+
+OUTPUT:
+
+A. Files Modified
+B. State Architecture Used
+C. Persistence Verified: YES/NO
+D. Previous Image Preserved On Failure: YES/NO
+E. Loading UX Improved: YES/NO
+F. Any Regressions Found
+
+IMPLEMENT ONLY THESE CHANGES.
+NO NEW FEATURES.
+NO BACKEND CHANGES.
