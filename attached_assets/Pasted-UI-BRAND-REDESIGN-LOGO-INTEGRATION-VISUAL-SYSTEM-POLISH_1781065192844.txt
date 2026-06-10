@@ -1,0 +1,77 @@
+UI BRAND REDESIGN — LOGO INTEGRATION + VISUAL SYSTEM POLISH (NO BACKEND CHANGES)
+
+OBJECTIVE:
+Redesign the frontend visual identity of IB AI Studio Lab using the uploaded logo as the primary brand anchor. The goal is to align the entire UI (colors, spacing, typography, surfaces, and depth system) to match the logo aesthetic.
+
+IMPORTANT RULES:
+- DO NOT modify backend logic, APIs, routes, or AI systems
+- FRONTEND ONLY changes
+- Do not break existing chat/image/TTS functionality
+- Do not change architecture or state management
+- Only visual + UI layer improvements
+
+TASKS:
+
+1. LOGO INTEGRATION
+- Locate existing app logo usage in the frontend
+- Replace default/placeholder branding with the uploaded logo image
+- Ensure logo is used in:
+  - Login page
+  - Sidebar / top navigation
+  - Loading screens (if present)
+- Ensure proper scaling (no distortion)
+- Add subtle hover or glow animation (optional, soft, premium feel)
+
+2. BRAND COLOR SYSTEM EXTRACTION
+- Analyze the logo visually and derive:
+  - Primary color
+  - Secondary accent color
+  - Background tone
+  - Highlight/glow tone
+- Create a consistent theme palette used across:
+  - Buttons
+  - Active states
+  - Borders
+  - Chat highlights
+  - Cards and panels
+
+3. UI POLISH TO MATCH BRAND IDENTITY
+- Adjust UI styling to match logo tone:
+  - If logo is “glass / modern”: apply glassmorphism + blur surfaces
+  - If logo is “dark / cinematic”: deepen background contrast and lighting
+  - If logo is “minimal”: reduce noise and simplify surfaces
+
+4. TYPOGRAPHY ALIGNMENT
+- Apply modern, clean AI-studio typography:
+  - Improve font hierarchy
+  - Increase readability in chat interface
+  - Ensure consistent spacing and line height
+
+5. VISUAL CONSISTENCY FIXES
+- Align all:
+  - Buttons
+  - Cards
+  - Input fields
+  - Chat bubbles
+  - Modals
+- Ensure consistent border radius system
+- Ensure consistent shadow + glow system
+
+6. CHAT UI ENHANCEMENT (IMPORTANT)
+- Make chat feel like a “studio workspace”
+- Improve message spacing and grouping
+- Ensure assistant messages feel distinct but premium
+- Maintain readability and speed
+
+7. FINAL OUTPUT REQUIREMENTS
+- No backend changes
+- No API changes
+- No breaking changes
+- Preserve full functionality of:
+  - chat
+  - image tools
+  - TTS tools
+- Only UI + styling updates
+
+GOAL:
+Transform IB AI Studio Lab into a cohesive “AI Studio OS” visual identity that matches the uploaded logo and feels like a premium creative workspace (not a basic chatbot).

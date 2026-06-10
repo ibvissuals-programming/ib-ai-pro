@@ -231,9 +231,16 @@ export default function Login() {
         </AnimatePresence>
 
         <div className="flex flex-col items-center mb-8">
-          <IbLogo variant="mark" size={44} className="mb-5" />
-          <h1 className="text-xl font-bold text-foreground tracking-tight font-heading">
-            IB AI <span className="text-primary">Studio Lab</span>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.88 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.38, ease: 'easeOut' }}
+            className="mb-5"
+          >
+            <IbLogo variant="mark" size={64} />
+          </motion.div>
+          <h1 className="text-xl font-bold text-foreground tracking-tight font-heading" style={{ letterSpacing: '-0.03em' }}>
+            IB <span className="text-primary">AI</span> Studio Lab
           </h1>
           <p className="text-sm text-muted-foreground mt-1.5">
             {mode === 'login' && 'Sign in to your account'}
@@ -242,7 +249,7 @@ export default function Login() {
           </p>
         </div>
 
-        <div className="glass-card p-6">
+        <div className="glass-card-premium p-6">
           <AnimatePresence mode="wait">
 
             {/* ── Normal login ── */}

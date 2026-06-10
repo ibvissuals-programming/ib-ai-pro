@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Cpu, Copy, Check, Download, X, CheckSquare, Square, ImagePlus, ChevronDown } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
 import { useSelection } from '../hooks/useSelection';
+import { IbLogo } from './IbLogo';
 
 // ─── Typing indicator ─────────────────────────────────────────────────────────
 
@@ -38,14 +39,32 @@ function TypingIndicator() {
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center px-6">
-      <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-4">
-        <Cpu size={20} className="text-primary" />
-      </div>
-      <h3 className="text-base font-semibold text-foreground mb-1">IB AI</h3>
-      <p className="text-sm text-muted-foreground max-w-xs leading-relaxed mb-6">
-        Ask me anything — code, ideas, writing, analysis, or just a conversation.
-      </p>
-      <div className="flex flex-col gap-2 w-full max-w-sm">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.92, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: 'easeOut' }}
+        className="mb-5"
+      >
+        <IbLogo variant="mark" size={56} />
+      </motion.div>
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, delay: 0.08, ease: 'easeOut' }}
+      >
+        <h3 className="text-base font-bold text-foreground mb-1.5 tracking-tight" style={{ letterSpacing: '-0.02em' }}>
+          IB <span className="text-primary">AI</span> Studio Lab
+        </h3>
+        <p className="text-sm text-muted-foreground max-w-xs leading-relaxed mb-6">
+          Ask me anything — code, ideas, writing, analysis, or just a conversation.
+        </p>
+      </motion.div>
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.16, ease: 'easeOut' }}
+        className="flex flex-col gap-2 w-full max-w-sm"
+      >
         {[
           { text: 'Explain a concept in simple terms' },
           { text: 'Help me write or improve content' },
@@ -53,7 +72,7 @@ function EmptyState() {
         ].map((item, i) => (
           <div
             key={i}
-            className="text-left text-xs text-muted-foreground px-3 py-2.5 rounded-xl border border-border/50 bg-secondary/30 flex items-center gap-2 leading-relaxed"
+            className="text-left text-xs text-muted-foreground px-3 py-2.5 rounded-xl border border-border/50 bg-secondary/30 flex items-center gap-2 leading-relaxed hover:border-primary/20 hover:text-foreground/70 transition-colors"
           >
             {item.icon ? (
               <>
@@ -63,7 +82,7 @@ function EmptyState() {
             ) : item.text}
           </div>
         ))}
-      </div>
+      </motion.div>
     </div>
   );
 }
