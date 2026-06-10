@@ -61,7 +61,6 @@ timeoutMs = 20000
 
 [userenv.shared]
 CEO_USERNAME = "ibaiceo"
-PORT = "8080"
 USE_POSTGRES_STORAGE = "true"
 
 [nix]
