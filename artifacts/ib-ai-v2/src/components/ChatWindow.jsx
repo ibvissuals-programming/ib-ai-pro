@@ -4,6 +4,7 @@ import { Cpu, Copy, Check, Download, X, CheckSquare, Square, ImagePlus, ChevronD
 import { MessageBubble } from './MessageBubble';
 import { useSelection } from '../hooks/useSelection';
 import { IbLogo } from './IbLogo';
+import { OnboardingPanel } from './OnboardingPanel';
 
 // ─── Typing indicator ─────────────────────────────────────────────────────────
 
@@ -164,7 +165,7 @@ function SelectionBar({
 
 const NEAR_BOTTOM_PX = 120;
 
-export function ChatWindow({ messages, isTyping, onEditMessage }) {
+export function ChatWindow({ messages, isTyping, onEditMessage, onSuggest, showOnboarding }) {
   const scrollRef = useRef(null);
   const bottomRef = useRef(null);
   const isNearBottomRef = useRef(true);
@@ -213,7 +214,22 @@ export function ChatWindow({ messages, isTyping, onEditMessage }) {
   if (messages.length === 0 && !isTyping) {
     return (
       <div className="flex-1 overflow-y-auto">
-        <EmptyState />
+        <AnimatePresence mode="wait">
+          {showOnboarding && onSuggest ? (
+            <OnboardingPanel key="onboarding" onSend={onSuggest} />
+          ) : (
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="h-full"
+            >
+              <EmptyState />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
