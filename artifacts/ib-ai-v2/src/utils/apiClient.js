@@ -44,7 +44,7 @@ export const IMAGE_GEN_MS     = 120_000;
 // emits a consistent structured entry in the browser console.
 
 function _apiDebugLog(errorType, status) {
-  console.log('[API DEBUG]', { layer: 'global', status: status ?? null, errorType });
+  console.log(`[API] error | ${errorType}${status != null ? ` | ${status}` : ''}`);
 }
 
 // ── Safe JSON parse ───────────────────────────────────────────────────────────
@@ -99,10 +99,10 @@ export async function safeJson(res) {
  */
 export async function fetchWithTimeout(url, options = {}, timeoutMs = API_TIMEOUT_MS, externalSignal) {
   const controller = new AbortController();
-  const timer = setTimeout(() => { console.log('[API:fetch]', 'timeout-abort', { timeoutMs }); controller.abort(); }, timeoutMs);
+  const timer = setTimeout(() => { console.log(`[API] fetch | timeout-abort | ${timeoutMs}ms`); controller.abort(); }, timeoutMs);
   if (externalSignal) {
-    if (externalSignal.aborted) { clearTimeout(timer); console.log('[API:fetch]', 'pre-aborted', { url: url.split('/api/').pop() }); throw Object.assign(new DOMException('Aborted', 'AbortError'), { name: 'AbortError' }); }
-    externalSignal.addEventListener('abort', () => { console.log('[API:fetch]', 'external-abort', { url: url.split('/api/').pop() }); controller.abort(); }, { once: true });
+    if (externalSignal.aborted) { clearTimeout(timer); console.log(`[API] fetch | abort | pre-fired | ${url.split('/api/').pop()}`); throw Object.assign(new DOMException('Aborted', 'AbortError'), { name: 'AbortError' }); }
+    externalSignal.addEventListener('abort', () => { console.log(`[API] fetch | abort | external | ${url.split('/api/').pop()}`); controller.abort(); }, { once: true });
   }
   try {
     return await fetch(url, { ...options, signal: controller.signal });
