@@ -362,14 +362,20 @@ function AiDirectorPanel({ sourceImage, onApplyPrompt }) {
   const [loading, setLoading] = useState(false);
   const [insight, setInsight] = useState(null);
   const [error, setError] = useState(null);
+  const abortRef = useRef(null);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const handleGenerate = async () => {
     if (loading || !sourceImage) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     setError(null);
     setInsight(null);
     try {
-      const result = await generateCinematicPrompt(sourceImage);
+      const result = await generateCinematicPrompt(sourceImage, controller.signal);
       setInsight(result);
       setOpen(true);
     } catch (err) {

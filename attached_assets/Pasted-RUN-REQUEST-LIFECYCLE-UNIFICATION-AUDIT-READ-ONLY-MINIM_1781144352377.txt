@@ -1,0 +1,70 @@
+RUN REQUEST LIFECYCLE UNIFICATION AUDIT (READ ONLY + MINIMAL FIXES ONLY IF REQUIRED)
+
+OBJECTIVE:
+Unify request handling patterns across ImageTools, Chat, and DirectorPanel into a consistent lifecycle model WITHOUT introducing new frameworks or refactors.
+
+SCOPE:
+Frontend only:
+- ImageTools.jsx (EditTab + GenerateTab)
+- AiDirectorPanel (if applicable)
+- useChat.js (SSE lifecycle)
+- apiClient.js (fetchWithTimeout)
+- imageToolsApi.js
+
+DO NOT touch:
+- backend
+- auth system
+- database
+- provider configuration
+- UI redesign or styling systems
+
+TASKS:
+
+1. REQUEST LIFECYCLE CLASSIFICATION
+Classify every async operation into:
+- HARD CANCEL (must abort in-flight request)
+- SOFT IGNORE (allow completion, ignore stale result)
+- PERSISTED (must survive tab switch or unmount)
+
+Map each of:
+- image generation
+- image editing
+- cinematic prompt generation
+- chat SSE stream
+
+2. CONSISTENCY CHECK
+Verify:
+- each lifecycle type uses the correct pattern (AbortController vs requestId vs parent state)
+- no mixed patterns inside the same feature
+- no duplicate cancellation systems per feature
+
+3. CROSS-COMPONENT STATE SAFETY
+Check:
+- no shared mutable state between tabs/components
+- no race condition where stale response overwrites new state
+- no unguarded setState after async await
+
+4. FETCH LAYER VALIDATION
+Review fetchWithTimeout:
+- confirm correct externalSignal behavior
+- ensure no memory leaks or dangling timers
+- ensure AbortError is properly classified everywhere it is used
+
+5. SSE STREAM SAFETY (useChat.js)
+Verify:
+- abort behavior is correct on new request
+- reader.releaseLock() is always reached
+- no zombie streams after unmount
+- retry logic does not create duplicate streams
+
+6. OUTPUT FORMAT:
+A. Lifecycle Map Table
+B. PASS / FAIL per system (Image / Chat / Director / API layer)
+C. List ONLY real inconsistencies (no theoretical improvements)
+D. If fix is needed:
+   - max 10 lines per file
+   - no refactors
+   - no new abstraction layers
+
+FINAL RULE:
+Do NOT introduce new architecture patterns. Only enforce consistency across existing ones.

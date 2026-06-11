@@ -145,7 +145,7 @@ export async function fetchImageHistory(limit = 30) {
  *   moodTarget: string,
  * }>}
  */
-export async function generateCinematicPrompt(imageDataUrl) {
+export async function generateCinematicPrompt(imageDataUrl, signal) {
   const match = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) throw new Error('Invalid image format — expected a data URL.');
   const [, mimeType, imageBase64] = match;
@@ -160,6 +160,7 @@ export async function generateCinematicPrompt(imageDataUrl) {
         body: JSON.stringify({ imageBase64, mimeType }),
       },
       IMAGE_GEN_MS,
+      signal,
     );
   } catch (err) {
     throwFetchError(err);
