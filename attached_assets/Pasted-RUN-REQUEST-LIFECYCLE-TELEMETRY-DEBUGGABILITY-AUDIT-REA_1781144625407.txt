@@ -1,0 +1,77 @@
+RUN REQUEST LIFECYCLE TELEMETRY & DEBUGGABILITY AUDIT (READ ONLY + MINIMAL INSTRUMENTATION FIXES ONLY)
+
+OBJECTIVE:
+Add a unified, lightweight request tracking model across ImageTools + Chat + DirectorPanel WITHOUT changing behavior, UI, or backend logic.
+
+GOAL:
+Make every async operation traceable from:
+- start → in-flight → completion → failure → discard (unmounted)
+
+SCOPE:
+Frontend only:
+- ImageTools.jsx (EditTab + GenerateTab)
+- AiDirectorPanel
+- useChat.js (SSE lifecycle)
+- imageToolsApi.js
+- apiClient.js (fetchWithTimeout)
+
+DO NOT touch:
+- backend
+- auth
+- database
+- UI layout / styling / animations
+- cancellation logic (AbortController already implemented — do not modify unless required)
+
+TASKS:
+
+1. REQUEST LIFECYCLE INSTRUMENTATION MAP
+For each system (image generate, image edit, director panel, chat SSE), identify:
+- where request starts
+- where it resolves
+- where it is discarded (unmount / stale / abort)
+- where state is committed
+
+2. UNIFIED REQUEST TRACE MODEL
+Check if a consistent structure exists. If not, propose minimal addition:
+
+RequestTrace object:
+- requestId
+- type (image_generate | image_edit | chat_stream | director)
+- status (started | success | failed | aborted | discarded)
+- startTimestamp
+- endTimestamp
+- duration
+- sourceComponent
+
+3. STATE SAFETY VERIFICATION
+Ensure:
+- no setState after unmount without tracking
+- no silent failures without trace
+- no overlapping request overwrites without detection
+
+4. SSE VISIBILITY CHECK (useChat.js)
+Verify:
+- stream start/end is traceable
+- abort vs error vs completion is distinguishable
+- reader.releaseLock() events are observable in lifecycle
+- userStop vs systemAbort separation is preserved
+
+5. FETCH LAYER VISIBILITY (apiClient.js)
+Check:
+- fetchWithTimeout hides no failure states
+- AbortError, timeout, network failure all distinguishable
+- externalSignal path is traceable (if present)
+
+6. OUTPUT FORMAT:
+A. Lifecycle trace diagram per system
+B. PASS / FAIL per system observability
+C. Missing telemetry points (ONLY real gaps)
+D. If needed:
+   - minimal instrumentation diff only (console-safe, non-invasive)
+   - NO refactors
+   - NO behavioral changes
+   - NO new architecture layers
+
+FINAL RULE:
+This is a visibility audit only. Do NOT change cancellation logic or execution flow.
+Only add minimal tracing if necessary for debuggability.

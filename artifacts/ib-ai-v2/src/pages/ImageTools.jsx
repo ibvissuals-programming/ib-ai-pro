@@ -245,6 +245,7 @@ function GenerateTab({ initialPrompt = '', savedResult = null, onResult = null }
     setLoading(true);
     setError(null);
     try {
+      console.log('[ImageTools:generate]', 'start');
       const res = await generateImage(prompt.trim());
       const result = {
         b64Image:       res.b64Image,
@@ -255,7 +256,9 @@ function GenerateTab({ initialPrompt = '', savedResult = null, onResult = null }
       };
       setOutput(res.b64Image);
       onResult?.(result);
+      console.log('[ImageTools:generate]', 'success', { expanded: res.promptExpanded ?? false });
     } catch (err) {
+      console.log('[ImageTools:generate]', 'error', err.message);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -375,10 +378,13 @@ function AiDirectorPanel({ sourceImage, onApplyPrompt }) {
     setError(null);
     setInsight(null);
     try {
+      console.log('[ImageTools:director]', 'start');
       const result = await generateCinematicPrompt(sourceImage, controller.signal);
       setInsight(result);
       setOpen(true);
+      console.log('[ImageTools:director]', 'success', { mood: result.moodTarget });
     } catch (err) {
+      console.log('[ImageTools:director]', err.name === 'AbortError' ? 'aborted' : 'error', err.message);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -679,6 +685,7 @@ function EditTab({ initialPrompt = '', initialMode = '', initialIntensity = '' }
     setOutputMeta(null);
     setEnhancementResult(null);
     try {
+      console.log('[ImageTools:edit]', 'start', { mode: editMode || 'auto', intensity: intensityLevel || 'auto', director: useDirectorAnalysis });
       const res = await editImage(
         sourceImage,
         prompt.trim(),
@@ -687,6 +694,7 @@ function EditTab({ initialPrompt = '', initialMode = '', initialIntensity = '' }
         useDirectorAnalysis  || undefined,
         controller.signal,
       );
+      console.log('[ImageTools:edit]', res.enhancementMode ? 'enhancement-mode' : 'success', { mode: res.mode ?? null });
       if (res.enhancementMode) {
         setEnhancementResult(res);
       } else {
@@ -699,6 +707,7 @@ function EditTab({ initialPrompt = '', initialMode = '', initialIntensity = '' }
         });
       }
     } catch (err) {
+      console.log('[ImageTools:edit]', err.name === 'AbortError' ? 'aborted' : 'error', err.message);
       setError(err.message);
     } finally {
       setLoading(false);

@@ -99,10 +99,10 @@ export async function safeJson(res) {
  */
 export async function fetchWithTimeout(url, options = {}, timeoutMs = API_TIMEOUT_MS, externalSignal) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = setTimeout(() => { console.log('[API:fetch]', 'timeout-abort', { timeoutMs }); controller.abort(); }, timeoutMs);
   if (externalSignal) {
-    if (externalSignal.aborted) { clearTimeout(timer); throw Object.assign(new DOMException('Aborted', 'AbortError'), { name: 'AbortError' }); }
-    externalSignal.addEventListener('abort', () => controller.abort(), { once: true });
+    if (externalSignal.aborted) { clearTimeout(timer); console.log('[API:fetch]', 'pre-aborted', { url: url.split('/api/').pop() }); throw Object.assign(new DOMException('Aborted', 'AbortError'), { name: 'AbortError' }); }
+    externalSignal.addEventListener('abort', () => { console.log('[API:fetch]', 'external-abort', { url: url.split('/api/').pop() }); controller.abort(); }, { once: true });
   }
   try {
     return await fetch(url, { ...options, signal: controller.signal });
