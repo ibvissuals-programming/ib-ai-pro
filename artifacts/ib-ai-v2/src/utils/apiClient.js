@@ -97,9 +97,13 @@ export async function safeJson(res) {
  * @param {number} [timeoutMs]
  * @returns {Promise<Response>}
  */
-export async function fetchWithTimeout(url, options = {}, timeoutMs = API_TIMEOUT_MS) {
+export async function fetchWithTimeout(url, options = {}, timeoutMs = API_TIMEOUT_MS, externalSignal) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  if (externalSignal) {
+    if (externalSignal.aborted) { clearTimeout(timer); throw Object.assign(new DOMException('Aborted', 'AbortError'), { name: 'AbortError' }); }
+    externalSignal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } finally {

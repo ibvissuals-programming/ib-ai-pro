@@ -74,7 +74,7 @@ export async function generateImage(prompt) {
  * @param {boolean} [useCinematicAnalysis] — if true, backend runs Gemini vision pre-analysis
  * @returns {Promise<{ b64Image: string, status: string, mode?: string, intensity?: string, cinematicAnalysisUsed?: boolean }>}
  */
-export async function editImage(imageBase64, prompt, editMode, intensity, useCinematicAnalysis) {
+export async function editImage(imageBase64, prompt, editMode, intensity, useCinematicAnalysis, signal) {
   let res;
   const body = { image: imageBase64, prompt };
   if (editMode)             body.editMode             = editMode;
@@ -90,6 +90,7 @@ export async function editImage(imageBase64, prompt, editMode, intensity, useCin
         body: JSON.stringify(body),
       },
       IMAGE_GEN_MS,
+      signal,
     );
   } catch (err) {
     throwFetchError(err);

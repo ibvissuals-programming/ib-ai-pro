@@ -631,7 +631,10 @@ function EditTab({ initialPrompt = '', initialMode = '', initialIntensity = '' }
   const [showBeforeAfter, setShowBeforeAfter] = useState(false);
   const [enhancementResult, setEnhancementResult] = useState(null);
   const fileInputRef = useRef(null);
+  const abortRef = useRef(null);
   const checkRate = useRateLimit();
+
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const EXAMPLES_BY_MODE = {
     '':            ['Add dramatic cinematic lighting', 'Make it look like a watercolor painting', 'Remove the watermark', 'Make the background a sunset beach'],
@@ -661,6 +664,9 @@ function EditTab({ initialPrompt = '', initialMode = '', initialIntensity = '' }
     if (loading || !sourceImage || !prompt.trim()) return;
     const wait = checkRate();
     if (wait > 0) { setError(`Please wait ${wait}s before editing again.`); return; }
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     setError(null);
     setOutput(null);
@@ -673,6 +679,7 @@ function EditTab({ initialPrompt = '', initialMode = '', initialIntensity = '' }
         editMode             || undefined,
         intensityLevel       || undefined,
         useDirectorAnalysis  || undefined,
+        controller.signal,
       );
       if (res.enhancementMode) {
         setEnhancementResult(res);
