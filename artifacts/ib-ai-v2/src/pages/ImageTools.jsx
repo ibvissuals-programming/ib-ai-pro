@@ -170,13 +170,14 @@ function ProcessingStageIndicator({ active }) {
     if (!active) { setIdx(0); return; }
     const delays = [600, 2000, 12000, 4000, 2000];
     let cur = 0;
+    const handles = [];
     const advance = () => {
       cur = Math.min(cur + 1, PROC_STAGES.length - 1);
       setIdx(cur);
-      if (cur < PROC_STAGES.length - 1) setTimeout(advance, delays[cur]);
+      if (cur < PROC_STAGES.length - 1) handles.push(setTimeout(advance, delays[cur]));
     };
-    const t = setTimeout(advance, delays[0]);
-    return () => clearTimeout(t);
+    handles.push(setTimeout(advance, delays[0]));
+    return () => handles.forEach(clearTimeout);
   }, [active]);
   if (!active) return null;
   return (
