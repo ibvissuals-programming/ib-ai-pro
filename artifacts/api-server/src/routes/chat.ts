@@ -21,6 +21,7 @@ import { retrieveRelevantMemories } from "../services/memoryRetriever";
 import { extractAndStoreMemory } from "../services/memoryExtractor";
 import { pushEvent } from "../lib/eventTracker";
 import { incChatRequest, incChatMessage } from "../lib/statsCounter";
+import { normalizeAIError } from "../lib/aiOrchestrator";
 
 const router = Router();
 
@@ -318,11 +319,14 @@ router.post(
       const errMsg = err instanceof Error ? err.message : String(err);
       logger.error({ err: errMsg }, "LLM stream error");
 
-      // Sanitize: never send raw provider error messages to clients
+      // Sanitize: never send raw provider error messages to clients.
+      // Map the actual error to a canonical code (rate_limit, quota_exceeded,
+      // provider_unavailable, etc.) so the frontend can show an accurate message.
+      const { code: errCode } = normalizeAIError(err, "chat");
       res.write(
         sseEvent({
           error: true,
-          code: "provider_unavailable",
+          code: errCode,
         })
       );
     } finally {

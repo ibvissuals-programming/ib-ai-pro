@@ -487,16 +487,42 @@ export function useChat(username, { onCreditExhausted } = {}) {
       const dataUrl = `data:${mimeType};base64,${base64}`;
       const result = await editImage(dataUrl, editPrompt);
 
-      finalMessages = [
-        ...updatedMessages,
-        {
-          id: aiMsgId,
-          role: 'assistant',
-          type: 'image-edit-result',
-          content: result.b64Image,
-          timestamp,
-        },
-      ];
+      if (result.enhancementMode) {
+        // Safe Enhancement Mode — FAL_KEY absent or fal.ai unavailable.
+        // b64Image is "" — show AI suggestions as a text message instead of a
+        // broken/empty image card.
+        const header = result.falConfigured === false
+          ? 'AI image editing requires a **FAL_KEY** secret (fal.ai) to be configured. Your original image is unchanged.\n\nHere are professional cinematic edit suggestions powered by Gemini AI:'
+          : 'Fal.ai image editing is temporarily unavailable. Your original image is unchanged.\n\nHere are professional cinematic edit suggestions powered by Gemini AI:';
+
+        const suggestionLines = (result.suggestions ?? [])
+          .map((s, idx) => `${idx + 1}. ${s}`)
+          .join('\n');
+
+        const extras = [
+          result.colorGrade       ? `**Color Grade:** ${result.colorGrade}` : '',
+          result.lightingNotes    ? `**Lighting:** ${result.lightingNotes}` : '',
+          result.compositionNotes ? `**Composition:** ${result.compositionNotes}` : '',
+        ].filter(Boolean).join('\n');
+
+        const content = [header, suggestionLines, extras].filter(Boolean).join('\n\n');
+
+        finalMessages = [
+          ...updatedMessages,
+          { id: aiMsgId, role: 'assistant', content, timestamp },
+        ];
+      } else {
+        finalMessages = [
+          ...updatedMessages,
+          {
+            id: aiMsgId,
+            role: 'assistant',
+            type: 'image-edit-result',
+            content: result.b64Image,
+            timestamp,
+          },
+        ];
+      }
     } catch (err) {
       console.error('[IB AI Assistant] Image edit failed:', err.message);
       const userFacingError = err.code === 'CREDITS_EXHAUSTED'
@@ -618,7 +644,7 @@ export function useChat(username, { onCreditExhausted } = {}) {
       }
       setIsTyping(false);
     }
-  }, [chatData, activeChatId, persist, username, onCreditExhausted]);
+  }, [chatData, activeChatId, persist, onCreditExhausted]);
 
   const clearChat = useCallback(() => {
     if (!chatData || !activeChatId) return;

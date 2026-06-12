@@ -289,6 +289,12 @@ export default function VoiceStudio() {
     if (urlVoice && VOICES.some(v => v.id === urlVoice)) setVoice(urlVoice);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Unmount guard — prevents setState on unmounted component ─────────────
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    return () => { mountedRef.current = false; };
+  }, []);
+
   // ── Load persistent history on mount ─────────────────────────────────────
   useEffect(() => {
     fetchTtsHistory()
@@ -309,14 +315,16 @@ export default function VoiceStudio() {
       const voiceLabel = activeVoice.label;
 
       const entry = { text: text.trim(), voiceStyle: selectedVoice, voiceLabel, jobId, audioUrl, timestamp: Date.now() };
+      if (!mountedRef.current) return;
       setResult(entry);
 
       // Optimistically prepend to local history, then refresh from backend
       setHistory(h => [entry, ...h].slice(0, 20));
       setTimeout(() => {
-        fetchTtsHistory().then(setHistory).catch(() => {});
+        if (mountedRef.current) fetchTtsHistory().then(setHistory).catch(() => {});
       }, 1_500);
     } catch (err) {
+      if (!mountedRef.current) return;
       // Differentiate error types for better UX
       const msg = err.message ?? '';
       if (msg.includes('FEATURE_DISABLED') || msg.includes('501')) {
@@ -331,7 +339,7 @@ export default function VoiceStudio() {
         setError('Voice generation temporarily unavailable. Please try again.');
       }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 

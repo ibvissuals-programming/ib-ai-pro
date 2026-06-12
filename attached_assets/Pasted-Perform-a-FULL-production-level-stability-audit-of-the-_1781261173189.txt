@@ -1,0 +1,103 @@
+Perform a FULL production-level stability audit of the IB AI application.
+
+This is NOT a feature audit.
+
+This is a SYSTEM ORCHESTRATION AUDIT.
+
+========================
+SCOPE
+========================
+Analyze ALL flows together:
+
+1. Chat system (streaming + memory)
+2. Image generation pipeline
+3. Image editing (Fal.ai + fallback)
+4. TTS / voice generation
+5. AI provider routing (Gemini / Groq / Safe Mode)
+6. Auth system (JWT, login, session persistence)
+7. Frontend state management across all features
+8. API layer consistency (routes + responses)
+9. Error handling system (global + per-feature)
+10. Loading + fallback UX system
+
+========================
+STEP 1 — ORCHESTRATION MAP
+========================
+Build a full mental model of:
+
+- how requests enter the system
+- how they are routed (chat/image/tts/etc.)
+- how AI providers are selected
+- how fallback systems trigger
+- how responses are normalized before reaching UI
+
+Show a unified request lifecycle diagram in text.
+
+========================
+STEP 2 — CROSS-SYSTEM STATE ANALYSIS
+========================
+Identify shared frontend state issues:
+
+- conflicting loading states between features
+- global vs local state mismatches
+- race conditions between API calls
+- stale closures affecting multiple modules
+- inconsistent response shapes across endpoints
+
+Focus on SYSTEM interactions, not individual components.
+
+========================
+STEP 3 — FAILURE MODE SIMULATION
+========================
+Simulate real-world usage:
+
+- user sends chat while image is generating
+- user triggers image edit while TTS is playing
+- AI provider switches mid-request
+- network delay during streaming response
+- backend restarts mid-session
+
+Identify where UI breaks or desyncs occur.
+
+========================
+STEP 4 — ROOT CAUSE CLASSIFICATION
+========================
+For each issue found classify:
+
+- STATE BUG (React / frontend)
+- API CONTRACT MISMATCH
+- ASYNC RACE CONDITION
+- BACKEND LOGIC ISSUE
+- AI PROVIDER FAILURE HANDLING GAP
+- UX FALLBACK DESIGN ISSUE
+
+Provide:
+- exact file
+- exact line
+- exact variable/state causing issue
+
+========================
+STEP 5 — MINIMAL PATCH RULE
+========================
+If fixes are needed:
+
+- Do NOT redesign architecture
+- Do NOT introduce new frameworks
+- Do NOT rewrite backend
+- Only apply surgical fixes
+- Preserve all existing APIs
+
+========================
+OUTPUT FORMAT
+========================
+
+SECTION 1: SYSTEM ARCHITECTURE MAP
+SECTION 2: GLOBAL STATE ISSUES
+SECTION 3: CROSS-FEATURE RACE CONDITIONS
+SECTION 4: ERROR HANDLING GAPS
+SECTION 5: UI CONSISTENCY ISSUES
+
+FINAL RESULT:
+- SYSTEM STABILITY SCORE (0–10)
+- PRODUCTION READINESS: YES / NO
+- BLOCKING ISSUES LIST (if any)

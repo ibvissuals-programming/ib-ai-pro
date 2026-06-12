@@ -486,7 +486,7 @@ export default function VideoStudio() {
       } else {
         setError(msg || 'Request failed — please try again.');
       }
-      setStatusMsg(error);
+      setStatusMsg(msg || 'Request failed — please try again.');
     }
   };
 
