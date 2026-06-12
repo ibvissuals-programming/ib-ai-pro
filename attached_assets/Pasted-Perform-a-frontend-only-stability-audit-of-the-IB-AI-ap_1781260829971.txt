@@ -1,0 +1,83 @@
+Perform a frontend-only stability audit of the IB AI application.
+
+Do NOT modify backend logic unless absolutely required to fix a frontend-breaking contract mismatch.
+
+FOCUS: UI glitches, flickering, inconsistent states, and incorrect rendering.
+
+========================
+STEP 1 — UI STATE MAPPING
+========================
+- Identify all major frontend state stores (React state, context, hooks, query clients)
+- Map:
+  - loading states
+  - error states
+  - fallback states
+  - AI response states (Gemini, Fal.ai, Groq, Safe Mode)
+
+Detect where multiple states overlap or conflict.
+
+========================
+STEP 2 — GLITCH DETECTION
+========================
+Find UI issues such as:
+- flickering components (loading → error → success → fallback loops)
+- inconsistent rendering between backend response types
+- duplicate rendering of AI responses
+- stale state not being cleared between requests
+- race conditions in async AI/image/chat flows
+- conditional rendering bugs (false positives for "unavailable", "loading forever", etc.)
+
+========================
+STEP 3 — COMPONENT TRACE
+========================
+Trace UI flow for:
+- Chat interface
+- Image generation
+- Image editing
+- TTS player
+- AI fallback system UI
+
+For each:
+- input event
+- API call
+- response handling
+- state update
+- final render
+
+========================
+STEP 4 — ROOT CAUSE IDENTIFICATION
+========================
+For each glitch found:
+- exact file
+- exact line
+- exact state variable causing issue
+- whether issue is:
+  - React state bug
+  - stale async closure
+  - incorrect conditional rendering
+  - missing loading reset
+  - race condition
+
+========================
+STEP 5 — MINIMAL FIX RULE
+========================
+- Fix ONLY UI/state issues
+- Do NOT redesign components
+- Do NOT refactor backend
+- Do NOT introduce new libraries
+- Keep changes surgical
+
+========================
+OUTPUT FORMAT:
+========================
+For each issue:
+
+ISSUE:
+ROOT CAUSE:
+FILE + LINE:
+FIX:
+VERIFICATION:
+
+End with:
+- UI STABILITY SCORE (0–10)
+- LIST OF REMAINING GLITCHES (if any)
