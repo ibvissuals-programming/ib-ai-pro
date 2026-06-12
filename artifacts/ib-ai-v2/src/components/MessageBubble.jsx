@@ -128,7 +128,7 @@ function renderContent(text) {
     }
 
     if (!trimmed) {
-      result.push(<div key={`br-${i}`} className="h-2" />);
+      result.push(<div key={`br-${i}`} className="h-1" />);
       i++;
       continue;
     }

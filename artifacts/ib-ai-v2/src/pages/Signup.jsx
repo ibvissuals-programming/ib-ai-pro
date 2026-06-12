@@ -76,7 +76,7 @@ export default function Signup() {
           <p className="text-sm text-muted-foreground mt-1.5">Create your account</p>
         </div>
 
-        <div className="glass-card p-6">
+        <div className="glass-card-premium p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">

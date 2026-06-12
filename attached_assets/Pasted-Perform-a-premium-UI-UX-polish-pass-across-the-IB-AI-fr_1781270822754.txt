@@ -1,0 +1,73 @@
+Perform a premium UI/UX polish pass across the IB AI frontend.
+
+Goal:
+Upgrade the interface to feel like a modern, high-end AI product (ChatGPT / Gemini / Claude level polish). Focus ONLY on visual, spacing, typography, motion, and interaction quality — NOT backend logic.
+
+Core principles:
+- Do NOT break existing functionality
+- Do NOT change API contracts or backend logic
+- Do NOT redesign architecture
+- Only improve UI/UX layer (React components + CSS)
+- Maintain current feature set exactly
+- Make everything feel smoother, more premium, and more cohesive
+
+UI Direction:
+- Modern glassmorphism (refined, not overdone)
+- Softer spacing rhythm (8px grid consistency)
+- Better typography hierarchy (headings, messages, metadata)
+- Subtle animations (fade, slide, shimmer — no heavy motion)
+- ChatGPT-style conversation clarity
+- Gemini-style clean input + spacing balance
+- Premium code blocks and message bubbles
+- Better empty states and loading states
+- Improved focus states and hover micro-interactions
+
+Specific upgrades to implement:
+
+1. Global Styling (index.css or design tokens)
+- Normalize border radius system (rounded-xl consistency)
+- Improve shadows (softer + layered, not harsh)
+- Add subtle background noise/gradient system if missing
+- Define consistent spacing scale usage
+- Add shimmer loading animation + skeleton states
+- Improve focus ring system (input + buttons)
+
+2. Chat UI (Message system)
+- Upgrade message bubble spacing and readability
+- Improve user vs assistant visual separation
+- Add better timestamp/metadata styling (if present)
+- Enhance code block UI (header, language label, copy button)
+- Improve inline code styling
+- Add subtle entry animations for new messages
+
+3. Input Composer
+- Make input feel more “alive” and premium
+- Improve focus state glow (subtle, not aggressive)
+- Improve send button states (idle / hover / active / disabled)
+- Add smoother transitions for height changes (if textarea)
+- Ensure spacing feels balanced and centered
+
+4. Empty States / Loading States
+- Replace plain empty screens with modern AI-style prompts
+- Add skeleton loaders for chat responses
+- Improve typing indicator animation (more natural rhythm)
+
+5. Overall UX polish
+- Ensure consistent spacing across all pages
+- Improve hover feedback consistency
+- Reduce visual noise and unnecessary borders
+- Align all UI elements to a consistent design system
+- Make it feel like a “premium AI operating system”
+
+Constraints:
+- Do NOT modify backend
+- Do NOT change API routes or auth logic
+- Do NOT introduce new dependencies unless absolutely necessary
+- Keep changes strictly in UI layer (React + CSS/Tailwind)
+- Preserve all existing functionality
+
+Output:
+Apply changes directly to codebase and summarize:
+- Files modified
+- UI improvements made
+- Any design system improvements introduced

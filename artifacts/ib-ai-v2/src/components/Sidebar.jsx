@@ -253,8 +253,10 @@ export function Sidebar({ chats, activeChatId, onSwitch, onNew, onDelete, onRena
       {/* Studio tool nav links */}
       <div className="px-3 pb-1 space-y-0.5">
         <Link to="/image-tools">
-          <a className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-all border border-transparent hover:border-border/40 group">
-            <ImageIcon size={14} className="shrink-0 group-hover:text-primary transition-colors" />
+          <a className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all border border-transparent hover:border-border/40 group">
+            <div className="w-5 h-5 rounded-md bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
+              <ImageIcon size={11} className="text-primary/70 group-hover:text-primary transition-colors" />
+            </div>
             <span className="font-medium">AI Image Studio</span>
           </a>
         </Link>

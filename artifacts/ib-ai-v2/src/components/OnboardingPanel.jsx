@@ -157,20 +157,23 @@ export function OnboardingPanel({ onSend }) {
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.3, delay: 0.42 + i * 0.06, ease: 'easeOut' }}
+              whileHover={{ x: 2 }}
               onClick={() => onSend(text)}
               className="
                 flex items-center gap-3 px-3.5 py-2.5 rounded-xl
-                border border-border/50 bg-secondary/30
-                hover:bg-secondary/60 hover:border-primary/20
+                border border-border/40 bg-secondary/20
+                hover:bg-secondary/50 hover:border-primary/25
                 transition-all duration-150 text-left
-                active:scale-[0.98] group cursor-pointer
+                active:scale-[0.97] group cursor-pointer
               "
             >
-              <Icon
-                size={13}
-                className="text-muted-foreground/50 group-hover:text-primary/60 transition-colors shrink-0"
-              />
-              <span className="text-xs text-muted-foreground group-hover:text-foreground/80 transition-colors leading-relaxed">
+              <div className="w-5 h-5 rounded-md bg-secondary flex items-center justify-center shrink-0 group-hover:bg-primary/10 transition-colors">
+                <Icon
+                  size={11}
+                  className="text-muted-foreground/50 group-hover:text-primary/70 transition-colors"
+                />
+              </div>
+              <span className="text-xs text-muted-foreground/70 group-hover:text-foreground/80 transition-colors leading-relaxed">
                 {text}
               </span>
             </motion.button>

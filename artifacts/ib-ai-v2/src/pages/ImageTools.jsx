@@ -197,13 +197,14 @@ function ProcessingStageIndicator({ active }) {
 function ErrorBox({ message }) {
   return (
     <motion.div
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: 'auto' }}
-      exit={{ opacity: 0, height: 0 }}
-      className="flex items-start gap-2.5 px-3.5 py-3 rounded-xl bg-destructive/10 border border-destructive/25 text-destructive text-sm"
+      initial={{ opacity: 0, y: -4, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -4, scale: 0.98 }}
+      transition={{ duration: 0.18, ease: 'easeOut' }}
+      className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-xl bg-destructive/7 border border-destructive/18 text-destructive/85"
     >
-      <AlertCircle size={14} className="shrink-0 mt-0.5" />
-      <span className="leading-relaxed">{message}</span>
+      <AlertCircle size={13} className="shrink-0 mt-0.5 opacity-75" />
+      <span className="text-xs leading-relaxed">{message}</span>
     </motion.div>
   );
 }
@@ -1327,16 +1328,18 @@ export default function ImageTools() {
           )}
 
           {/* Mode tabs */}
-          <div className="flex gap-1 p-1 rounded-xl bg-secondary/40 border border-border/40 w-fit">
+          <div className="flex gap-0.5 p-1 rounded-xl bg-secondary/30 border border-border/35 w-fit">
             {TABS.map(({ id, icon: Icon, label }) => (
               <button
                 key={id}
                 onClick={() => setTab(id)}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  tab === id ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  tab === id
+                    ? 'bg-background/90 text-foreground shadow-md ring-1 ring-white/6'
+                    : 'text-muted-foreground hover:text-foreground/80 hover:bg-secondary/40'
                 }`}
               >
-                <Icon size={13} />
+                <Icon size={13} className={tab === id ? 'text-primary' : ''} />
                 {label}
               </button>
             ))}
