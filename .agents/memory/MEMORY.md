@@ -4,3 +4,4 @@
 - [HuggingFace image pipeline](hf-image-pipeline.md) — HF router endpoint quirks, Accept header, model params, and why api-inference.huggingface.co is unreachable from Replit.
 - [Free image editing pipeline](free-img2img-pipeline.md) — HF inference API does not support img2img (all models 400). Two-path: Fal.ai FLUX.1-dev img2img (FAL_KEY, identity preserved) or HF FLUX.1-schnell t2i fallback (identity drifts).
 - [Safe Enhancement Mode](safe-enhancement-mode.md) — When Fal.ai is absent or fails (403/402/$0 balance), runFreeImg2Img catches all errors and returns EnhancementData instead of throwing; frontend shows EnhancementPanel instead of OutputCard; never emits "unexpected error".
+- [Vite proxy JSON error fix](vite-proxy-json-error.md) — "Server error — please try again" fallback fires when Vite proxy returns HTML 502; fix is configure+onError in vite.config.ts to return JSON 503.

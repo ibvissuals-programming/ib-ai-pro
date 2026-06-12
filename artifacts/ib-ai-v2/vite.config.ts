@@ -57,6 +57,18 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:8099",
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on("error", (_err, _req, res) => {
+            res.writeHead(503, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                success: false,
+                error:
+                  "Service temporarily unavailable — the server is starting up. Please try again in a moment.",
+              }),
+            );
+          });
+        },
       },
     },
   },
