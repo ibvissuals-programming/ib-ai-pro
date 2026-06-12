@@ -203,9 +203,9 @@ export async function signup(username, password) {
     if (!res.ok) {
       // Hard validation / conflict — never retry
       if (res.status === 400 || res.status === 409) {
-        return { success: false, error: data.error || 'Registration failed' };
+        return { success: false, error: data.error || data.message || 'Registration failed' };
       }
-      return { success: false, error: data.error || 'Server error — please try again' };
+      return { success: false, error: data.error || data.message || 'Service temporarily unavailable' };
     }
 
     if (!data.token || !data.user) {
@@ -243,9 +243,9 @@ export async function login(username, password) {
     if (!res.ok) {
       // Hard auth failure — never retry
       if (res.status === 401 || res.status === 400) {
-        return { success: false, error: data.error || 'Invalid username or password' };
+        return { success: false, error: data.error || data.message || 'Invalid username or password' };
       }
-      return { success: false, error: data.error || 'Server error — please try again' };
+      return { success: false, error: data.error || data.message || 'Service temporarily unavailable' };
     }
 
     if (!data.token || !data.user) {
@@ -319,9 +319,9 @@ export async function recoveryResetPassword(username, recoveryKey, newPassword) 
 
     if (!res.ok) {
       if (res.status === 401 || res.status === 400 || res.status === 503) {
-        return { success: false, error: data.error || 'Recovery reset failed' };
+        return { success: false, error: data.error || data.message || 'Recovery reset failed' };
       }
-      return { success: false, error: data.error || 'Server error — please try again' };
+      return { success: false, error: data.error || data.message || 'Service temporarily unavailable' };
     }
 
     return { success: true };

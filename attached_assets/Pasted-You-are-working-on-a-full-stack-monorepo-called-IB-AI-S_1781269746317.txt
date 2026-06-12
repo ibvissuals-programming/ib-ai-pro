@@ -1,0 +1,95 @@
+You are working on a full-stack monorepo called IB AI Studio Lab.
+
+Your goal is to fix stability issues and ensure the app boots reliably on every import without repeated manual setup.
+
+DO NOT redesign the app. DO NOT add new features. ONLY fix stability, environment handling, and login/server errors.
+
+----------------------------------------
+TASK 1 — CENTRAL ENV SYSTEM
+----------------------------------------
+Create a single centralized environment loader:
+
+- artifacts/api-server/src/lib/env.ts
+
+It must:
+- Read all process.env values from one place
+- Validate required variables on startup
+- Throw clear errors for missing critical variables
+- Provide safe fallback only for SESSION_SECRET (dev mode)
+
+Required envs:
+- DATABASE_URL (CRITICAL)
+- JWT_SECRET (CRITICAL)
+- SESSION_SECRET (fallback allowed)
+- GEMINI_API_KEY (required for AI features)
+- GROQ_API_KEY (optional)
+- CEO_RECOVERY_KEY (optional)
+
+----------------------------------------
+TASK 2 — BOOT VALIDATION SYSTEM
+----------------------------------------
+Create:
+
+- artifacts/api-server/src/bootstrap/envBootstrap.ts
+
+It must:
+- Print a startup banner showing env status (✓ / ✗)
+- Stop server ONLY if DATABASE_URL or JWT_SECRET is missing
+- Allow SAFE MODE if AI keys are missing
+- Never crash silently
+
+----------------------------------------
+TASK 3 — FIX LOGIN 500 ERROR
+----------------------------------------
+Locate auth/login route.
+
+Replace generic catch blocks:
+
+BEFORE:
+catch (err) {
+  res.status(500).json({ message: "Server error" });
+}
+
+AFTER:
+catch (err) {
+  console.error("AUTH ERROR:", err);
+  return res.status(500).json({
+    success: false,
+    error: err?.message || "Authentication failed"
+  });
+}
+
+Ensure frontend receives "error" field consistently.
+
+----------------------------------------
+TASK 4 — FRONTEND ERROR HANDLING FIX
+----------------------------------------
+In login/auth service:
+
+- Never show generic "Server error — please try again"
+- Always prefer:
+  data.error → data.message → fallback message
+
+Fallback:
+"Service temporarily unavailable"
+
+----------------------------------------
+TASK 5 — KEEP ARCHITECTURE UNCHANGED
+----------------------------------------
+DO NOT:
+- Add new frameworks
+- Add new auth systems
+- Modify frontend UI structure
+- Introduce new AI providers
+- Refactor business logic
+
+ONLY fix stability + environment + login reliability.
+
+----------------------------------------
+EXPECTED RESULT
+----------------------------------------
+- App boots cleanly on every Replit import
+- No repeated manual secret debugging loops
+- Login never shows generic 500 error screen
+- AI runs in SAFE MODE if keys are missing
+- System is stable and predictable on startup

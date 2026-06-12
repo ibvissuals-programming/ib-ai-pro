@@ -147,10 +147,13 @@ function printBootstrapBanner(s: BootstrapStatus): void {
   }
 
   if (s.missing.length > 0) {
-    logger.warn(
-      { missing: s.missing },
-      "[bootstrap] AI provider secrets missing — SAFE MODE active"
-    );
+    // Only log "SAFE MODE active" when Gemini specifically is absent — Groq being
+    // absent does not activate safe mode (Gemini fallback is used automatically).
+    const geminiMissing = s.missing.includes("GEMINI_API_KEY");
+    const msg = geminiMissing
+      ? "[bootstrap] AI provider secrets missing — SAFE MODE active"
+      : "[bootstrap] Optional AI provider secrets absent — Gemini fallback active";
+    logger.warn({ missing: s.missing }, msg);
     for (const key of s.missing) {
       const def = getSecretDef(key);
       if (def) {

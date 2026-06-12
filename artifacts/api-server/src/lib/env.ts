@@ -1,19 +1,27 @@
 /**
- * env.ts — Build metadata and provider health logging.
+ * env.ts — Central environment access + build metadata + provider health logging.
  *
- * Single source of truth for:
+ * Single import point for all environment concerns:
+ *   - ENV typed accessors (re-exported from envConfig.ts)
+ *   - validateEnv() startup check (re-exported from envConfig.ts)
  *   - Build version / date
- *   - Provider availability checks (reads from requiredSecrets.ts)
+ *   - Provider availability checks
  *   - Startup health logging
  *
  * Rules:
  *   - Never throw here. Log warnings for missing optional config.
  *   - Never log secret values — only boolean presence.
- *   - Secret definitions live in requiredSecrets.ts, not here.
+ *   - Secret definitions live in requiredSecrets.ts.
+ *   - All process.env reads go through ENV accessors below.
  */
 import { logger } from "./logger";
 import { isGeminiConfigured } from "./geminiEnv";
 import { getSecretDef } from "./requiredSecrets";
+
+// Re-export the typed ENV accessor map and validateEnv so callers only need
+// to import from this one file instead of also importing envConfig.ts.
+export { ENV, validateEnv, printBootStatusBanner } from "./envConfig";
+export type { EnvVar, EnvValidationResult } from "./envConfig";
 
 export const VERSION   = "1.0.0";
 export const BUILD_DATE = "2026-05-19";
