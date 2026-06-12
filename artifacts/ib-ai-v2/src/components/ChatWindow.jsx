@@ -14,19 +14,20 @@ function TypingIndicator() {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 8 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
       className="flex gap-3 items-end"
     >
-      <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center bg-secondary border border-border text-muted-foreground">
+      <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center bg-secondary border border-border/60 text-muted-foreground">
         <Cpu size={13} />
       </div>
-      <div className="px-4 py-3 rounded-2xl rounded-tl-sm glass-card">
-        <div className="flex gap-1.5 items-center h-4">
+      <div className="px-4 py-3.5 rounded-2xl rounded-tl-sm glass-card">
+        <div className="flex gap-1 items-center h-4">
           {[0, 1, 2].map((i) => (
             <motion.div
               key={i}
-              className="w-1.5 h-1.5 rounded-full bg-muted-foreground"
-              animate={{ opacity: [0.3, 1, 0.3], y: [0, -3, 0] }}
-              transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+              className="w-2 h-2 rounded-full bg-primary/50"
+              animate={{ opacity: [0.25, 0.9, 0.25], scale: [0.8, 1.15, 0.8] }}
+              transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.18, ease: 'easeInOut' }}
             />
           ))}
         </div>
@@ -41,46 +42,51 @@ function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center px-6">
       <motion.div
-        initial={{ opacity: 0, scale: 0.92, y: 8 }}
+        initial={{ opacity: 0, scale: 0.88, y: 12 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: 'easeOut' }}
+        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
         className="mb-5"
       >
-        <IbLogo variant="mark" size={56} />
+        <IbLogo variant="mark" size={52} />
       </motion.div>
       <motion.div
-        initial={{ opacity: 0, y: 8 }}
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, delay: 0.08, ease: 'easeOut' }}
+        transition={{ duration: 0.38, delay: 0.08, ease: 'easeOut' }}
       >
-        <h3 className="text-base font-bold text-foreground mb-1.5 tracking-tight" style={{ letterSpacing: '-0.02em' }}>
+        <h3 className="text-[17px] font-bold text-foreground mb-2 tracking-tight" style={{ letterSpacing: '-0.03em' }}>
           IB <span className="text-primary">AI</span> Studio Lab
         </h3>
-        <p className="text-sm text-muted-foreground max-w-xs leading-relaxed mb-6">
-          Ask me anything — code, ideas, writing, analysis, or just a conversation.
+        <p className="text-sm text-muted-foreground/70 max-w-[280px] leading-relaxed mb-7">
+          Ask anything — code, ideas, writing, or just a conversation.
         </p>
       </motion.div>
       <motion.div
-        initial={{ opacity: 0, y: 8 }}
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, delay: 0.16, ease: 'easeOut' }}
-        className="flex flex-col gap-2 w-full max-w-sm"
+        transition={{ duration: 0.32, delay: 0.18, ease: 'easeOut' }}
+        className="flex flex-col gap-2 w-full max-w-[320px]"
       >
         {[
-          { text: 'Explain a concept in simple terms' },
+          { text: 'Explain a concept simply' },
           { text: 'Help me write or improve content' },
-          { icon: <ImagePlus size={11} />, text: 'Drop an image to analyze or edit it' },
+          { icon: <ImagePlus size={11} />, text: 'Drop an image to analyze or edit' },
         ].map((item, i) => (
           <div
             key={i}
-            className="text-left text-xs text-muted-foreground px-3 py-2.5 rounded-xl border border-border/50 bg-secondary/30 flex items-center gap-2 leading-relaxed hover:border-primary/20 hover:text-foreground/70 transition-colors"
+            className="text-left text-xs text-muted-foreground/60 px-3.5 py-3 rounded-xl border border-border/40 bg-secondary/20 flex items-center gap-2.5 leading-relaxed hover:border-primary/25 hover:text-muted-foreground hover:bg-secondary/40 transition-all cursor-default"
           >
             {item.icon ? (
               <>
-                <span className="text-primary shrink-0">{item.icon}</span>
+                <span className="text-primary/70 shrink-0">{item.icon}</span>
                 {item.text}
               </>
-            ) : item.text}
+            ) : (
+              <>
+                <span className="w-1 h-1 rounded-full bg-border shrink-0" />
+                {item.text}
+              </>
+            )}
           </div>
         ))}
       </motion.div>

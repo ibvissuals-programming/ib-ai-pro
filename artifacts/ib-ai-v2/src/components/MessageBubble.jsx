@@ -52,24 +52,23 @@ function CodeBlock({ lang, code }) {
   };
 
   return (
-    <div className="relative my-2 rounded-lg glass-card bg-black/30 overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/40">
-        <span className="text-[10px] text-muted-foreground font-mono tracking-wide uppercase">
-          {lang || 'code'}
-        </span>
+    <div className="code-block-wrap">
+      <div className="code-block-header">
+        <span className="code-block-lang">{lang || 'code'}</span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors py-0.5 px-1.5 rounded hover:bg-white/5"
+          className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-all py-0.5 px-2 rounded-md hover:bg-white/8 active:scale-95"
           aria-label="Copy code"
         >
-          {copied ? <Check size={9} /> : <Copy size={9} />}
-          <span>{copied ? 'Copied!' : 'Copy code'}</span>
+          {copied ? (
+            <><Check size={9} className="text-emerald-400" /><span className="text-emerald-400">Copied!</span></>
+          ) : (
+            <><Copy size={9} /><span>Copy</span></>
+          )}
         </button>
       </div>
-      <pre className="overflow-x-auto">
-        <code className={`block px-4 py-3 text-xs font-mono leading-relaxed text-foreground/90 language-${lang}`}>
-          {code}
-        </code>
+      <pre className="code-block-body">
+        <code className={`language-${lang}`}>{code}</code>
       </pre>
     </div>
   );
@@ -88,7 +87,7 @@ function renderInline(line) {
     }
     if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
       return (
-        <code key={j} className="px-1 py-0.5 rounded text-[11px] font-mono bg-white/10 text-primary/90 border border-white/10">
+        <code key={j} className="inline-code">
           {part.slice(1, -1)}
         </code>
       );
@@ -469,11 +468,11 @@ export function MessageBubble({
         }`}
       >
         <div
-          className={`px-4 py-3 rounded-2xl text-sm leading-relaxed transition-colors ${
+          className={`px-4 py-3.5 rounded-2xl text-sm leading-[1.7] transition-colors ${
             isAnalysis || isEditResult
               ? 'glass-card text-foreground rounded-tl-sm w-full'
               : isUser
-              ? `bg-primary text-primary-foreground rounded-tr-sm shadow-lg shadow-primary/10 ${isSelected ? 'ring-1 ring-primary/40' : ''}`
+              ? `bubble-user text-primary-foreground rounded-tr-sm ${isSelected ? 'ring-1 ring-primary/40' : ''}`
               : isPromptEngineering
               ? 'glass-card border-purple-500/30 text-foreground rounded-tl-sm'
               : `glass-card text-foreground rounded-tl-sm ${isSelected ? 'ring-1 ring-primary/30' : ''}`

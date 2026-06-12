@@ -1,0 +1,97 @@
+UI POLISH & PREMIUM DESIGN OVERHAUL (IB AI STUDIO)
+
+Goal:
+Upgrade the UI to feel premium, modern, and polished like ChatGPT / Gemini / Apple Glass UI while preserving ALL existing functionality and architecture.
+
+IMPORTANT CONSTRAINTS:
+- Do NOT change backend logic
+- Do NOT break existing routes or APIs
+- Do NOT modify business logic
+- Only improve frontend UI/UX layer
+- Keep components and file structure intact
+- No redesign of architecture, only visual + interaction polish
+
+FOCUS AREAS:
+
+1. GLOBAL VISUAL SYSTEM
+- Introduce consistent glassmorphism design language
+- Subtle blur + transparency layers (no overuse)
+- Soft shadows (no harsh borders)
+- Smooth gradients (dark premium theme preferred)
+- Refined spacing system (8pt rhythm)
+- Unified border radius scale (8px–20px max)
+
+2. TYPOGRAPHY UPGRADE
+- Improve font hierarchy (ChatGPT-like clarity)
+- Strong title vs body distinction
+- Softer secondary text (muted opacity system)
+- Increase readability in chat and tool panels
+
+3. CHAT UI (CORE EXPERIENCE)
+- Redesign message bubbles:
+  - Cleaner spacing
+  - Better grouping per speaker
+  - Subtle hover states
+  - Smooth entry animations (fade + slide)
+- Improve AI responses readability:
+  - Better line spacing
+  - Code blocks more premium styled
+  - Image outputs framed elegantly
+
+4. INPUT BAR (CRITICAL)
+- Make input feel like ChatGPT / Gemini:
+  - Floating glass container
+  - Smooth focus glow
+  - Rounded, soft edges
+  - Better send button animation
+  - Clear disabled/loading states
+
+5. IMAGE TOOLS PANEL
+- Upgrade layout to feel like a creative studio:
+  - Cards with soft elevation
+  - Better preview framing
+  - Cleaner error/success states
+  - Replace harsh error banners with subtle status chips
+  - Improve Fal.ai fallback messaging UI
+
+6. LOADING & STATES
+- Replace basic loaders with:
+  - Subtle shimmer / pulse animation
+  - Soft skeleton screens
+  - Non-intrusive progress indicators
+
+7. MICRO-INTERACTIONS
+- Add:
+  - Hover lift effects (very subtle)
+  - Smooth transitions (200–300ms ease)
+  - Button press feedback
+  - Soft focus rings
+
+8. SYSTEM CONSISTENCY
+- Ensure ALL components follow same design system:
+  - Buttons
+  - Inputs
+  - Cards
+  - Modals
+  - Alerts
+
+9. ERROR UX POLISH
+- Replace harsh error messages with:
+  - Soft status chips
+  - Context-aware fallback text
+  - Less technical wording for users
+
+10. OVERALL GOAL
+Make the app feel:
+- Premium
+- Minimal
+- Modern SaaS (ChatGPT / Gemini level)
+- Smooth and confident
+- Not “developer-looking” but “product-ready”
+
+SUCCESS CRITERIA:
+- No layout breakage
+- No API changes
+- UI feels 10x more polished
+- Chat feels like a premium AI product
+- Image tools feel like a creative studio

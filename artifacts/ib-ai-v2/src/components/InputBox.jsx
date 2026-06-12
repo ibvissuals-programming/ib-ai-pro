@@ -273,14 +273,8 @@ export function InputBox({ onSend, onSendImage, onSendImageEdit, onClear, onStop
         </AnimatePresence>
 
         {/* Main input container */}
-        <motion.div
-          animate={{
-            boxShadow: focused
-              ? '0 0 0 1px hsl(217 91% 60% / 0.4), 0 4px 20px rgba(0,0,0,0.2)'
-              : '0 4px 20px rgba(0,0,0,0.14)',
-          }}
-          transition={{ duration: 0.15 }}
-          className="relative rounded-2xl glass-input overflow-hidden"
+        <div
+          className={`relative rounded-2xl glass-input overflow-hidden transition-all duration-200 ${focused ? 'input-focused' : ''}`}
         >
           <textarea
             ref={textareaRef}
@@ -292,12 +286,12 @@ export function InputBox({ onSend, onSendImage, onSendImageEdit, onClear, onStop
             disabled={disabled}
             rows={1}
             data-testid="input-message"
-            placeholder="Message IB AI Assistant… or drop an image"
-            className="w-full bg-transparent text-foreground text-sm placeholder:text-muted-foreground/60 resize-none outline-none px-4 py-3.5 pr-28 leading-relaxed disabled:opacity-50"
-            style={{ maxHeight: '120px', minHeight: '52px' }}
+            placeholder="Message IB AI…"
+            className="w-full bg-transparent text-foreground text-sm placeholder:text-muted-foreground/45 resize-none outline-none px-4 py-3.5 pr-36 leading-[1.6] disabled:opacity-50"
+            style={{ maxHeight: '120px', minHeight: '54px' }}
           />
 
-          <div className="absolute right-2 bottom-2 flex items-center gap-1">
+          <div className="absolute right-2 bottom-2 flex items-center gap-0.5">
             {/* Voice input — only rendered when browser supports Web Speech API */}
             {speechSupported && (
               <button
@@ -308,7 +302,7 @@ export function InputBox({ onSend, onSendImage, onSendImageEdit, onClear, onStop
                 className={`p-2 rounded-xl transition-all ${
                   isListening
                     ? 'text-red-400 bg-red-400/10 animate-pulse'
-                    : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-secondary disabled:opacity-30'
+                    : 'text-muted-foreground/40 hover:text-muted-foreground hover:bg-secondary/80 disabled:opacity-30'
                 }`}
               >
                 {isListening ? <MicOff size={14} /> : <Mic size={14} />}
@@ -323,8 +317,8 @@ export function InputBox({ onSend, onSendImage, onSendImageEdit, onClear, onStop
               title="Upload image for analysis"
               className={`p-2 rounded-xl transition-all ${
                 attachedImage
-                  ? 'text-primary bg-primary/10'
-                  : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-secondary disabled:opacity-30'
+                  ? 'text-primary bg-primary/15 hover:bg-primary/20'
+                  : 'text-muted-foreground/40 hover:text-muted-foreground hover:bg-secondary/80 disabled:opacity-30'
               }`}
             >
               <ImagePlus size={14} />
@@ -337,12 +331,12 @@ export function InputBox({ onSend, onSendImage, onSendImageEdit, onClear, onStop
               className={`p-2 rounded-xl transition-all text-xs font-medium ${
                 showClearConfirm
                   ? 'bg-destructive/20 text-destructive border border-destructive/30'
-                  : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-secondary'
+                  : 'text-muted-foreground/40 hover:text-muted-foreground hover:bg-secondary/80'
               }`}
               title={showClearConfirm ? 'Click again to confirm' : 'Clear chat'}
             >
               {showClearConfirm ? (
-                <span className="px-1">Clear?</span>
+                <span className="px-1 text-[11px]">Clear?</span>
               ) : (
                 <Trash2 size={14} />
               )}
@@ -354,7 +348,7 @@ export function InputBox({ onSend, onSendImage, onSendImageEdit, onClear, onStop
                 onClick={onStop}
                 data-testid="button-stop"
                 title="Stop generation"
-                className="p-2 rounded-xl transition-all bg-destructive/15 text-destructive hover:bg-destructive/25 active:scale-95"
+                className="p-2.5 rounded-xl transition-all bg-destructive/15 text-destructive hover:bg-destructive/25 active:scale-95 ml-0.5"
               >
                 <Square size={14} />
               </button>
@@ -363,20 +357,20 @@ export function InputBox({ onSend, onSendImage, onSendImageEdit, onClear, onStop
                 onClick={handleSend}
                 disabled={!canSend}
                 data-testid="button-send"
-                className={`p-2 rounded-xl transition-all ${
+                className={`p-2.5 rounded-xl transition-all ml-0.5 ${
                   canSend
-                    ? 'bg-primary text-primary-foreground hover:opacity-90 active:scale-95'
-                    : 'bg-secondary text-muted-foreground/30 cursor-not-allowed'
+                    ? 'bg-primary text-primary-foreground hover:brightness-110 active:scale-95 shadow-lg shadow-primary/30 send-btn-glow'
+                    : 'bg-secondary/60 text-muted-foreground/25 cursor-not-allowed'
                 }`}
               >
                 <ArrowUp size={16} />
               </button>
             )}
           </div>
-        </motion.div>
+        </div>
 
-        <p className="text-center text-xs text-muted-foreground/40 mt-2">
-          Enter to send · Shift + Enter for new line · Drop image anywhere
+        <p className="text-center text-[11px] text-muted-foreground/30 mt-2 tracking-wide">
+          Enter to send · Shift+Enter for new line
         </p>
       </div>
     </>
