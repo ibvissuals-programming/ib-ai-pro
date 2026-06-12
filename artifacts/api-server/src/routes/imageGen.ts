@@ -382,6 +382,7 @@ router.post(
         b64Image:               result.b64Image,
         status:                 result.enhancementMode ? "enhanced" : "success",
         enhancementMode:        result.enhancementMode ?? false,
+        falConfigured:          result.falConfigured   ?? false,
         suggestions:            result.suggestions      ?? [],
         colorGrade:             result.colorGrade       ?? null,
         lightingNotes:          result.lightingNotes    ?? null,

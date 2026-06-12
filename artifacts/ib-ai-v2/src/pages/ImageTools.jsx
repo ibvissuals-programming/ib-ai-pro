@@ -566,7 +566,9 @@ function EnhancementPanel({ result, sourceImage, onClear }) {
       </div>
 
       <p className="text-xs text-muted-foreground leading-relaxed">
-        Fal.ai image editing is temporarily unavailable. Your original image is unchanged. Here are professional cinematic suggestions powered by Gemini AI:
+        {result.falConfigured
+          ? 'Fal.ai image editing is temporarily unavailable. Your original image is unchanged. Here are professional cinematic suggestions powered by Gemini AI:'
+          : 'AI image editing requires a FAL_KEY secret (fal.ai). Your original image is unchanged. Here are professional cinematic suggestions powered by Gemini AI:'}
       </p>
 
       {/* Original image preview */}

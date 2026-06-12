@@ -123,6 +123,7 @@ export interface EditResult {
   explanation?:        ExplanationResult;
   // Safe Enhancement Mode fields — populated when no img2img provider is available
   enhancementMode?:    boolean;
+  falConfigured?:      boolean;   // true = FAL_KEY present (transient failure); false = FAL_KEY absent (config gap)
   suggestions?:        string[];
   colorGrade?:         string;
   lightingNotes?:      string;
@@ -1742,6 +1743,7 @@ export async function editImage(
       qualityIssues:       [],
       contractVersionUsed: CONTRACT_VERSION,
       enhancementMode:     true,
+      falConfigured:       isFalConfigured(),
       suggestions:         data.suggestions,
       colorGrade:          data.colorGrade,
       lightingNotes:       data.lightingNotes,
