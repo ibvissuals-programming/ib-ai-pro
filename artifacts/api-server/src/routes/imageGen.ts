@@ -76,7 +76,13 @@ const VALID_INTENSITIES = ["LOW", "MEDIUM", "HIGH", "EXTREME"] as const;
 const VALID_EDIT_MODES = ["portrait_safe", "cinematic", "style_transfer", "creative", "polish", "social", "luxury", "restore"] as const;
 
 const EditSchema = z.object({
-  image: z.string().min(10, "Image is required"),
+  image: z
+    .string()
+    .min(10, "Image is required")
+    .refine(
+      (v) => v.includes(",") && v.startsWith("data:image/"),
+      "Image must be a data URL (data:image/...;base64,...)",
+    ),
   prompt: z
     .string()
     .min(1, "Edit instruction is required")

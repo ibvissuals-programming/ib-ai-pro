@@ -166,7 +166,7 @@ export async function generateSpeech(
   const response = await withProviderRetry(
     () => withProviderTimeout(
       () => ai.models.generateContent({
-        model:    "gemini-2.0-flash",
+        model:    "gemini-2.5-flash-preview-tts",
         contents: [{ role: "user", parts: [{ text }] }],
         config:   ttsConfig as unknown as GenerateContentConfig,
       }),

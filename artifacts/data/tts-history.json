@@ -1,0 +1,15 @@
+[
+  {
+    "userId": "cd34017e-c72a-4c7f-b18d-274753f7f33f",
+    "type": "tts",
+    "text": "Audit verification test",
+    "voiceStyle": "neutral_assistant",
+    "voiceLabel": "Neutral Assistant",
+    "jobId": "job_mqarz8fn_5ztx9c",
+    "audioUrl": "/api/tts/serve/job_mqarz8fn_5ztx9c",
+    "durationMs": 2331,
+    "textLength": 23,
+    "timestamp": 1781259608503,
+    "id": "324f9e72-f11a-44d8-a7e1-0d133aa07b2f"
+  }
+]
