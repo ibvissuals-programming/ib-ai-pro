@@ -1,0 +1,123 @@
+You are working on a full-stack monorepo called IB AI Studio Lab (IB AI).
+
+Your ONLY goal is to upgrade the UI/UX to a premium, modern AI product experience (ChatGPT / Gemini / Claude level).
+
+DO NOT change backend logic.
+DO NOT change API structure.
+DO NOT change authentication or database.
+DO NOT introduce new frameworks.
+
+This is a PURE UI/UX polish pass.
+
+----------------------------------------------------
+🎯 OBJECTIVE
+----------------------------------------------------
+Transform the UI into a:
+- Premium AI assistant interface (ChatGPT / Gemini inspired)
+- Clean, minimal, soft-glass / modern dark aesthetic
+- Highly readable spacing and hierarchy
+- Smooth interaction feel (not developer tool UI)
+
+----------------------------------------------------
+🎨 DESIGN DIRECTION
+----------------------------------------------------
+
+Apply consistent design system across all frontend:
+
+1. Layout Style
+- Centered chat layout (like ChatGPT)
+- Max width: 720–900px content area
+- Soft background gradient (dark mode default)
+- Remove cluttered side spacing inconsistencies
+
+2. Typography
+- Improve font hierarchy:
+  - Headings: slightly larger, bold, clean
+  - Body: soft white/gray (#E5E7EB style)
+  - Muted text: reduced opacity, not harsh gray
+- Increase line spacing for readability
+
+3. Visual Style
+- Add soft glassmorphism where appropriate:
+  - chat input box
+  - message containers
+  - image preview cards
+- Subtle border (1px rgba white low opacity)
+- Soft blur backgrounds (backdrop-blur)
+
+4. Message UI (VERY IMPORTANT)
+Improve chat bubbles:
+- AI messages: slightly elevated card style
+- User messages: subtle accent tint
+- Add spacing between message blocks
+- Add hover glow subtle effect (no aggressive neon)
+
+5. Buttons & Inputs
+- Rounded corners (12–16px)
+- Soft hover transitions (200–250ms ease)
+- Remove harsh default HTML styling
+- Add primary gradient button style:
+  - subtle blue → purple or emerald gradient
+- Input box should feel like ChatGPT prompt bar
+
+6. Loading States
+Replace all loading indicators with:
+- soft pulsing dots
+- skeleton shimmer for AI responses
+- avoid spinners that feel "dev tool-ish"
+
+7. Image / AI Tools UI (IMPORTANT)
+Upgrade ImageTools / AI panels:
+- card-based layout
+- clearer section separation
+- remove harsh borders
+- add preview glow around generated images
+- enhancement panel should feel like “studio tool”, not debug panel
+
+8. Error States
+Replace harsh error text:
+- "Server error" → "Something went wrong. Please try again."
+- Add soft red accent background for error boxes
+- never show raw stack traces
+
+9. Navigation (if present)
+- minimal top bar styling
+- reduce visual noise
+- keep only essential navigation items visible
+
+----------------------------------------------------
+⚙️ CONSISTENCY RULES
+----------------------------------------------------
+- Use one unified spacing system (8px grid system)
+- Use consistent border radius (12px default)
+- Use consistent shadow system (soft elevation only)
+- No harsh black/white contrast
+- No default HTML UI styles anywhere
+
+----------------------------------------------------
+🚫 DO NOT
+----------------------------------------------------
+- Do NOT change backend logic
+- Do NOT modify API contracts
+- Do NOT add new AI providers
+- Do NOT change authentication flow
+- Do NOT restructure folders
+- Do NOT introduce new pages
+
+----------------------------------------------------
+✅ EXPECTED RESULT
+----------------------------------------------------
+- App feels like a premium AI product
+- Chat interface feels like ChatGPT/Gemini
+- Image tools feel like creative studio
+- Everything is visually consistent
+- No “developer dashboard” appearance left
+
+----------------------------------------------------
+🧠 PRIORITY ORDER
+----------------------------------------------------
+1. Chat UI (highest priority)
+2. Image tools UI
+3. Buttons + inputs consistency
+4. Loading + error states
+5. Global spacing + typography system
