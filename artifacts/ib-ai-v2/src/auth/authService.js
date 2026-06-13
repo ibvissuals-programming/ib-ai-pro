@@ -245,6 +245,15 @@ export async function login(username, password) {
       if (res.status === 401 || res.status === 400) {
         return { success: false, error: data.error || data.message || 'Invalid username or password' };
       }
+      // 503 from the Vite proxy means the backend process is still starting up.
+      // Unlike network-level errors (TypeError), the proxy returns a real HTTP
+      // response so fetch() never throws — the catch-based retry never fires.
+      // Retry once explicitly here so a login attempt made during the brief
+      // startup window succeeds automatically instead of surfacing the error.
+      if (res.status === 503 && attempt === 1) {
+        await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+        continue;
+      }
       return { success: false, error: data.error || data.message || 'Service temporarily unavailable' };
     }
 
