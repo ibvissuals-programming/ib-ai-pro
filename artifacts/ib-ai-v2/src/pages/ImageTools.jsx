@@ -414,7 +414,212 @@ function AnalyseTab() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {insight && !loading && <EnhancementPlanPanel insight={insight} />}
     </div>
+  );
+}
+
+// ── Enhancement plan builder functions ────────────────────────────────────────
+
+function buildAIPrompt(insight) {
+  return [
+    insight.cinematicEditPrompt,
+    insight.lightingDirection && `Relighting: ${insight.lightingDirection}`,
+    insight.colorGrade        && `Color science: ${insight.colorGrade}`,
+    insight.exposureGuidance  && `Exposure: ${insight.exposureGuidance}`,
+    insight.moodTarget        && `Target mood: ${insight.moodTarget}.`,
+  ].filter(Boolean).join(' ');
+}
+
+function buildLightroomGuide(insight) {
+  const mood  = (insight.moodTarget || 'cinematic').toLowerCase();
+  const warm  = ['golden', 'warm', 'vibrant', 'intimate'].some((m) => mood.includes(m));
+  const cool  = ['cinematic', 'dark', 'moody', 'dramatic'].some((m) => mood.includes(m));
+  const wbDir = warm
+    ? 'Shift White Balance toward amber (+500 to +800K).'
+    : cool
+    ? 'Shift White Balance toward blue (−300 to −500K).'
+    : 'Keep White Balance as-shot; adjust by feel.';
+
+  return [
+    'LIGHTROOM EDIT GUIDE',
+    `Scene: ${insight.sceneDescription || ''}`,
+    `Target mood: ${(insight.moodTarget || 'cinematic').toUpperCase()}`,
+    '',
+    '─ LIGHT PANEL ──────────────────────────────────────',
+    insight.exposureGuidance || '',
+    '',
+    '─ COLOR PANEL ──────────────────────────────────────',
+    `White balance: ${wbDir}`,
+    `Current palette: ${insight.colorTone || ''}`,
+    insight.colorGrade || '',
+    '',
+    '─ TONE CURVE ───────────────────────────────────────',
+    `Apply an S-curve: pull shadows down ~10 pts, push highlights up ~10 pts.`,
+    `This reinforces the ${insight.moodTarget || 'cinematic'} contrast direction.`,
+    '',
+    '─ EFFECTS ──────────────────────────────────────────',
+    'Vignette: Amount −20 to −30, Feather 80%. Draws focus to subject.',
+    'Clarity: +15–25 for landscape/architecture; +5–10 for portraits.',
+    '',
+    '─ LIGHTING NOTE ────────────────────────────────────',
+    insight.lightingDirection || '',
+  ].join('\n');
+}
+
+function buildPhotoshopGuide(insight) {
+  const mood       = (insight.moodTarget || 'cinematic').toLowerCase();
+  const warmMoods  = ['golden', 'warm', 'vibrant'];
+  const coolMoods  = ['cinematic', 'dark', 'moody', 'dramatic'];
+  const hlShift    = warmMoods.some((m) => mood.includes(m))
+    ? 'Push highlights toward amber: Cyan −5, Yellow +8, Red +3 (Highlights).'
+    : coolMoods.some((m) => mood.includes(m))
+    ? 'Push highlights toward cool blue: Cyan +5, Yellow −8, Blue +3 (Highlights).'
+    : 'Keep highlights neutral; adjust Whites +5 for clean separation.';
+  const shShift    = coolMoods.some((m) => mood.includes(m))
+    ? 'Teal shadows: Cyan +8, Blue +5, Red −3 (Shadows).'
+    : 'Warm shadows: Red +3, Yellow +3 (Shadows). Avoid crushing blacks.';
+
+  return [
+    'PHOTOSHOP EDIT GUIDE',
+    `Scene: ${insight.sceneDescription || ''}`,
+    `Current lighting: ${insight.lightingConditions || ''}`,
+    `Target: ${(insight.moodTarget || 'cinematic').toUpperCase()} mood`,
+    '',
+    '─ STEP 1 — CURVES ──────────────────────────────────',
+    'Apply an S-curve: anchor centre, pull ¼ shadows down ~10 pts, push ¾ highlights up ~10 pts.',
+    insight.exposureGuidance || '',
+    '',
+    '─ STEP 2 — COLOR BALANCE (HIGHLIGHTS) ──────────────',
+    hlShift,
+    '',
+    '─ STEP 3 — COLOR BALANCE (SHADOWS) ─────────────────',
+    shShift,
+    '',
+    '─ STEP 4 — HUE / SATURATION ─────────────────────────',
+    `Palette reference: ${insight.colorTone || ''}`,
+    'Overall: Vibrance +20, Saturation −5 (avoids oversaturation).',
+    'If faces present: Reds Saturation −8, Reds Luminance +5 (skin protection).',
+    '',
+    '─ STEP 5 — SELECTIVE COLOR ──────────────────────────',
+    insight.colorGrade || '',
+    '',
+    '─ STEP 6 — RELIGHTING DIRECTION ─────────────────────',
+    insight.lightingDirection || '',
+    '',
+    '─ FINISHING ─────────────────────────────────────────',
+    `Composition: ${insight.compositionType || ''}`,
+    `Mood directive: ${insight.mood || ''}`,
+    'Smart Sharpen: Amount 80%, Radius 1.0px, Reduce Noise 10%.',
+  ].join('\n');
+}
+
+// ── EnhancementPlanPanel ──────────────────────────────────────────────────────
+function EnhancementPlanPanel({ insight }) {
+  const [active, setActive] = useState(null);
+  const [copied, setCopied] = useState(null);
+
+  const exports = [
+    {
+      id: 'ai',
+      label: 'AI Prompt',
+      icon: Sparkles,
+      desc: 'For any AI image tool',
+      content: buildAIPrompt(insight),
+    },
+    {
+      id: 'lr',
+      label: 'Lightroom Guide',
+      icon: Sun,
+      desc: 'Panel-by-panel adjustments',
+      content: buildLightroomGuide(insight),
+    },
+    {
+      id: 'ps',
+      label: 'Photoshop Guide',
+      icon: Palette,
+      desc: 'Layer-by-layer workflow',
+      content: buildPhotoshopGuide(insight),
+    },
+  ];
+
+  const handleCopy = (id, text) => {
+    navigator.clipboard.writeText(text).catch(() => {});
+    setCopied(id);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2 }}
+      className="space-y-3 pt-1"
+    >
+      <div className="border-t border-border/30 pt-3 space-y-3">
+        <div className="flex items-center gap-1.5">
+          <Lightbulb size={11} className="text-primary" />
+          <span className="text-[11px] font-semibold text-foreground uppercase tracking-widest">Enhancement Plan</span>
+          <span className="ml-1 text-[10px] text-muted-foreground">· AI Creative Director output</span>
+        </div>
+
+        <div className="grid grid-cols-3 gap-1.5">
+          {exports.map((exp) => {
+            const Icon  = exp.icon;
+            const isOn  = active === exp.id;
+            return (
+              <button
+                key={exp.id}
+                onClick={() => setActive(isOn ? null : exp.id)}
+                className={`flex flex-col items-start gap-1.5 px-2.5 py-2.5 rounded-xl border text-left transition-all ${
+                  isOn
+                    ? 'border-primary/50 bg-primary/8 text-foreground'
+                    : 'border-border/40 bg-background/40 text-muted-foreground hover:text-foreground hover:border-primary/30 hover:bg-primary/5'
+                }`}
+              >
+                <Icon size={12} className={isOn ? 'text-primary' : ''} />
+                <span className="text-[11px] font-medium leading-tight">{exp.label}</span>
+                <span className="text-[10px] opacity-60 leading-tight">{exp.desc}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <AnimatePresence mode="wait">
+          {active && (() => {
+            const exp = exports.find((e) => e.id === active);
+            return (
+              <motion.div
+                key={active}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.15 }}
+                className="rounded-xl border border-border/40 bg-background/60 overflow-hidden"
+              >
+                <div className="flex items-center justify-between px-3 py-2 border-b border-border/30 bg-secondary/30">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    {exp.label}
+                  </span>
+                  <button
+                    onClick={() => handleCopy(exp.id, exp.content)}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-[11px] font-medium"
+                  >
+                    {copied === exp.id
+                      ? <><Check size={10} />Copied</>
+                      : <><Copy size={10} />Copy all</>}
+                  </button>
+                </div>
+                <pre className="text-[11px] text-foreground/85 leading-relaxed whitespace-pre-wrap font-mono px-3 py-3 max-h-72 overflow-y-auto">
+                  {exp.content}
+                </pre>
+              </motion.div>
+            );
+          })()}
+        </AnimatePresence>
+      </div>
+    </motion.div>
   );
 }
 
