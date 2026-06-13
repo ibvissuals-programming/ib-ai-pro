@@ -12,10 +12,9 @@ const GENERATE_URL         = `${BASE}/api/image/generate`;
 const EDIT_URL             = `${BASE}/api/image/edit`;
 const HISTORY_URL          = `${BASE}/api/image/history`;
 const CINEMATIC_PROMPT_URL = `${BASE}/api/image/cinematic-prompt`;
+const PROMPT_EXPAND_URL    = `${BASE}/api/prompt/expand`;
 
 // ── Shared HTTP error handler ─────────────────────────────────────────────────
-// Called only when a response EXISTS and res.ok === false.
-// HTTP status always takes priority — classifyHttpError handles the mapping.
 
 function handleErrorResponse(res, data) {
   if (res.status === 401) throw new Error('Authentication required. Please log in again.');
@@ -29,14 +28,40 @@ function handleErrorResponse(res, data) {
 }
 
 // ── Shared fetch-error handler ────────────────────────────────────────────────
-// Called only from catch blocks where fetch() itself threw (no response exists).
-// Preserves AbortError.name so callers can distinguish cancel from failure.
 
 function throwFetchError(err) {
   const msg = classifyFetchError(err);
   const e = new Error(msg);
   if (err.name === 'AbortError') e.name = 'AbortError';
   throw e;
+}
+
+/**
+ * Expand a brief idea into a rich professional image generation prompt.
+ * Calls POST /api/prompt/expand via Gemini 2.5 Flash.
+ *
+ * @param {string} prompt — brief idea or subject
+ * @param {string} [category] — prompt style category (default: "cinematic")
+ * @returns {Promise<{ original: string, expanded: string, category: string, wordsBefore: number, wordsAfter: number, expansionRatio: number }>}
+ */
+export async function expandPrompt(prompt, category = 'cinematic') {
+  let res;
+  try {
+    res = await fetchWithTimeout(
+      PROMPT_EXPAND_URL,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ prompt, category }),
+      },
+      IMAGE_GEN_MS,
+    );
+  } catch (err) {
+    throwFetchError(err);
+  }
+  const data = await safeJson(res);
+  if (!res.ok) handleErrorResponse(res, data);
+  return data;
 }
 
 /**
@@ -69,10 +94,10 @@ export async function generateImage(prompt) {
  * Edit an existing image using a natural-language instruction.
  * @param {string} imageBase64 — data URL (data:image/...;base64,...)
  * @param {string} prompt — edit instruction
- * @param {string} [editMode] — "portrait_safe" | "cinematic" | "style_transfer" | "creative"
- * @param {string} [intensity] — optional intensity override ("LOW"|"MEDIUM"|"HIGH"|"EXTREME")
- * @param {boolean} [useCinematicAnalysis] — if true, backend runs Gemini vision pre-analysis
- * @returns {Promise<{ b64Image: string, status: string, mode?: string, intensity?: string, cinematicAnalysisUsed?: boolean }>}
+ * @param {string} [editMode]
+ * @param {string} [intensity]
+ * @param {boolean} [useCinematicAnalysis]
+ * @returns {Promise<{ b64Image: string, status: string, mode?: string, intensity?: string }>}
  */
 export async function editImage(imageBase64, prompt, editMode, intensity, useCinematicAnalysis, signal) {
   let res;
@@ -104,7 +129,7 @@ export async function editImage(imageBase64, prompt, editMode, intensity, useCin
 
 /**
  * Fetch the current user's image generation/edit history.
- * @param {number} [limit=30] — max entries to return
+ * @param {number} [limit=30]
  * @returns {Promise<{ entries: Array, count: number }>}
  */
 export async function fetchImageHistory(limit = 30) {
@@ -128,10 +153,11 @@ export async function fetchImageHistory(limit = 30) {
 }
 
 /**
- * Call the Cinematic Insight Engine — analyze an image and return structured
+ * Call the Cinematic Insight Engine — analyse an image and return structured
  * professional editing direction.
  *
  * @param {string} imageDataUrl — data URL (data:image/...;base64,...)
+ * @param {AbortSignal} [signal]
  * @returns {Promise<{
  *   sceneDescription: string,
  *   lightingConditions: string,

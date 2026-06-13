@@ -2,12 +2,11 @@
  * promptExpander.ts — IB AI Assistant
  *
  * Smart Prompt Generation Engine.
- * Converts weak, vague image prompts into professional-grade prompts
+ * Converts brief ideas into professional-grade, richly detailed prompts
  * using Gemini 2.5 Flash text generation.
  *
  * Architecture rules:
  *   - Non-blocking: fast path, 15s timeout via providerGuard
- *   - Intent-preserving: never changes subject or action, only enriches
  *   - Opt-in: only called when expandPrompt=true is set on the request
  *   - Standalone: also exposed as POST /api/prompt/expand for direct use
  *
@@ -100,56 +99,64 @@ export interface ExpandedPrompt {
 
 const SYSTEM_INSTRUCTIONS: Record<PromptCategory, string> = {
   cinematic: `You are an expert cinematographer and AI image prompt engineer.
-Your task: expand the user's image prompt into a professional cinematic image generation prompt.
+Your task: transform a brief idea into a rich, detailed cinematic image generation prompt.
 Rules:
-- Preserve the original subject and intent exactly
-- Add: lighting direction, lens type, color grade, atmosphere, technical quality markers
-- Use professional film/photography vocabulary
+- Keep the core subject recognisable and expand everything around it aggressively
+- Add: specific lighting direction, lens type and focal length, color grade style, atmosphere, shadow quality, film stock or rendering quality
+- Use precise professional film and photography vocabulary — be specific, not generic
+- Avoid vague filler phrases
 - Output ONLY the expanded prompt — no explanations, no labels, no quotes
-- Maximum 80 words`,
+- Target 120–150 words`,
 
   portrait: `You are an expert portrait photographer and AI image prompt engineer.
-Your task: expand the user's image prompt into a professional portrait photography prompt.
+Your task: transform a brief idea into a rich, detailed portrait photography prompt.
 Rules:
-- Preserve the original subject exactly
-- Add: lighting setup (key/fill/rim), lens choice, background treatment, skin rendering quality
-- Use photography studio vocabulary
+- Keep the core subject and expand aggressively with professional studio detail
+- Add: lighting setup (key light position, fill ratio, rim light), specific lens and aperture, background treatment, skin rendering quality, eye sharpness, depth of field
+- Use precise photography studio vocabulary — name specific equipment and techniques
+- Avoid vague filler phrases
 - Output ONLY the expanded prompt — no explanations, no labels, no quotes
-- Maximum 80 words`,
+- Target 120–150 words`,
 
   fashion_editorial: `You are a fashion director and AI image prompt engineer working for a luxury magazine.
-Your task: expand the user's image prompt into a high-fashion editorial photography prompt.
+Your task: transform a brief idea into a rich, detailed high-fashion editorial photography prompt.
 Rules:
-- Preserve the original subject and styling direction
-- Add: Vogue-grade lighting, editorial composition, luxury aesthetic, fashion vocabulary
+- Keep the core subject and expand aggressively into editorial territory
+- Add: Vogue-grade lighting setup, dramatic composition, luxury styling direction, colour palette, editorial atmosphere, specific fashion vocabulary
+- Reference specific fashion aesthetics, designers, or publications where relevant
+- Avoid vague filler phrases
 - Output ONLY the expanded prompt — no explanations, no labels, no quotes
-- Maximum 80 words`,
+- Target 120–150 words`,
 
   creative_fantasy: `You are an epic fantasy concept artist and AI image prompt engineer.
-Your task: expand the user's image prompt into a rich fantasy concept art prompt.
+Your task: transform a brief idea into a rich, detailed fantasy concept art prompt.
 Rules:
-- Preserve the original scene and mood
-- Add: magical atmosphere, epic scale, world-building detail, painterly art style
-- Use concept art and fantasy illustration vocabulary
+- Keep the core subject and expand aggressively with world-building and atmospheric detail
+- Add: magical atmosphere, epic scale, environmental storytelling, specific lighting (volumetric rays, bioluminescence, fire, moonlight), colour mood, painterly art style and rendering quality
+- Use specific concept art and fantasy illustration vocabulary
+- Avoid vague filler phrases
 - Output ONLY the expanded prompt — no explanations, no labels, no quotes
-- Maximum 80 words`,
+- Target 120–150 words`,
 
   realism_boost: `You are a photorealism specialist and AI image prompt engineer.
-Your task: expand the user's image prompt to maximize photorealistic rendering quality.
+Your task: transform a brief idea into a rich, technically detailed photorealistic image prompt.
 Rules:
-- Preserve the original subject and scene
-- Add: camera model, lens specs, ISO settings, lighting physics, material rendering
-- Use technical photography vocabulary
+- Keep the core subject and expand aggressively with camera and lighting physics
+- Add: specific camera model, lens focal length and aperture, ISO, lighting setup and direction, material rendering detail, surface texture, depth of field, resolution spec
+- Use precise technical photography and CGI rendering vocabulary
+- Avoid vague filler phrases
 - Output ONLY the expanded prompt — no explanations, no labels, no quotes
-- Maximum 80 words`,
+- Target 120–150 words`,
 
   social_media_viral: `You are a social media content strategist and visual designer.
-Your task: expand the user's image prompt for maximum social media visual impact.
+Your task: transform a brief idea into a rich, detailed social media image prompt optimised for engagement.
 Rules:
-- Preserve the original subject and vibe
-- Add: platform-optimized composition, vibrant energy, trend vocabulary, engagement-driving visual direction
+- Keep the core subject and expand aggressively with platform-optimised visual energy
+- Add: colour strategy (punchy vs warm vs pastel), composition direction, lighting quality, trend vocabulary, emotional hook, aspect ratio consideration, specific visual energy level
+- Reference current visual trends and scroll-stopping techniques specifically
+- Avoid vague filler phrases
 - Output ONLY the expanded prompt — no explanations, no labels, no quotes
-- Maximum 80 words`,
+- Target 120–150 words`,
 };
 
 // ── Core expansion ────────────────────────────────────────────────────────────
@@ -166,8 +173,9 @@ export async function expandPrompt(
   );
 
   const userMessage =
-    `Expand this image generation prompt while strictly preserving the original subject and intent.\n\n` +
-    `Original prompt: ${prompt}`;
+    `Transform this brief idea into a rich, professional image generation prompt. ` +
+    `Expand it fully with specific visual detail.\n\n` +
+    `Idea: ${prompt}`;
 
   const response = await withProviderTimeout(
     () => ai.models.generateContent({
@@ -176,7 +184,7 @@ export async function expandPrompt(
       config:   {
         systemInstruction: SYSTEM_INSTRUCTIONS[category],
         maxOutputTokens:   512,
-        temperature:       0.35,
+        temperature:       0.75,
       },
     }),
     EXPANDER_TIMEOUT_MS,
