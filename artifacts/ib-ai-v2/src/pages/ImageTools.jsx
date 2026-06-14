@@ -99,16 +99,56 @@ function ErrorBox({ message }) {
   );
 }
 
-// ── Generate tab — Prompt Generator Mode ──────────────────────────────────────
+// ── Style variation definitions ────────────────────────────────────────────────
+const STYLE_VARIATIONS = [
+  {
+    id:          'cinematic_luxury',
+    label:       'Cinematic Luxury',
+    category:    'fashion_editorial',
+    description: 'Dramatic lighting · Rich shadows · Editorial fashion quality',
+    prefix:      'Cinematic luxury editorial fashion photography of:',
+  },
+  {
+    id:          'minimal_professional',
+    label:       'Minimal Professional',
+    category:    'portrait',
+    description: 'Clean studio · Precise composition · Premium clarity',
+    prefix:      'Minimalist clean professional studio photograph of:',
+  },
+  {
+    id:          'glassmorphism_premium',
+    label:       'Glassmorphism Premium',
+    category:    'realism_boost',
+    description: 'Glass surfaces · Soft blur · Premium digital aesthetic',
+    prefix:      'Premium glassmorphism digital art render of:',
+  },
+  {
+    id:          'futuristic_ai',
+    label:       'Futuristic AI',
+    category:    'creative_fantasy',
+    description: 'Sci-fi atmosphere · Neon accents · World-building detail',
+    prefix:      'Futuristic AI science fiction concept art of:',
+  },
+  {
+    id:          'creative_editorial',
+    label:       'Creative Editorial',
+    category:    'social_media_viral',
+    description: 'Bold composition · Vibrant energy · Scroll-stopping visual',
+    prefix:      'Creative editorial high-impact visual design of:',
+  },
+];
+
+// ── Generate tab — Full Generation Workflow ───────────────────────────────────
 function GenerateTab({ initialPrompt = '' }) {
-  const [prompt, setPrompt] = useState(initialPrompt);
-  const [expandedPrompt, setExpandedPrompt] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const checkRate = useRateLimit();
+  const [idea, setIdea]                     = useState(initialPrompt);
+  const [variations, setVariations]         = useState(null);
+  const [varLoading, setVarLoading]         = useState(false);
+  const [varError, setVarError]             = useState(null);
+  const [selected, setSelected]             = useState(null);
   const [generatedImage, setGeneratedImage] = useState(null);
-  const [imageLoading, setImageLoading] = useState(false);
-  const [imageError, setImageError] = useState(null);
+  const [imageLoading, setImageLoading]     = useState(false);
+  const [imageError, setImageError]         = useState(null);
+  const checkRate = useRateLimit();
 
   const EXAMPLES = [
     'Cinematic sunset over a futuristic cityscape',
@@ -117,32 +157,47 @@ function GenerateTab({ initialPrompt = '' }) {
     'Professional product photo of a glass perfume bottle',
   ];
 
-  const handleExpand = async () => {
-    if (loading || !prompt.trim()) return;
+  const resetOutput = () => {
+    setVariations(null);
+    setSelected(null);
+    setGeneratedImage(null);
+    setImageError(null);
+    setVarError(null);
+  };
+
+  const handleGenerateVariations = async () => {
+    if (varLoading || !idea.trim()) return;
     const wait = checkRate();
-    if (wait > 0) { setError(`Please wait ${wait}s before trying again.`); return; }
-    setLoading(true);
-    setError(null);
-    setExpandedPrompt(null);
+    if (wait > 0) { setVarError(`Please wait ${wait}s before trying again.`); return; }
+    setVarLoading(true);
+    setVarError(null);
+    setVariations(null);
+    setSelected(null);
     setGeneratedImage(null);
     setImageError(null);
     try {
-      const res = await expandPrompt(prompt.trim());
-      setExpandedPrompt(res.expanded);
+      const results = await Promise.all(
+        STYLE_VARIATIONS.map(style =>
+          expandPrompt(`${style.prefix} ${idea.trim()}`, style.category)
+            .then(res => ({ ...style, prompt: res.expanded }))
+            .catch(() => ({ ...style, prompt: `${style.prefix} ${idea.trim()}, ultra high quality, professional, highly detailed` }))
+        )
+      );
+      setVariations(results);
     } catch (err) {
-      setError(err.message);
+      setVarError(err.message);
     } finally {
-      setLoading(false);
+      setVarLoading(false);
     }
   };
 
   const handleGenerateImage = async () => {
-    if (imageLoading || !expandedPrompt) return;
+    if (imageLoading || !selected) return;
     setImageLoading(true);
     setImageError(null);
     setGeneratedImage(null);
     try {
-      const res = await generateImage(expandedPrompt);
+      const res = await generateImage(selected.prompt);
       setGeneratedImage(res.b64Image);
     } catch (err) {
       setImageError(err.message);
@@ -153,23 +208,27 @@ function GenerateTab({ initialPrompt = '' }) {
 
   return (
     <div className="space-y-4">
+      {/* Idea input */}
       <div className="space-y-2">
-        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Idea or Subject</label>
+        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+          Your Idea or Subject
+        </label>
         <textarea
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleExpand(); }}
+          value={idea}
+          onChange={(e) => { setIdea(e.target.value); resetOutput(); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleGenerateVariations(); }}
           placeholder="Describe your idea — a few words is enough…"
-          rows={3}
+          rows={2}
           className="w-full bg-background/60 border border-input rounded-xl px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/40 outline-none focus:ring-2 focus:ring-ring/40 focus:border-primary/50 transition-all resize-none leading-relaxed"
         />
       </div>
 
+      {/* Example pills */}
       <div className="flex flex-wrap gap-1.5">
         {EXAMPLES.map((ex) => (
           <button
             key={ex}
-            onClick={() => setPrompt(ex)}
+            onClick={() => { setIdea(ex); resetOutput(); }}
             className="text-[11px] px-2.5 py-1 rounded-full border border-border/60 text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-all"
           >
             {ex.length > 34 ? ex.slice(0, 34) + '…' : ex}
@@ -177,68 +236,113 @@ function GenerateTab({ initialPrompt = '' }) {
         ))}
       </div>
 
+      {/* Generate variations button */}
       <button
-        onClick={handleExpand}
-        disabled={loading || !prompt.trim()}
+        onClick={handleGenerateVariations}
+        disabled={varLoading || !idea.trim()}
         className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/20"
       >
-        {loading
-          ? <><Loader2 size={14} className="animate-spin" />Generating…</>
-          : <><Sparkles size={14} />Generate Prompt</>}
+        {varLoading
+          ? <><Loader2 size={14} className="animate-spin" />Generating variations…</>
+          : <><Sparkles size={14} />Generate Variations</>}
       </button>
 
-      <AnimatePresence>{error && <ErrorBox message={error} />}</AnimatePresence>
+      <AnimatePresence>{varError && <ErrorBox message={varError} />}</AnimatePresence>
 
+      {/* Variations loading skeleton */}
       <AnimatePresence>
-        {loading && (
-          <motion.div key="skel" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <ImageSkeleton label="Generating your prompt…" />
+        {varLoading && (
+          <motion.div key="var-skel" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <ImageSkeleton label="Crafting 5 style variations…" />
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* Variation cards + generate image button */}
       <AnimatePresence>
-        {expandedPrompt && !loading && (
+        {variations && !varLoading && (
           <motion.div
-            key="prompt-result"
+            key="variations"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-3"
+            className="space-y-3"
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-primary uppercase tracking-widest flex items-center gap-1.5">
-                <Sparkles size={10} />
-                Generated Prompt
-              </span>
-              <div className="flex items-center gap-1">
-                <CopyButton text={expandedPrompt} label="Copy" />
-                <button
-                  onClick={() => setExpandedPrompt(null)}
-                  className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            </div>
-            <p className="text-sm text-foreground leading-relaxed">{expandedPrompt}</p>
-            <div className="pt-1 border-t border-primary/15">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+                Choose a Style
+              </p>
               <button
-                onClick={handleGenerateImage}
-                disabled={imageLoading}
-                className="flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary/30 text-primary rounded-xl text-xs font-medium hover:bg-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleGenerateVariations}
+                disabled={varLoading}
+                className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-lg hover:bg-secondary disabled:opacity-50"
               >
-                {imageLoading
-                  ? <><Loader2 size={12} className="animate-spin" />Generating image…</>
-                  : <><Wand2 size={12} />Generate Image</>}
+                <RefreshCw size={10} />Regenerate
               </button>
             </div>
+
+            <div className="space-y-2">
+              {variations.map((v) => {
+                const isSelected = selected?.id === v.id;
+                return (
+                  <motion.button
+                    key={v.id}
+                    onClick={() => { setSelected(v); setGeneratedImage(null); setImageError(null); }}
+                    whileTap={{ scale: 0.998 }}
+                    className={`w-full text-left rounded-xl border px-3.5 py-3 transition-all space-y-1.5 ${
+                      isSelected
+                        ? 'border-primary/60 bg-primary/8 ring-1 ring-primary/25'
+                        : 'border-border/40 bg-background/40 hover:border-primary/30 hover:bg-primary/3'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className={`text-[11px] font-semibold uppercase tracking-wider ${isSelected ? 'text-primary' : 'text-foreground/80'}`}>
+                        {v.label}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {isSelected && (
+                          <span className="flex items-center gap-1 text-[10px] text-primary font-medium">
+                            <Check size={9} />Selected
+                          </span>
+                        )}
+                        <CopyButton text={v.prompt} label="Copy" />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">{v.description}</p>
+                    <p className="text-[11px] text-foreground/80 leading-relaxed line-clamp-2">{v.prompt}</p>
+                  </motion.button>
+                );
+              })}
+            </div>
+
+            {/* Generate image button — appears after selection */}
+            <AnimatePresence>
+              {selected && (
+                <motion.div
+                  key="gen-btn"
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <button
+                    onClick={handleGenerateImage}
+                    disabled={imageLoading}
+                    className="w-full flex items-center justify-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/20"
+                  >
+                    {imageLoading
+                      ? <><Loader2 size={14} className="animate-spin" />Generating image…</>
+                      : <><Wand2 size={14} />Generate Image · {selected.label}</>}
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>
 
       <AnimatePresence>{imageError && <ErrorBox message={imageError} />}</AnimatePresence>
 
+      {/* Image generation skeleton */}
       <AnimatePresence>
         {imageLoading && (
           <motion.div key="img-skel" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -247,6 +351,7 @@ function GenerateTab({ initialPrompt = '' }) {
         )}
       </AnimatePresence>
 
+      {/* Generated image result */}
       <AnimatePresence>
         {generatedImage && !imageLoading && (
           <motion.div
@@ -258,11 +363,12 @@ function GenerateTab({ initialPrompt = '' }) {
           >
             <div className="flex items-center justify-between px-3 py-2 bg-secondary/30 border-b border-border/30">
               <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                <ImageIcon size={10} />Generated Image
+                <ImageIcon size={10} />Generated · {selected?.label}
               </span>
               <div className="flex items-center gap-1.5">
+                <CopyButton text={selected?.prompt} label="Copy prompt" />
                 <button
-                  onClick={() => { const a = document.createElement('a'); a.href = `data:image/png;base64,${generatedImage}`; a.download = `ib-ai-${Date.now()}.png`; a.click(); }}
+                  onClick={() => { const a = document.createElement('a'); a.href = generatedImage; a.download = `ib-ai-${Date.now()}.png`; a.click(); }}
                   className="flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-[11px] font-medium"
                 >
                   <Download size={10} />Save
@@ -276,7 +382,7 @@ function GenerateTab({ initialPrompt = '' }) {
               </div>
             </div>
             <img
-              src={`data:image/png;base64,${generatedImage}`}
+              src={generatedImage}
               alt="Generated"
               className="w-full object-contain bg-black/5 max-h-96"
             />
@@ -861,14 +967,14 @@ function EditTab() {
                 <Wand2 size={10} />Edited Image{result.mode ? ` · ${result.mode}` : ''}
               </span>
               <button
-                onClick={() => { const a = document.createElement('a'); a.href = `data:image/png;base64,${result.b64Image}`; a.download = `ib-ai-edit-${Date.now()}.png`; a.click(); }}
+                onClick={() => { const a = document.createElement('a'); a.href = result.b64Image; a.download = `ib-ai-edit-${Date.now()}.png`; a.click(); }}
                 className="flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-[11px] font-medium"
               >
                 <Download size={10} />Save
               </button>
             </div>
             <img
-              src={`data:image/png;base64,${result.b64Image}`}
+              src={result.b64Image}
               alt="Edited"
               className="w-full object-contain bg-black/5 max-h-96"
             />
