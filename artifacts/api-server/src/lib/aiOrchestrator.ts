@@ -41,6 +41,7 @@ export type AIErrorCode =
   | "feature_disabled"
   | "timeout"
   | "invalid_request"
+  | "safety_block"
   | "internal_error";
 
 export interface AIJobOptions {
@@ -176,8 +177,21 @@ export function buildStandardResponse<T extends Record<string, unknown>>(
 
 // ── normalizeAIError ──────────────────────────────────────────────────────────
 // Maps provider/runtime errors to canonical error codes.
-// Logs with the standardized format: [AI_ERROR][CODE][SYSTEM]
-// Returns a user-safe message (no stack traces, no internal details).
+//
+// Classification order (first match wins — order is load-bearing):
+//   1. timeout              — watchdog / connection deadline / ProviderError timeout
+//   2. provider_not_configured — quota with limit:0 (billing disabled)
+//   3. rate_limit           — 429 / quota / resource_exhausted / too many requests
+//   4. provider_not_configured — 401/403 / bad API key / permission denied
+//   5. feature_disabled     — fal balance / locked / unsupported model
+//   6. safety_block         — Gemini SAFETY / content_filter / recitation
+//   7. invalid_request      — 400 / INVALID_ARGUMENT / bad request / malformed
+//   8. provider_unavailable — 503 / UNAVAILABLE / network / service errors
+//   9. internal_error       — catch-all
+//
+// chat.ts is the ONLY caller that converts these codes into user-safe text.
+// This function logs the raw classification inputs at DEBUG so issues are
+// diagnosable without exposing internals to the client.
 
 const USER_MESSAGES: Record<AIErrorCode, string> = {
   provider_unavailable:    "The AI provider is temporarily unavailable. Please try again shortly.",
@@ -186,44 +200,135 @@ const USER_MESSAGES: Record<AIErrorCode, string> = {
   feature_disabled:        "This feature is not available in the current environment.",
   timeout:                 "The request timed out. Please try again.",
   invalid_request:         "The request could not be processed. Please check your input.",
+  safety_block:            "Your message was blocked by the AI safety filter. Please rephrase and try again.",
   internal_error:          "An unexpected error occurred. Please try again.",
 };
 
-export function normalizeAIError(err: unknown, system = "unknown"): NormalizedAIError {
-  const raw = err instanceof Error ? err.message : String(err);
-  const lower = raw.toLowerCase();
+// ── HTTP status extraction ─────────────────────────────────────────────────────
+// Extracts the first 4xx/5xx status code from a provider error message.
+// Handles formats produced by llm.ts:
+//   "Groq API error 429: {..."     → 429
+//   "[400 Bad Request] {..."       → 400
+//   "HTTP 503 Service Unavailable" → 503
+// Returns null when no status code is present.
 
+function extractHttpStatus(lower: string): number | null {
+  const m = lower.match(/(?:error|http|status)[:\s]+([45]\d{2})\b/) ||
+            lower.match(/\[([45]\d{2})\s/) ||
+            lower.match(/\b([45]\d{2})\b/);
+  return m ? parseInt(m[1]!, 10) : null;
+}
+
+// ── Provider name extraction ──────────────────────────────────────────────────
+// Best-effort: extracts the originating provider from the error message for
+// the debug log. Not used for classification.
+
+function extractProvider(lower: string): string {
+  if (lower.includes("groq"))                                          return "groq";
+  if (lower.includes("generativelanguage") ||
+      lower.includes("googlegenerat") ||
+      lower.includes("gemini"))                                        return "gemini";
+  if (lower.includes("both providers"))                                return "both";
+  return "unknown";
+}
+
+export function normalizeAIError(err: unknown, system = "unknown"): NormalizedAIError {
+  const raw    = err instanceof Error ? err.message : String(err);
+  const lower  = raw.toLowerCase();
+  const http   = extractHttpStatus(lower);
+
+  // ── 1. Timeout ────────────────────────────────────────────────────────────────
   let code: AIErrorCode;
-  if (lower.includes("timeout") || lower.includes("timed out") || lower.includes("deadline"))
+  if (
+    lower.includes("timeout") || lower.includes("timed out") || lower.includes("deadline") ||
+    lower.includes("stream inactivity")
+  )
     code = "timeout";
-  else if ((lower.includes("quota") || lower.includes("resource_exhausted")) && lower.includes("limit: 0"))
+
+  // ── 2. provider_not_configured — quota with billing disabled (limit: 0) ───────
+  else if (
+    (lower.includes("quota") || lower.includes("resource_exhausted")) &&
+    lower.includes("limit: 0")
+  )
     code = "provider_not_configured";
-  else if (lower.includes("rate limit") || lower.includes("rate-limit") || lower.includes("ratelimit") || lower.includes("too many requests") || lower.includes("resource_exhausted") || lower.includes("429") || lower.includes("quota"))
+
+  // ── 3. rate_limit — 429 / resource_exhausted / quota (without limit:0) ────────
+  else if (
+    lower.includes("rate limit") || lower.includes("rate-limit") ||
+    lower.includes("ratelimit")  || lower.includes("too many requests") ||
+    lower.includes("resource_exhausted") ||
+    http === 429 || lower.includes("quota")
+  )
     code = "rate_limit";
+
+  // ── 4. provider_not_configured — bad key / auth failure (401/403) ─────────────
   else if (
     lower.includes("provider_not_configured") ||
-    lower.includes("api key not valid") || lower.includes("invalid api key") ||
-    lower.includes("permission_denied") || lower.includes("api key invalid") ||
-    (lower.includes("403") && lower.includes("api")) ||
-    (lower.includes("401") && lower.includes("api"))
+    lower.includes("api key not valid")  || lower.includes("invalid api key") ||
+    lower.includes("api key invalid")    || lower.includes("unauthenticated") ||
+    lower.includes("permission_denied")  ||
+    http === 401 || http === 403
   )
     code = "provider_not_configured";
-  else if (lower.includes("exhausted balance") || lower.includes("user is locked") ||
-    (lower.includes("fal") && (lower.includes("402") || lower.includes("403") || lower.includes("credit"))))
-    code = "feature_disabled";
-  else if (lower.includes("feature_disabled") || lower.includes("not available") || lower.includes("unsupported_model") || lower.includes("not supported"))
-    code = "feature_disabled";
-  else if (lower.includes("invalid") || lower.includes("bad request") || lower.includes("malformed"))
-    code = "invalid_request";
+
+  // ── 5. feature_disabled — balance / locked / unsupported model ────────────────
   else if (
-    lower.includes("unavailable") || lower.includes("provider") ||
-    lower.includes("503") || lower.includes("service") || lower.includes("network")
+    lower.includes("exhausted balance") || lower.includes("user is locked") ||
+    (lower.includes("fal") &&
+      (lower.includes("402") || lower.includes("403") || lower.includes("credit"))) ||
+    lower.includes("feature_disabled") || lower.includes("not available") ||
+    lower.includes("unsupported_model") || lower.includes("not supported")
+  )
+    code = "feature_disabled";
+
+  // ── 6. safety_block — content policy / safety filter ─────────────────────────
+  // Gemini: "Candidate was blocked due to SAFETY", "finish_reason: SAFETY"
+  // Groq:   finish_reason "content_filter" (body text from SSE error)
+  // Gemini: "RECITATION" (copyright reproduction refusal)
+  else if (
+    (lower.includes("safety") &&
+      (lower.includes("block") || lower.includes("filter") ||
+       lower.includes("candidate") || lower.includes("finish_reason"))) ||
+    lower.includes("content_filter") || lower.includes("recitation")
+  )
+    code = "safety_block";
+
+  // ── 7. invalid_request — 400 / INVALID_ARGUMENT / bad input ──────────────────
+  // Covers:  "Groq API error 400: ...", "[400 Bad Request] ...",
+  //          "INVALID_ARGUMENT", "bad request", "malformed", bare http===400
+  else if (
+    lower.includes("invalid_argument") || lower.includes("invalid") ||
+    lower.includes("bad request")      || lower.includes("malformed") ||
+    http === 400
+  )
+    code = "invalid_request";
+
+  // ── 8. provider_unavailable — 503 / UNAVAILABLE / network failures ────────────
+  else if (
+    lower.includes("unavailable") || lower.includes("service") ||
+    lower.includes("network")     || lower.includes("provider") ||
+    http === 503
   )
     code = "provider_unavailable";
+
+  // ── 9. catch-all ──────────────────────────────────────────────────────────────
   else
     code = "internal_error";
 
-  // Standardized error log format: [AI_ERROR][CODE][SYSTEM]
+  // ── Debug log — raw classification inputs (never surfaced to clients) ─────────
+  logger.debug(
+    {
+      system,
+      rawErrorType:        err instanceof Error ? err.constructor.name : typeof err,
+      detectedProvider:    extractProvider(lower),
+      httpStatus:          http,
+      classificationResult: code,
+      rawMessage:          raw.slice(0, 300),
+    },
+    `[AI_ERROR:debug][${system.toUpperCase()}] raw error classification`,
+  );
+
+  // ── Structured error log ───────────────────────────────────────────────────────
   logger.error(
     { system, code, rawMessage: raw.slice(0, 200) },
     `[AI_ERROR][${code.toUpperCase()}][${system.toUpperCase()}]`,

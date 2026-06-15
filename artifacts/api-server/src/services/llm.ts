@@ -1,7 +1,7 @@
 import { logger } from "../lib/logger";
 import { ai } from "@workspace/integrations-gemini-ai";
 import { recordCompletion, type AiProvider } from "../lib/aiMetrics";
-import { isTransientError, withProviderTimeout, sanitizeProviderError } from "../lib/providerGuard";
+import { isTransientError, withProviderTimeout } from "../lib/providerGuard";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -384,7 +384,14 @@ export async function createChatStream(
       const msg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
       recordCompletion("gemini", false, Date.now() - requestStartMs, false);
       logger.error({ err: msg, model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini failed — no fallback available");
-      throw new Error(`AI provider failed: ${sanitizeProviderError(geminiErr, "chat")}`);
+      // Re-throw the original error unchanged so normalizeAIError in chat.ts
+      // can classify it accurately (rate_limit, invalid_request, timeout, etc.).
+      // sanitizeProviderError must NOT be applied here — it destroys error identity.
+      logger.debug(
+        { provider: "gemini", rawError: msg },
+        "[llm:debug] propagating original Gemini error to chat boundary",
+      );
+      throw geminiErr;
     }
   }
 
@@ -427,11 +434,19 @@ export async function createChatStream(
     const geminiErrMsg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
     recordCompletion("gemini", true, Date.now() - requestStartMs, false);
     logger.error(
-      { geminiErr: geminiErrMsg },
+      { geminiErr: geminiErrMsg, groqErr: groqErrMsg },
       "[llm] Both providers failed — no AI response possible",
     );
-    throw new Error(
-      `Both AI providers failed. Groq: ${sanitizeProviderError(new Error(groqErrMsg), "chat")}. Gemini: ${sanitizeProviderError(geminiErr, "chat")}.`,
+    // Preserve Gemini's original error message so normalizeAIError in chat.ts
+    // can classify the failure type accurately. Groq's error is captured in the
+    // log above; it is intentionally excluded from the thrown message to prevent
+    // Groq's error tokens (e.g. "429" from a Groq rate limit) from overriding
+    // the classification of Gemini's separate, authoritative failure.
+    // sanitizeProviderError must NOT be applied here — it destroys error identity.
+    logger.debug(
+      { provider: "both", groqRawError: groqErrMsg, geminiRawError: geminiErrMsg },
+      "[llm:debug] both providers failed — propagating Gemini error for classification",
     );
+    throw new Error(`Both providers failed. Gemini: ${geminiErrMsg}.`);
   }
 }
