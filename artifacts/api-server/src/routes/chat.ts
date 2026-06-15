@@ -270,11 +270,19 @@ router.post(
 
     res.write(": connected\n\n");
 
+    // ── Stream lifecycle controller ────────────────────────────────────────────
+    // A single AbortController governs the entire provider stream. It fires on
+    // client disconnect so the provider's read loop is interrupted at the next
+    // raceAbort call rather than waiting for a chunk that may never arrive.
+    const streamController = new AbortController();
     let clientDisconnected = false;
-    req.on("close", () => {
+
+    const onClientClose = () => {
       clientDisconnected = true;
-      logger.debug({ userId }, "[chat] client disconnected — aborting stream");
-    });
+      streamController.abort();
+      logger.debug({ userId }, "[chat] client disconnected — aborting provider stream");
+    };
+    req.on("close", onClientClose);
 
     let streamSucceeded = false;
     let accumContent = "";
@@ -284,7 +292,15 @@ router.post(
 
     try {
       tAiStart = Date.now();
-      const stream = await createChatStream(messages);
+
+      // If the client already disconnected during memory retrieval, skip the
+      // LLM call entirely — there is nobody to receive the response.
+      if (clientDisconnected) {
+        logger.debug({ userId }, "[chat] client gone before LLM call — skipping");
+        return;
+      }
+
+      const stream = await createChatStream(messages, streamController.signal);
 
       for await (const chunk of stream) {
         if (clientDisconnected) break;
@@ -310,26 +326,37 @@ router.post(
       res.write("data: [DONE]\n\n");
       streamSucceeded = true;
     } catch (err: unknown) {
-      // Phase 4: emit error event — never throws
-      pushEvent("error_occurred", {
-        userId,
-        route: "/api/chat",
-        meta: { error: err instanceof Error ? err.message : String(err) },
-      });
-      const errMsg = err instanceof Error ? err.message : String(err);
-      logger.error({ err: errMsg }, "LLM stream error");
+      if (clientDisconnected) {
+        // Client disconnected mid-stream — not an error, just cleanup.
+        // The provider stream was already aborted via streamController.
+        logger.debug({ userId }, "[chat] stream cancelled by client disconnect");
+      } else {
+        // Genuine provider or timeout error — log and emit error SSE.
+        pushEvent("error_occurred", {
+          userId,
+          route: "/api/chat",
+          meta: { error: err instanceof Error ? err.message : String(err) },
+        });
+        const errMsg = err instanceof Error ? err.message : String(err);
+        logger.error({ err: errMsg }, "LLM stream error");
 
-      // Sanitize: never send raw provider error messages to clients.
-      // Map the actual error to a canonical code (rate_limit, quota_exceeded,
-      // provider_unavailable, etc.) so the frontend can show an accurate message.
-      const { code: errCode } = normalizeAIError(err, "chat");
-      res.write(
-        sseEvent({
-          error: true,
-          code: errCode,
-        })
-      );
+        // Sanitize: never send raw provider error messages to clients.
+        // Map the actual error to a canonical code (rate_limit, quota_exceeded,
+        // provider_unavailable, timeout, etc.) so the frontend shows an
+        // accurate, user-safe message.
+        const { code: errCode } = normalizeAIError(err, "chat");
+        res.write(
+          sseEvent({
+            error: true,
+            code: errCode,
+          })
+        );
+      }
     } finally {
+      // Remove the close listener — it fires once at most, but removing it
+      // keeps the req event emitter tidy on normal completion.
+      req.off("close", onClientClose);
+
       if (streamSucceeded) {
         // ── Phase 4: Latency breakdown ───────────────────────────────────────
         const tAiMs    = Date.now() - tAiStart;

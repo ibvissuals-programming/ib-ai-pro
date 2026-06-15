@@ -35,7 +35,7 @@ function classifyStreamError(err) {
     const code = msg.split('STREAM_ERROR:')[1] ?? 'unknown';
     if (code === 'provider_unavailable') return 'The AI provider is temporarily unavailable. Please try again.';
     if (code === 'provider_not_configured') return 'This feature requires additional API access.';
-    if (code === 'network_timeout') return 'The request took too long. Please retry.';
+    if (code === 'timeout' || code === 'network_timeout') return 'The AI took too long to respond. Please try again.';
     return 'AI generation error. Please try again.';
   }
   if (msg.includes('Empty response')) {
