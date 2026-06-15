@@ -7,9 +7,46 @@ import { fetchLatestSession } from '../services/chatHistoryApi';
 
 // ── Structured error classifiers ──────────────────────────────────────────────
 
+// Backend error code → user-facing message.
+// Covers every AIErrorCode value defined in aiOrchestrator.ts.
+// Extend here when new codes are added to the backend.
+const STREAM_ERROR_MESSAGES = {
+  rate_limit:              "You're sending messages too fast. Please wait a moment.",
+  invalid_request:         "Your message couldn't be processed. Try rephrasing.",
+  safety_block:            'This request was blocked by safety filters.',
+  provider_not_configured: 'AI service is not configured.',
+  timeout:                 'Request timed out. Please try again.',
+  provider_unavailable:    'AI service is temporarily unavailable.',
+  internal_error:          'An unexpected error occurred. Please try again.',
+};
+
 function classifyStreamError(err) {
-  const msg = err?.message ?? '';
+  const msg  = err?.message ?? '';
   const name = err?.name ?? '';
+
+  // ── Determine stream phase ────────────────────────────────────────────────────
+  // pre-stream : error thrown during fetch / HTTP handshake (before SSE starts)
+  // stream     : STREAM_ERROR:code emitted inside the SSE event loop
+  // post-stream: error thrown after the stream closed (e.g. empty response)
+  const phase = msg.includes('STREAM_ERROR')
+    ? 'stream'
+    : msg.includes('Empty response')
+      ? 'post-stream'
+      : 'pre-stream';
+
+  // ── Extract backend code if this is a stream-phase error ─────────────────────
+  const backendCode = phase === 'stream'
+    ? (msg.split('STREAM_ERROR:')[1] ?? 'unknown')
+    : null;
+
+  // ── Debug log — fires once per classified error (never shown to users) ────────
+  console.debug('[IB AI] classifyStreamError', {
+    phase,
+    code:    backendCode ?? (name || 'n/a'),
+    message: msg,
+  });
+
+  // ── Pre-stream errors (fetch / HTTP layer) ────────────────────────────────────
   if (name === 'AbortError' || msg.includes('aborted') || msg.includes('abort')) {
     return 'Request timed out — the AI took too long to respond. Please try again.';
   }
@@ -31,19 +68,25 @@ function classifyStreamError(err) {
   if (msg.startsWith('API error 4')) {
     return 'Request rejected by the AI service. Please try again.';
   }
-  if (msg.includes('STREAM_ERROR')) {
-    const code = msg.split('STREAM_ERROR:')[1] ?? 'unknown';
-    if (code === 'provider_unavailable') return 'The AI provider is temporarily unavailable. Please try again.';
-    if (code === 'provider_not_configured') return 'This feature requires additional API access.';
-    if (code === 'timeout' || code === 'network_timeout') return 'The AI took too long to respond. Please try again.';
-    return 'AI generation error. Please try again.';
+
+  // ── Stream-phase errors (backend AIErrorCode values) ─────────────────────────
+  // backendCode is the exact string from `parsed.code` in api.js — no transformation.
+  if (phase === 'stream') {
+    const mapped = STREAM_ERROR_MESSAGES[backendCode];
+    if (mapped) return mapped;
+    // Unknown code from a future backend version — surface it rather than hiding it.
+    return `AI error (${backendCode}). Please try again.`;
   }
+
+  // ── Post-stream errors ────────────────────────────────────────────────────────
   if (msg.includes('Empty response')) {
     return 'AI returned an empty response. Please try again.';
   }
   if (msg.includes('AI_PROVIDER_VIOLATION')) {
     return 'AI service configuration error. Please contact support.';
   }
+
+  // ── Catch-all ─────────────────────────────────────────────────────────────────
   return 'Could not reach the AI. Please check your connection and try again.';
 }
 
