@@ -62,7 +62,6 @@ timeoutMs = 20000
 [userenv.shared]
 CEO_USERNAME = "ibaiceo"
 USE_POSTGRES_STORAGE = "true"
-JWT_SECRET = "03ac5599482bb49bc21590ad8189bdded0361bdf44c056eceb688ec5a1306fd36e05901d5f585328a4e30d92ca15eb97"
 
 [nix]
 channel = "stable-25_05"
