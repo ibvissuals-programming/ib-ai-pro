@@ -8,27 +8,14 @@ export type ChatMessage = {
   content: string;
 };
 
-// ── Last-completion tracking ───────────────────────────────────────────────────
-// Stores the provider/fallback/latency result of the most recently completed
-// stream. Consumed once by the chat route for persistence. Not suitable for
-// high-concurrency environments (in-memory, single-process only).
+// ── Per-request provider result ────────────────────────────────────────────────
+// Delivered via an onComplete callback instead of a module-level global so that
+// concurrent requests never overwrite each other's provider metadata.
 
-interface LastProviderResult {
+export interface LastProviderResult {
   provider: AiProvider;
   fallbackUsed: boolean;
   latencyMs: number;
-}
-
-let _lastProviderResult: LastProviderResult | null = null;
-
-/**
- * Returns and clears the result of the most recently completed chat stream.
- * Call immediately after the for-await loop in the chat route.
- */
-export function getLastProviderResult(): LastProviderResult | null {
-  const r = _lastProviderResult;
-  _lastProviderResult = null;
-  return r;
 }
 
 export const CHAT_MODEL = "llama-3.1-8b-instant";
@@ -138,6 +125,7 @@ async function* wrapTracked(
   provider: AiProvider,
   fallbackTriggered: boolean,
   startMs: number,
+  onComplete?: (result: LastProviderResult) => void,
 ): AsyncIterable<string> {
   try {
     for await (const chunk of inner) {
@@ -145,7 +133,8 @@ async function* wrapTracked(
     }
     const latencyMs = Date.now() - startMs;
     recordCompletion(provider, fallbackTriggered, latencyMs, true);
-    _lastProviderResult = { provider, fallbackUsed: fallbackTriggered, latencyMs };
+    // Deliver result via callback — no module-level global, safe for concurrent requests.
+    onComplete?.({ provider, fallbackUsed: fallbackTriggered, latencyMs });
     logger.debug(
       { provider, fallbackTriggered, latencyMs, success: true },
       "[llm] stream completed",
@@ -366,6 +355,7 @@ async function createGeminiStream(
 export async function createChatStream(
   messages: ChatMessage[],
   signal?: AbortSignal,
+  onComplete?: (result: LastProviderResult) => void,
 ): Promise<AsyncIterable<string>> {
   const hasGroqKey = !!process.env.GROQ_API_KEY;
   const requestStartMs = Date.now();
@@ -379,14 +369,11 @@ export async function createChatStream(
     try {
       const stream = await createGeminiStream(messages, signal);
       logger.debug({ model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini stream ready");
-      return wrapTracked(stream, "gemini", false, requestStartMs);
+      return wrapTracked(stream, "gemini", false, requestStartMs, onComplete);
     } catch (geminiErr) {
       const msg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
       recordCompletion("gemini", false, Date.now() - requestStartMs, false);
       logger.error({ err: msg, model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini failed — no fallback available");
-      // Re-throw the original error unchanged so normalizeAIError in chat.ts
-      // can classify it accurately (rate_limit, invalid_request, timeout, etc.).
-      // sanitizeProviderError must NOT be applied here — it destroys error identity.
       logger.debug(
         { provider: "gemini", rawError: msg },
         "[llm:debug] propagating original Gemini error to chat boundary",
@@ -404,15 +391,12 @@ export async function createChatStream(
   try {
     const stream = await createGroqStream(messages, signal);
     logger.debug({ model: CHAT_MODEL }, "[llm] Groq stream ready");
-    return wrapTracked(stream, "groq", false, requestStartMs);
+    return wrapTracked(stream, "groq", false, requestStartMs, onComplete);
   } catch (groqErr) {
     groqErrMsg = groqErr instanceof Error ? groqErr.message : String(groqErr);
     groqErrIsTransient = isTransientError(groqErr);
     recordCompletion("groq", false, Date.now() - groqStartMs, false);
 
-    // All Groq failures (transient or not) fall back to Gemini.
-    // Non-transient Groq errors (401, 400, bad model) still allow Gemini to serve
-    // the request, preventing a broken/misconfigured Groq key from taking down chat.
     const logLevel = groqErrIsTransient ? "warn" : "error";
     logger[logLevel](
       { err: groqErrMsg, model: CHAT_MODEL, fallback: GEMINI_FALLBACK_MODEL, transient: groqErrIsTransient },
@@ -420,7 +404,7 @@ export async function createChatStream(
     );
   }
 
-  // ── Gemini fallback (triggered only by transient Groq failure) ─────────────
+  // ── Gemini fallback ────────────────────────────────────────────────────────
   logger.info(
     { model: GEMINI_FALLBACK_MODEL, trigger: "groq_transient_failure" },
     "[llm] Gemini fallback activated",
@@ -429,7 +413,7 @@ export async function createChatStream(
   try {
     const stream = await createGeminiStream(messages, signal);
     logger.debug({ model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini fallback stream ready");
-    return wrapTracked(stream, "gemini", true, requestStartMs);
+    return wrapTracked(stream, "gemini", true, requestStartMs, onComplete);
   } catch (geminiErr) {
     const geminiErrMsg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
     recordCompletion("gemini", true, Date.now() - requestStartMs, false);
@@ -437,12 +421,6 @@ export async function createChatStream(
       { geminiErr: geminiErrMsg, groqErr: groqErrMsg },
       "[llm] Both providers failed — no AI response possible",
     );
-    // Preserve Gemini's original error message so normalizeAIError in chat.ts
-    // can classify the failure type accurately. Groq's error is captured in the
-    // log above; it is intentionally excluded from the thrown message to prevent
-    // Groq's error tokens (e.g. "429" from a Groq rate limit) from overriding
-    // the classification of Gemini's separate, authoritative failure.
-    // sanitizeProviderError must NOT be applied here — it destroys error identity.
     logger.debug(
       { provider: "both", groqRawError: groqErrMsg, geminiRawError: geminiErrMsg },
       "[llm:debug] both providers failed — propagating Gemini error for classification",

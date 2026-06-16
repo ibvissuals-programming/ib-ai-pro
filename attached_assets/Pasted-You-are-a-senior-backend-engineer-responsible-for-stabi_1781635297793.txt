@@ -1,0 +1,143 @@
+You are a senior backend engineer responsible for stabilizing an AI chat system in production (IB AI Studio Lab).
+
+Your task is to FIX ALL instability issues causing:
+- "You're going a bit fast" stuck state
+- random "Service temporarily unavailable"
+- request blocking even after waiting
+- inconsistent AI responses under load
+
+You MUST redesign and implement a safe request pipeline.
+
+---
+
+## 1. REQUIRED GOAL
+
+Build a production-safe chat request system where:
+
+- No request ever permanently locks the system
+- No global rate-limit flags exist
+- Each user is rate-limited independently
+- Failures never block future requests
+- AI generation always has fallback handling
+- System always recovers automatically
+
+---
+
+## 2. CRITICAL BUGS TO ELIMINATE
+
+Search and REMOVE:
+
+- any global variables like:
+  - isRateLimited
+  - isProcessing
+  - cooldownActive
+  - lastRequestTime (global scope)
+
+- any middleware that returns permanent blocking states
+
+- any rate limiter that is not user-scoped
+
+- any queue system that can deadlock
+
+---
+
+## 3. IMPLEMENT SAFE RATE LIMITING (PER USER)
+
+Replace all rate limiting with:
+
+- per-user token bucket OR sliding window
+- stored by userId or IP fallback
+- auto-expiry after short window (e.g. 10–30 seconds max)
+
+NEVER block globally.
+
+---
+
+## 4. REQUEST PIPELINE (MANDATORY STRUCTURE)
+
+Every request must follow:
+
+1. Receive request
+2. Identify userId (or fallback sessionId)
+3. Check per-user rate limit
+4. If allowed → continue
+5. If blocked → return soft response:
+   "You're sending requests too quickly. Please slow down slightly."
+6. NEVER permanently block user
+
+---
+
+## 5. AI CALL SAFETY WRAPPER
+
+Wrap ALL AI calls:
+
+- timeout after 30 seconds
+- retry once on failure
+- fallback response if AI fails
+
+Example behavior:
+
+IF AI fails:
+→ return graceful message
+→ DO NOT throw raw errors
+→ DO NOT block system
+
+---
+
+## 6. QUEUE SAFETY RULE
+
+If a queue is used:
+
+- ensure every job has:
+  - timeout
+  - failure handler
+  - completion cleanup
+
+NEVER allow stuck jobs.
+
+---
+
+## 7. ERROR HANDLING RULE
+
+Replace all:
+
+- "Service temporarily unavailable"
+
+WITH:
+
+- structured fallback response:
+  "I'm having trouble generating that response right now. Please try again."
+
+NEVER break request pipeline.
+
+---
+
+## 8. LOGGING REQUIREMENT
+
+Add logs for every request:
+
+- userId
+- timestamp
+- rateLimit decision
+- AI call start
+- AI call success/failure
+- response returned
+
+---
+
+## 9. FINAL ACCEPTANCE TEST
+
+System is only considered fixed if:
+
+- 50 rapid messages do NOT break system
+- no permanent "too fast" state occurs
+- system recovers automatically after failure
+- both short and long prompts work consistently
+
+---
+
+Return:
+- fixed middleware code
+- fixed rate limiter implementation
+- fixed request handler
+- explanation of root cause

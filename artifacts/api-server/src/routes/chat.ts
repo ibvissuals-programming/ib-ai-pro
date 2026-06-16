@@ -8,7 +8,7 @@
 // ╚══════════════════════════════════════════════════════════════════╝
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import { createChatStream, getLastProviderResult, type ChatMessage } from "../services/llm";
+import { createChatStream, type LastProviderResult, type ChatMessage } from "../services/llm";
 import { SYSTEM_PROMPT } from "../prompts/system";
 import { logger } from "../lib/logger";
 import { policyEngine, deductRequestCredits } from "../middleware/policyEngine";
@@ -158,8 +158,8 @@ router.post(
   policyEngine({
     cost: CREDIT_COSTS.chat,
     rateKey: "chat",
-    rateMax: 30,
-    rateWindowMs: 60_000,
+    rateMax: 60,        // 60 per 30 s window = 2/s average; handles 50-message bursts cleanly
+    rateWindowMs: 30_000,
     allowRecovery: true,
   }),
   async (req: Request, res: Response) => {
@@ -289,6 +289,8 @@ router.post(
     let resolvedSessionId: string | undefined;
     // Phase 4: AI model timing — declared here so finally can read them
     let tAiStart = 0;
+    // Provider result delivered via callback — avoids module-global race under concurrency.
+    let providerResult: LastProviderResult | null = null;
 
     try {
       tAiStart = Date.now();
@@ -300,7 +302,11 @@ router.post(
         return;
       }
 
-      const stream = await createChatStream(messages, streamController.signal);
+      const stream = await createChatStream(
+        messages,
+        streamController.signal,
+        (r) => { providerResult = r; },
+      );
 
       for await (const chunk of stream) {
         if (clientDisconnected) break;
@@ -397,7 +403,6 @@ router.post(
         // Fire-and-forget persistence — never blocks the stream response.
         // Only runs when session was successfully resolved and there is content.
         if (resolvedSessionId && userId && lastUserContent) {
-          const providerResult = getLastProviderResult();
           const sid = resolvedSessionId;
 
           saveMessagePair({

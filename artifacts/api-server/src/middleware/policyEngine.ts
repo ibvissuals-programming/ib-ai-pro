@@ -170,9 +170,11 @@ export function policyEngine(opts: PolicyOptions) {
     // ── Step 4: Rate limit (CEO bypassed) ─────────────────────────────────
 
     if (!isCeo && rateMax > 0) {
-      const raw = req.ip ?? req.socket?.remoteAddress ?? "unknown";
-      const ip = raw.replace(/^::ffff:/, "");
-      const key = `${rateKey}:${ip}`;
+      // Key by authenticated userId — each user gets their own independent bucket.
+      // This prevents IP-sharing (NAT, corporate proxies) from causing users to
+      // exhaust each other's quota, and ensures rate-limit state never leaks
+      // between accounts even on the same machine.
+      const key = `${rateKey}:${payload.userId}`;
       const now = Date.now();
       const w = windows.get(key);
 

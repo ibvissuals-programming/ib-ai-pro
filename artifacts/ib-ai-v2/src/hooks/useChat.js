@@ -332,6 +332,12 @@ export function useChat(username, { onCreditExhausted } = {}) {
     let resolvedSessionId = chatSessionId;
 
     let finalContent = '';
+    // Track whether finalContent is an error string so we can tag it with
+    // type: 'error'. Error messages tagged this way are excluded from the
+    // contextMessages filter (!m.type || m.type === 'text') on the next send,
+    // preventing error strings from contaminating the AI's conversation context
+    // and causing the "stuck" state.
+    let isErrorResponse = false;
 
     try {
       for await (const chunk of streamChat(contextMessages, {
@@ -352,6 +358,7 @@ export function useChat(username, { onCreditExhausted } = {}) {
       if (!wasAborted) {
         console.error('[IB AI Assistant] AI request failed:', err.message);
         finalContent = classifyStreamError(err);
+        isErrorResponse = true;
       }
       // If user clicked Stop (wasAborted + userStopRef), finalContent keeps
       // whatever was streamed — no error message, partial content is committed.
@@ -370,7 +377,13 @@ export function useChat(username, { onCreditExhausted } = {}) {
                 sessionId: resolvedSessionId,
                 messages: [
                   ...updatedMessages,
-                  { id: aiMsgId, role: 'assistant', content: finalContent, timestamp },
+                  {
+                    id: aiMsgId,
+                    role: 'assistant',
+                    content: finalContent,
+                    timestamp,
+                    ...(isErrorResponse ? { type: 'error' } : {}),
+                  },
                 ],
               },
             },
@@ -458,6 +471,7 @@ export function useChat(username, { onCreditExhausted } = {}) {
     const chatSessionId    = chatData.chats[activeChatId]?.sessionId;
     let resolvedSessionId  = chatSessionId;
     let finalContent       = '';
+    let isErrorResponse    = false;
 
     try {
       for await (const chunk of streamChat(contextMessages, {
@@ -476,6 +490,7 @@ export function useChat(username, { onCreditExhausted } = {}) {
       if (!wasAborted) {
         console.error('[IB AI Assistant] Regeneration failed:', err.message);
         finalContent = classifyStreamError(err);
+        isErrorResponse = true;
       }
     } finally {
       const shouldCommit = !wasAborted || userStopRef.current;
@@ -491,7 +506,13 @@ export function useChat(username, { onCreditExhausted } = {}) {
                 sessionId: resolvedSessionId,
                 messages: [
                   ...trimmedMessages,
-                  { id: aiMsgId, role: 'assistant', content: finalContent, timestamp },
+                  {
+                    id: aiMsgId,
+                    role: 'assistant',
+                    content: finalContent,
+                    timestamp,
+                    ...(isErrorResponse ? { type: 'error' } : {}),
+                  },
                 ],
               },
             },
