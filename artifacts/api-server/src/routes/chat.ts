@@ -340,11 +340,28 @@ router.post(
         const errMsg = err instanceof Error ? err.message : String(err);
         logger.error({ err: errMsg }, "LLM stream error");
 
+        // ── [DIAG] Pre-normalizeAIError ── temporary forensic logging ──────────
+        logger.error(
+          {
+            RAW_CHAT_ERROR_TYPE:  err instanceof Error ? err.constructor.name : typeof err,
+            RAW_CHAT_ERROR_MSG:   errMsg,
+            RAW_CHAT_ERROR_STACK: err instanceof Error
+              ? err.stack?.split("\n").slice(0, 3).join(" → ")
+              : undefined,
+          },
+          "[DIAG] pre-normalizeAIError",
+        );
+        // ── end [DIAG] ───────────────────────────────────────────────────────────
+
         // Sanitize: never send raw provider error messages to clients.
         // Map the actual error to a canonical code (rate_limit, quota_exceeded,
         // provider_unavailable, timeout, etc.) so the frontend shows an
         // accurate, user-safe message.
         const { code: errCode } = normalizeAIError(err, "chat");
+
+        // ── [DIAG] Post-normalizeAIError ── temporary forensic logging ─────────
+        logger.error({ CLASSIFIED_CHAT_ERROR: errCode }, "[DIAG] post-normalizeAIError");
+        // ── end [DIAG] ───────────────────────────────────────────────────────────
         res.write(
           sseEvent({
             error: true,
