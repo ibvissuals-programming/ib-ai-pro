@@ -186,8 +186,17 @@ export function buildStandardResponse<T extends Record<string, unknown>>(
 //   5. feature_disabled     — fal balance / locked / unsupported model
 //   6. safety_block         — Gemini SAFETY / content_filter / recitation
 //   7. invalid_request      — 400 / INVALID_ARGUMENT / bad request / malformed
-//   8. provider_unavailable — 503 / UNAVAILABLE / network / service errors
+//   8. provider_unavailable — 503 / UNAVAILABLE keyword only
 //   9. internal_error       — catch-all
+//
+// Step 8 intentionally omits "service", "network", and "provider" string
+// matches. "service" and "provider" are too generic — "provider" in
+// particular appears in the "Both providers failed" wrapper emitted by
+// llm.ts when both Groq and Gemini fail, causing every such error to be
+// misclassified as provider_unavailable. "network" similarly over-fires.
+// Genuine 503 responses are caught by http===503 or "unavailable" keyword.
+// Errors that would have matched only via those broad terms fall correctly
+// to step 9 (internal_error).
 //
 // chat.ts is the ONLY caller that converts these codes into user-safe text.
 // This function logs the raw classification inputs at DEBUG so issues are
@@ -303,10 +312,10 @@ export function normalizeAIError(err: unknown, system = "unknown"): NormalizedAI
   )
     code = "invalid_request";
 
-  // ── 8. provider_unavailable — 503 / UNAVAILABLE / network failures ────────────
+  // ── 8. provider_unavailable — 503 / UNAVAILABLE keyword only ─────────────────
+  // "service", "network", "provider" intentionally omitted — see comment above.
   else if (
-    lower.includes("unavailable") || lower.includes("service") ||
-    lower.includes("network")     || lower.includes("provider") ||
+    lower.includes("unavailable") ||
     http === 503
   )
     code = "provider_unavailable";
