@@ -177,7 +177,7 @@ router.post(
           success:  false,
           mode:     "tts",
           error:    "Text-to-speech is not available in this environment.",
-          code:     "feature_disabled",
+          code:     "provider_not_configured",
         });
         return;
       }

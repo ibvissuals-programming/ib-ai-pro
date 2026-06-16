@@ -72,12 +72,16 @@ export async function* streamChat(messages, options = {}) {
 
   if (!response.ok) {
     clearTimeout(timer);
-    const body = await response.text().catch(() => '');
-    // Propagate 401/402/429 codes distinctly for the UI to handle
+    // Propagate 401/402/429 codes distinctly for the UI to handle.
+    // All other failures are mapped to a STREAM_ERROR code — never expose
+    // raw HTTP body text to the caller or UI.
     if (response.status === 401) throw new Error('UNAUTHENTICATED');
     if (response.status === 402) throw new Error('CREDITS_EXHAUSTED');
     if (response.status === 429) throw new Error('RATE_LIMITED');
-    throw new Error(`API error ${response.status}: ${body}`);
+    if (response.status === 400) throw new Error('STREAM_ERROR:invalid_request');
+    if (response.status === 403) throw new Error('STREAM_ERROR:provider_not_configured');
+    if (response.status >= 500)  throw new Error('STREAM_ERROR:provider_unavailable');
+    throw new Error('STREAM_ERROR:internal_error');
   }
 
   // Extract rate-limit headers while we still have the response object

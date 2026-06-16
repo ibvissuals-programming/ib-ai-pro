@@ -8,41 +8,39 @@ import { fetchLatestSession } from '../services/chatHistoryApi';
 // ── UI error type system ──────────────────────────────────────────────────────
 //
 // Three-layer architecture:
-//   1. UI_ERROR_MESSAGES  — the ONLY strings ever shown to users
-//   2. mapBackendErrorToUI — maps backend AIErrorCode → UIErrorType key
-//   3. classifyStreamError — maps any thrown error → user-safe string
+//   1. UI_ERROR_MESSAGES  — the ONLY strings ever shown to users; keyed by the
+//                           7 canonical backend AIErrorCode values (no extras)
+//   2. mapBackendErrorToUI — maps backend AIErrorCode → user-safe string (direct
+//                           lookup; no intermediate key layer)
+//   3. classifyStreamError — maps any thrown error → user-safe string via
+//                           mapBackendErrorToUI; never returns raw provider text
 //
-// No raw error strings, HTTP codes, provider names, or system wording
-// may reach the user through this layer.
+// Rules enforced by this layer:
+//   • No raw error strings, HTTP codes, provider names, or system wording
+//     may reach the user through this layer.
+//   • classifyStreamError is the ONLY path to produce a user-facing error string.
+//   • Error strings are NEVER stored in chat history — errors are transient state.
 
 /** @type {Record<string, string>} */
 const UI_ERROR_MESSAGES = {
-  TRY_AGAIN:  'Something went wrong. Please try again.',
-  SLOW_DOWN:  "You're going a bit fast. Please wait a moment.",
-  BLOCKED:    "I can't help with that request.",
-  BAD_INPUT:  "That message doesn't look right. Try rephrasing it.",
-  TEMP_DOWN:  'Service is temporarily unavailable. Please try again shortly.',
-  UNKNOWN:    'Something went wrong. Please try again.',
+  rate_limit:              "You're sending messages too fast. Please wait a moment.",
+  invalid_request:         "Your message couldn't be processed. Try rephrasing.",
+  safety_block:            "This request was blocked by safety filters.",
+  timeout:                 "Request timed out. Please try again.",
+  provider_unavailable:    "AI service is temporarily unavailable.",
+  provider_not_configured: "AI service is not configured.",
+  internal_error:          "Something went wrong. Please try again.",
 };
 
 /**
- * Maps a backend AIErrorCode to a UIErrorType key.
- * Covers every AIErrorCode value defined in aiOrchestrator.ts.
- * Add new cases here when the backend adds new codes.
+ * Maps a backend AIErrorCode to a user-safe UI string.
+ * Direct lookup into UI_ERROR_MESSAGES — falls back to internal_error.
+ * Covers all 7 canonical codes defined in aiOrchestrator.ts.
  * @param {string} code
- * @returns {keyof typeof UI_ERROR_MESSAGES}
+ * @returns {string}
  */
 function mapBackendErrorToUI(code) {
-  switch (code) {
-    case 'rate_limit':              return 'SLOW_DOWN';
-    case 'safety_block':            return 'BLOCKED';
-    case 'invalid_request':         return 'BAD_INPUT';
-    case 'timeout':
-    case 'provider_unavailable':
-    case 'provider_not_configured': return 'TEMP_DOWN';
-    case 'internal_error':          return 'TRY_AGAIN';
-    default:                        return 'UNKNOWN';
-  }
+  return UI_ERROR_MESSAGES[code] ?? UI_ERROR_MESSAGES.internal_error;
 }
 
 /**
@@ -50,8 +48,12 @@ function mapBackendErrorToUI(code) {
  *
  * Three phases:
  *   pre-stream  — fetch / HTTP handshake errors (before SSE stream opens)
- *   stream      — STREAM_ERROR:code events emitted inside the SSE loop
+ *   stream      — STREAM_ERROR:code events emitted inside the SSE loop,
+ *                 and coded HTTP errors from api.js (same STREAM_ERROR format)
  *   post-stream — errors thrown after the stream has closed
+ *
+ * UNAUTHENTICATED and CREDITS_EXHAUSTED are intentionally not mapped here —
+ * callers must detect and handle them before calling classifyStreamError.
  *
  * @param {unknown} err
  * @returns {string}
@@ -69,7 +71,7 @@ function classifyStreamError(err) {
 
   // ── Extract backend AIErrorCode (stream phase only) ───────────────────────
   const backendCode = phase === 'stream'
-    ? (msg.split('STREAM_ERROR:')[1] ?? 'unknown')
+    ? (msg.split('STREAM_ERROR:')[1]?.trim() ?? 'internal_error')
     : null;
 
   // ── Debug log (never shown to users) ──────────────────────────────────────
@@ -79,37 +81,32 @@ function classifyStreamError(err) {
     message: msg,
   });
 
-  // ── Pre-stream: HTTP / network layer ──────────────────────────────────────
-  // These fire before the SSE stream opens. Raw technical details are never
-  // forwarded — each condition maps to the nearest semantic UI type.
-  if (name === 'AbortError' || msg.includes('aborted') || msg.includes('abort')) {
-    return UI_ERROR_MESSAGES.TEMP_DOWN;
+  // ── AbortError — user-initiated stop or timeout abort ─────────────────────
+  // Only fires here when wasAborted is false (i.e. an unintended abort).
+  // Intentional Stop-button aborts are handled before calling this function.
+  if (name === 'AbortError') {
+    return UI_ERROR_MESSAGES.timeout;
   }
+
+  // ── Pre-stream: network failure ────────────────────────────────────────────
   if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('network')) {
-    return UI_ERROR_MESSAGES.TRY_AGAIN;
+    return UI_ERROR_MESSAGES.internal_error;
   }
-  if (msg.startsWith('API error 5') || msg.includes('502') || msg.includes('503')) {
-    return UI_ERROR_MESSAGES.TEMP_DOWN;
-  }
-  // Named codes emitted by api.js for specific HTTP statuses
-  if (msg === 'UNAUTHENTICATED' || msg === 'CREDITS_EXHAUSTED') {
-    return UI_ERROR_MESSAGES.UNKNOWN;   // auth / credit flows handle these separately
-  }
+
+  // ── Pre-stream: named codes from api.js ────────────────────────────────────
+  // UNAUTHENTICATED / CREDITS_EXHAUSTED handled by caller before reaching here.
   if (msg === 'RATE_LIMITED') {
-    return UI_ERROR_MESSAGES.SLOW_DOWN;
-  }
-  // Remaining HTTP 4xx (400 validation, 403 recovery-session, etc.)
-  if (msg.startsWith('API error 4')) {
-    return UI_ERROR_MESSAGES.TRY_AGAIN;
+    return UI_ERROR_MESSAGES.rate_limit;
   }
 
-  // ── Stream-phase: backend AIErrorCode values via SSE ──────────────────────
+  // ── Stream-phase: STREAM_ERROR:<code> — covers SSE server errors AND
+  //    all coded HTTP errors emitted by api.js (400, 403, 5xx) ─────────────
   if (phase === 'stream') {
-    return UI_ERROR_MESSAGES[mapBackendErrorToUI(backendCode)];
+    return mapBackendErrorToUI(backendCode);
   }
 
-  // ── Post-stream and catch-all ──────────────────────────────────────────────
-  return UI_ERROR_MESSAGES.TRY_AGAIN;
+  // ── Post-stream / catch-all ────────────────────────────────────────────────
+  return UI_ERROR_MESSAGES.internal_error;
 }
 
 function classifyImageError(err) {
@@ -140,6 +137,10 @@ export function useChat(username, { onCreditExhausted } = {}) {
   const [chatData, setChatData] = useState(null);
   const [isTyping, setIsTyping] = useState(false);
   const [rateLimitState, setRateLimitState] = useState(null);
+  // chatError holds the current transient error string shown to the user.
+  // It is NEVER stored in chat history — it resets on the next send, on chat
+  // switch/new, or when the user dismisses it.
+  const [chatError, setChatError] = useState(null);
   const streamAbortRef = useRef(null);
   const userStopRef   = useRef(false); // true when user explicitly clicks Stop
 
@@ -212,14 +213,18 @@ export function useChat(username, { onCreditExhausted } = {}) {
   const activeChat = activeChatId ? chats[activeChatId] : null;
   const messages = activeChat?.messages ?? [];
 
+  const clearChatError = useCallback(() => setChatError(null), []);
+
   const switchChat = useCallback((chatId) => {
     if (!chatData || !chatData.chats[chatId]) return;
+    setChatError(null);
     persist({ ...chatData, activeChatId: chatId });
   }, [chatData, persist]);
 
   const newChat = useCallback(() => {
     if (!chatData) return;
     const id = `chat_${Date.now()}`;
+    setChatError(null);
     persist({
       ...chatData,
       chats: {
@@ -331,13 +336,15 @@ export function useChat(username, { onCreditExhausted } = {}) {
     const chatSessionId = chatData.chats[activeChatId]?.sessionId;
     let resolvedSessionId = chatSessionId;
 
+    // Clear any leftover error from a previous attempt before starting a new stream.
+    setChatError(null);
+
     let finalContent = '';
-    // Track whether finalContent is an error string so we can tag it with
-    // type: 'error'. Error messages tagged this way are excluded from the
-    // contextMessages filter (!m.type || m.type === 'text') on the next send,
-    // preventing error strings from contaminating the AI's conversation context
-    // and causing the "stuck" state.
-    let isErrorResponse = false;
+    // wasError: true when the stream fails with a genuine error (not a user abort).
+    // On error we show a transient chatError banner — the error string is NEVER
+    // stored in chat history. withUserMsg (user message only) was already persisted
+    // before the stream; on error we simply roll back the live view to it.
+    let wasError = false;
 
     try {
       for await (const chunk of streamChat(contextMessages, {
@@ -356,46 +363,48 @@ export function useChat(username, { onCreditExhausted } = {}) {
       }
     } catch (err) {
       if (!wasAborted) {
+        wasError = true;
         console.error('[IB AI Assistant] AI request failed:', err.message);
-        finalContent = classifyStreamError(err);
-        isErrorResponse = true;
+        // CREDITS_EXHAUSTED triggers the upgrade modal (separate from error banner).
+        if (err?.message === 'CREDITS_EXHAUSTED') onCreditExhausted?.();
+        // Show transient banner — mapBackendErrorToUI via classifyStreamError.
+        setChatError(classifyStreamError(err));
+        // Roll back live streaming view (removes in-progress AI bubble).
+        setChatData(withUserMsg);
       }
-      // If user clicked Stop (wasAborted + userStopRef), finalContent keeps
-      // whatever was streamed — no error message, partial content is committed.
+      // wasAborted + userStopRef.current: user hit Stop — finalContent keeps
+      // whatever was streamed, committed below as a normal message.
     } finally {
       // Commit when: normal finish OR user explicitly stopped (not unmount/timeout abort)
       const shouldCommit = !wasAborted || userStopRef.current;
       userStopRef.current = false;
       if (shouldCommit) {
-        try {
-          const finalChatState = {
-            ...withUserMsg,
-            chats: {
-              ...withUserMsg.chats,
-              [activeChatId]: {
-                ...withUserMsg.chats[activeChatId],
-                sessionId: resolvedSessionId,
-                messages: [
-                  ...updatedMessages,
-                  {
-                    id: aiMsgId,
-                    role: 'assistant',
-                    content: finalContent,
-                    timestamp,
-                    ...(isErrorResponse ? { type: 'error' } : {}),
-                  },
-                ],
+        if (!wasError && finalContent) {
+          // Success or user-stop with content: persist the AI message to history.
+          try {
+            persist({
+              ...withUserMsg,
+              chats: {
+                ...withUserMsg.chats,
+                [activeChatId]: {
+                  ...withUserMsg.chats[activeChatId],
+                  sessionId: resolvedSessionId,
+                  messages: [
+                    ...updatedMessages,
+                    { id: aiMsgId, role: 'assistant', content: finalContent, timestamp },
+                  ],
+                },
               },
-            },
-          };
-          persist(finalChatState);
-        } catch (persistErr) {
-          console.error('[IB AI Assistant] Failed to persist message state:', persistErr);
+            });
+          } catch (persistErr) {
+            console.error('[IB AI Assistant] Failed to persist message state:', persistErr);
+          }
         }
+        // On error: withUserMsg already persisted pre-stream; no further action.
         setIsTyping(false);
       }
     }
-  }, [chatData, activeChatId, persist]);
+  }, [chatData, activeChatId, persist, onCreditExhausted]);
 
   // ── Stop generation (user-initiated) ──────────────────────────────────────
   // Aborts the active stream and commits whatever partial content was streamed.
@@ -471,7 +480,9 @@ export function useChat(username, { onCreditExhausted } = {}) {
     const chatSessionId    = chatData.chats[activeChatId]?.sessionId;
     let resolvedSessionId  = chatSessionId;
     let finalContent       = '';
-    let isErrorResponse    = false;
+    let wasError           = false;
+
+    setChatError(null);
 
     try {
       for await (const chunk of streamChat(contextMessages, {
@@ -488,42 +499,40 @@ export function useChat(username, { onCreditExhausted } = {}) {
       if (!finalContent) throw new Error('Empty response from AI');
     } catch (err) {
       if (!wasAborted) {
+        wasError = true;
         console.error('[IB AI Assistant] Regeneration failed:', err.message);
-        finalContent = classifyStreamError(err);
-        isErrorResponse = true;
+        if (err?.message === 'CREDITS_EXHAUSTED') onCreditExhausted?.();
+        setChatError(classifyStreamError(err));
+        setChatData(withTrimmed);
       }
     } finally {
       const shouldCommit = !wasAborted || userStopRef.current;
       userStopRef.current = false;
       if (shouldCommit) {
-        try {
-          persist({
-            ...withTrimmed,
-            chats: {
-              ...withTrimmed.chats,
-              [activeChatId]: {
-                ...withTrimmed.chats[activeChatId],
-                sessionId: resolvedSessionId,
-                messages: [
-                  ...trimmedMessages,
-                  {
-                    id: aiMsgId,
-                    role: 'assistant',
-                    content: finalContent,
-                    timestamp,
-                    ...(isErrorResponse ? { type: 'error' } : {}),
-                  },
-                ],
+        if (!wasError && finalContent) {
+          try {
+            persist({
+              ...withTrimmed,
+              chats: {
+                ...withTrimmed.chats,
+                [activeChatId]: {
+                  ...withTrimmed.chats[activeChatId],
+                  sessionId: resolvedSessionId,
+                  messages: [
+                    ...trimmedMessages,
+                    { id: aiMsgId, role: 'assistant', content: finalContent, timestamp },
+                  ],
+                },
               },
-            },
-          });
-        } catch (persistErr) {
-          console.error('[IB AI Assistant] Failed to persist regenerated state:', persistErr);
+            });
+          } catch (persistErr) {
+            console.error('[IB AI Assistant] Failed to persist regenerated state:', persistErr);
+          }
         }
         setIsTyping(false);
       }
     }
-  }, [chatData, activeChatId, persist]);
+  }, [chatData, activeChatId, persist, onCreditExhausted]);
 
   // ── Image edit send ────────────────────────────────────────────────────────
   // Called when user attaches an image AND types an edit-intent prompt.
@@ -734,6 +743,7 @@ export function useChat(username, { onCreditExhausted } = {}) {
 
   const clearChat = useCallback(() => {
     if (!chatData || !activeChatId) return;
+    setChatError(null);
     persist({
       ...chatData,
       chats: {
@@ -749,6 +759,8 @@ export function useChat(username, { onCreditExhausted } = {}) {
     messages,
     isTyping,
     rateLimitState,
+    chatError,
+    clearChatError,
     sendMessage,
     stopGeneration,
     regenerateFrom,

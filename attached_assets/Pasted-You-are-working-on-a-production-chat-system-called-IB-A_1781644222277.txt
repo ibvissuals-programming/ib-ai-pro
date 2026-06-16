@@ -1,0 +1,73 @@
+You are working on a production chat system called IB AI. Your goal is to make the chat stable, predictable, and user-friendly under all failure conditions.
+
+PRIMARY OBJECTIVES:
+- Ensure chat never breaks visually or gets stuck
+- Ensure all backend errors are correctly classified
+- Ensure no raw system errors or technical messages ever reach users
+- Ensure error states are recoverable (no permanent failure UI)
+- Ensure concurrent requests do not corrupt chat state
+- Ensure rate limits are user-friendly and non-blocking long-term
+
+ERROR UX ARCHITECTURE:
+
+1. Backend (normalizeAIError):
+Must output ONLY:
+- rate_limit
+- invalid_request
+- safety_block
+- timeout
+- provider_unavailable
+- provider_not_configured
+- internal_error
+
+No broad string matching. No leaking raw provider/network/service errors. No wrapper-based misclassification. All branches must be deterministic.
+
+2. Transport layer (api.js / chat.ts):
+- Never expose raw HTTP errors
+- Convert all failures into STREAM_ERROR:<code>
+- Never send "API error 400/403/429" to UI
+- SSE errors must not break stream rendering
+
+3. Frontend (useChat.js):
+Use ONLY:
+mapBackendErrorToUI(code)
+
+UI MESSAGES:
+- rate_limit → “You’re sending messages too fast. Please wait a moment.”
+- invalid_request → “Your message couldn’t be processed. Try rephrasing.”
+- safety_block → “This request was blocked by safety filters.”
+- timeout → “Request timed out. Please try again.”
+- provider_unavailable → “AI service is temporarily unavailable.”
+- provider_not_configured → “AI service is not configured.”
+- internal_error → “Something went wrong. Please try again.”
+
+CRITICAL RULES:
+- Never show API error messages to users
+- Never store error messages in chat history as AI messages
+- Never feed error text back into AI context
+- Never allow errors to persist across chats
+
+STATE SAFETY:
+- No shared global request state
+- No cross-request overwrites
+- Each stream must be isolated
+- No _lastProviderResult or shared mutation
+
+TEST SCENARIOS:
+1. Normal chat → works
+2. Rate limit → friendly cooldown message
+3. Invalid request → clean retry message
+4. Safety block → safe rejection message
+5. Network failure → retry message only
+6. Provider failure → temporary unavailable message
+7. Concurrent requests → no corruption
+
+SUCCESS CRITERIA:
+- No raw error text ever visible
+- No stuck UI states
+- All errors recoverable
+- No chat context corruption
+- Consistent UX under all failures
+
+FINAL GOAL:
+Make IB AI feel like a production-grade AI system with clean, human-friendly error handling and zero technical leakage to users.

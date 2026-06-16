@@ -38,7 +38,6 @@ export type AIErrorCode =
   | "provider_unavailable"
   | "provider_not_configured"
   | "rate_limit"
-  | "feature_disabled"
   | "timeout"
   | "invalid_request"
   | "safety_block"
@@ -179,15 +178,15 @@ export function buildStandardResponse<T extends Record<string, unknown>>(
 // Maps provider/runtime errors to canonical error codes.
 //
 // Classification order (first match wins — order is load-bearing):
-//   1. timeout              — watchdog / connection deadline / ProviderError timeout
+//   1. timeout                 — watchdog / connection deadline / ProviderError timeout
 //   2. provider_not_configured — quota with limit:0 (billing disabled)
-//   3. rate_limit           — 429 / quota / resource_exhausted / too many requests
+//   3. rate_limit              — 429 / quota / resource_exhausted / too many requests
 //   4. provider_not_configured — 401/403 / bad API key / permission denied
-//   5. feature_disabled     — fal balance / locked / unsupported model
-//   6. safety_block         — Gemini SAFETY / content_filter / recitation
-//   7. invalid_request      — 400 / INVALID_ARGUMENT / bad request / malformed
-//   8. provider_unavailable — 503 / UNAVAILABLE keyword only
-//   9. internal_error       — catch-all
+//   5. provider_not_configured — fal balance exhausted / locked / unsupported model
+//   6. safety_block            — Gemini SAFETY / content_filter / recitation
+//   7. invalid_request         — 400 / INVALID_ARGUMENT / bad request / malformed
+//   8. provider_unavailable    — 503 / UNAVAILABLE keyword only
+//   9. internal_error          — catch-all
 //
 // Step 8 intentionally omits "service", "network", and "provider" string
 // matches. "service" and "provider" are too generic — "provider" in
@@ -203,14 +202,13 @@ export function buildStandardResponse<T extends Record<string, unknown>>(
 // diagnosable without exposing internals to the client.
 
 const USER_MESSAGES: Record<AIErrorCode, string> = {
-  provider_unavailable:    "The AI provider is temporarily unavailable. Please try again shortly.",
-  provider_not_configured: "This feature requires a Gemini API key with billing enabled. Enable billing at ai.google.dev to use image editing.",
-  rate_limit:              "Too many requests. Please wait a moment and try again.",
-  feature_disabled:        "This feature is not available in the current environment.",
-  timeout:                 "The request timed out. Please try again.",
-  invalid_request:         "The request could not be processed. Please check your input.",
-  safety_block:            "Your message was blocked by the AI safety filter. Please rephrase and try again.",
-  internal_error:          "An unexpected error occurred. Please try again.",
+  provider_unavailable:    "AI service is temporarily unavailable.",
+  provider_not_configured: "AI service is not configured.",
+  rate_limit:              "You're sending messages too fast. Please wait a moment.",
+  timeout:                 "Request timed out. Please try again.",
+  invalid_request:         "Your message couldn't be processed. Try rephrasing.",
+  safety_block:            "This request was blocked by safety filters.",
+  internal_error:          "Something went wrong. Please try again.",
 };
 
 // ── HTTP status extraction ─────────────────────────────────────────────────────
@@ -280,7 +278,11 @@ export function normalizeAIError(err: unknown, system = "unknown"): NormalizedAI
   )
     code = "provider_not_configured";
 
-  // ── 5. feature_disabled — balance / locked / unsupported model ────────────────
+  // ── 5. provider_not_configured — balance exhausted / feature locked ───────────
+  // Fal.ai credit failures, locked accounts, and unsupported-model responses are
+  // all fundamentally "this feature requires a configured/funded provider" issues.
+  // Maps to provider_not_configured (not a separate feature_disabled code) so the
+  // frontend only handles the canonical 7 codes defined in the spec.
   else if (
     lower.includes("exhausted balance") || lower.includes("user is locked") ||
     (lower.includes("fal") &&
@@ -288,7 +290,7 @@ export function normalizeAIError(err: unknown, system = "unknown"): NormalizedAI
     lower.includes("feature_disabled") || lower.includes("not available") ||
     lower.includes("unsupported_model") || lower.includes("not supported")
   )
-    code = "feature_disabled";
+    code = "provider_not_configured";
 
   // ── 6. safety_block — content policy / safety filter ─────────────────────────
   // Gemini: "Candidate was blocked due to SAFETY", "finish_reason: SAFETY"

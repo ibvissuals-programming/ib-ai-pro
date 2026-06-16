@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Clock, WifiOff } from 'lucide-react';
+import { AlertCircle, Clock, WifiOff, X } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { useAuth } from '../hooks/useAuth';
 import { useChat } from '../hooks/useChat';
@@ -54,6 +54,8 @@ export default function ChatApp() {
     messages,
     isTyping,
     rateLimitState,
+    chatError,
+    clearChatError,
     sendMessage,
     stopGeneration,
     regenerateFrom,
@@ -201,6 +203,21 @@ export default function ChatApp() {
           onSuggest={handleSuggest}
           showOnboarding={!onboardingDone}
         />
+
+        {/* Transient AI error banner — never stored in chat history */}
+        {chatError && (
+          <div className="mx-4 mb-1 px-3.5 py-2.5 rounded-xl bg-destructive/10 border border-destructive/20 flex items-center gap-2 shrink-0">
+            <AlertCircle size={13} className="shrink-0 text-destructive/70" />
+            <span className="flex-1 text-[13px] text-destructive/90">{chatError}</span>
+            <button
+              onClick={clearChatError}
+              aria-label="Dismiss error"
+              className="text-destructive/40 hover:text-destructive/70 transition-colors ml-1 shrink-0"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        )}
 
         {rateLimitState && rateLimitState.remaining <= 5 && (
           <RateLimitBadge remaining={rateLimitState.remaining} resetAt={rateLimitState.resetAt} />
