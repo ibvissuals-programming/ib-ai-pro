@@ -1,0 +1,147 @@
+You are working on IB AI chat system. Your task is NOT to change backend logic or AI classification.
+
+Your goal is to implement a production-grade error UX layer so that users NEVER see raw system errors, backend codes, HTTP status wording, or technical failure messages.
+
+---
+
+## RULES (STRICT)
+
+1. DO NOT modify:
+   - normalizeAIError
+   - llm.ts provider logic
+   - api.js backend request logic
+   - providerGuard.ts
+
+2. ONLY modify frontend error presentation layer (useChat.js and any UI mapping helpers).
+
+3. REMOVE ALL direct user-facing exposure of:
+   - "Request rejected by the AI service"
+   - "API error 4xx"
+   - "You're sending messages too fast"
+   - any backend error strings
+   - any HTTP status messages
+   - any provider names
+
+---
+
+## IMPLEMENT A 3-LAYER ERROR UX SYSTEM
+
+### STEP 1 — Define UI Error Types
+
+Create:
+
+type UIErrorType =
+  | "TRY_AGAIN"
+  | "SLOW_DOWN"
+  | "BLOCKED"
+  | "BAD_INPUT"
+  | "TEMP_DOWN"
+  | "UNKNOWN";
+
+---
+
+### STEP 2 — Add UX Message Layer
+
+Create a constant:
+
+UI_ERROR_MESSAGES = {
+  TRY_AGAIN: "Something went wrong. Please try again.",
+  SLOW_DOWN: "You're going a bit fast. Please wait a moment.",
+  BLOCKED: "I can’t help with that request.",
+  BAD_INPUT: "That message doesn’t look right. Try rephrasing it.",
+  TEMP_DOWN: "Service is temporarily unavailable. Please try again shortly.",
+  UNKNOWN: "Something went wrong. Please try again."
+}
+
+---
+
+### STEP 3 — Add Mapping Function
+
+Create:
+
+function mapBackendErrorToUI(code) {
+  switch (code) {
+    case "rate_limit":
+      return "SLOW_DOWN";
+
+    case "safety_block":
+      return "BLOCKED";
+
+    case "invalid_request":
+      return "BAD_INPUT";
+
+    case "timeout":
+    case "provider_unavailable":
+      return "TEMP_DOWN";
+
+    case "internal_error":
+      return "TRY_AGAIN";
+
+    default:
+      return "UNKNOWN";
+  }
+}
+
+---
+
+### STEP 4 — Modify useChat.js ONLY
+
+Find ALL places where error messages are displayed such as:
+
+- STREAM_ERROR_MESSAGES
+- msg.startsWith("API error")
+- direct err.message rendering
+- fallback error strings
+- "Request rejected by the AI service"
+
+Replace ALL of them with:
+
+const uiType = mapBackendErrorToUI(backendCode);
+return UI_ERROR_MESSAGES[uiType];
+
+NO RAW ERROR STRINGS MUST EVER BE DISPLAYED TO USER.
+
+---
+
+### STEP 5 — CLEAN UX BEHAVIOR REQUIREMENTS
+
+User should ONLY ever see:
+
+- friendly messages
+- no HTTP codes
+- no provider references
+- no "API error"
+- no system wording
+
+Errors must feel like normal chat behavior, not system failures.
+
+---
+
+### STEP 6 — FINAL VALIDATION TESTS
+
+After implementation, verify:
+
+1. Normal chat works
+2. Rate limit shows friendly "slow down" message
+3. Invalid request shows "try rephrasing"
+4. Safety shows blocked message
+5. Provider failure shows "try again later"
+6. No message ever contains:
+   - "API error"
+   - "Request rejected"
+   - "429 / 400 / 403"
+   - "provider"
+   - "network"
+
+---
+
+## SUCCESS CRITERIA
+
+IB AI must feel like a polished production AI product (ChatGPT-level UX):
+
+- clean error handling
+- no technical leakage
+- consistent messaging
+- no visible system failures
+
+Only UI-friendly messages should be visible to users.

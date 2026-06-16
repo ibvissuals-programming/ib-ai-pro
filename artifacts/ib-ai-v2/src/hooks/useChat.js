@@ -5,89 +5,111 @@ import { analyzeImage } from '../services/imageApi';
 import { editImage } from '../services/imageToolsApi';
 import { fetchLatestSession } from '../services/chatHistoryApi';
 
-// ── Structured error classifiers ──────────────────────────────────────────────
+// ── UI error type system ──────────────────────────────────────────────────────
+//
+// Three-layer architecture:
+//   1. UI_ERROR_MESSAGES  — the ONLY strings ever shown to users
+//   2. mapBackendErrorToUI — maps backend AIErrorCode → UIErrorType key
+//   3. classifyStreamError — maps any thrown error → user-safe string
+//
+// No raw error strings, HTTP codes, provider names, or system wording
+// may reach the user through this layer.
 
-// Backend error code → user-facing message.
-// Covers every AIErrorCode value defined in aiOrchestrator.ts.
-// Extend here when new codes are added to the backend.
-const STREAM_ERROR_MESSAGES = {
-  rate_limit:              "You're sending messages too fast. Please wait a moment.",
-  invalid_request:         "Your message couldn't be processed. Try rephrasing.",
-  safety_block:            'This request was blocked by safety filters.',
-  provider_not_configured: 'AI service is not configured.',
-  timeout:                 'Request timed out. Please try again.',
-  provider_unavailable:    'AI service is temporarily unavailable.',
-  internal_error:          'An unexpected error occurred. Please try again.',
+/** @type {Record<string, string>} */
+const UI_ERROR_MESSAGES = {
+  TRY_AGAIN:  'Something went wrong. Please try again.',
+  SLOW_DOWN:  "You're going a bit fast. Please wait a moment.",
+  BLOCKED:    "I can't help with that request.",
+  BAD_INPUT:  "That message doesn't look right. Try rephrasing it.",
+  TEMP_DOWN:  'Service is temporarily unavailable. Please try again shortly.',
+  UNKNOWN:    'Something went wrong. Please try again.',
 };
 
+/**
+ * Maps a backend AIErrorCode to a UIErrorType key.
+ * Covers every AIErrorCode value defined in aiOrchestrator.ts.
+ * Add new cases here when the backend adds new codes.
+ * @param {string} code
+ * @returns {keyof typeof UI_ERROR_MESSAGES}
+ */
+function mapBackendErrorToUI(code) {
+  switch (code) {
+    case 'rate_limit':              return 'SLOW_DOWN';
+    case 'safety_block':            return 'BLOCKED';
+    case 'invalid_request':         return 'BAD_INPUT';
+    case 'timeout':
+    case 'provider_unavailable':
+    case 'provider_not_configured': return 'TEMP_DOWN';
+    case 'internal_error':          return 'TRY_AGAIN';
+    default:                        return 'UNKNOWN';
+  }
+}
+
+/**
+ * Classifies any error thrown by streamChat() into a user-safe UI message.
+ *
+ * Three phases:
+ *   pre-stream  — fetch / HTTP handshake errors (before SSE stream opens)
+ *   stream      — STREAM_ERROR:code events emitted inside the SSE loop
+ *   post-stream — errors thrown after the stream has closed
+ *
+ * @param {unknown} err
+ * @returns {string}
+ */
 function classifyStreamError(err) {
   const msg  = err?.message ?? '';
   const name = err?.name ?? '';
 
-  // ── Determine stream phase ────────────────────────────────────────────────────
-  // pre-stream : error thrown during fetch / HTTP handshake (before SSE starts)
-  // stream     : STREAM_ERROR:code emitted inside the SSE event loop
-  // post-stream: error thrown after the stream closed (e.g. empty response)
+  // ── Determine stream phase ─────────────────────────────────────────────────
   const phase = msg.includes('STREAM_ERROR')
     ? 'stream'
     : msg.includes('Empty response')
       ? 'post-stream'
       : 'pre-stream';
 
-  // ── Extract backend code if this is a stream-phase error ─────────────────────
+  // ── Extract backend AIErrorCode (stream phase only) ───────────────────────
   const backendCode = phase === 'stream'
     ? (msg.split('STREAM_ERROR:')[1] ?? 'unknown')
     : null;
 
-  // ── Debug log — fires once per classified error (never shown to users) ────────
+  // ── Debug log (never shown to users) ──────────────────────────────────────
   console.debug('[IB AI] classifyStreamError', {
     phase,
     code:    backendCode ?? (name || 'n/a'),
     message: msg,
   });
 
-  // ── Pre-stream errors (fetch / HTTP layer) ────────────────────────────────────
+  // ── Pre-stream: HTTP / network layer ──────────────────────────────────────
+  // These fire before the SSE stream opens. Raw technical details are never
+  // forwarded — each condition maps to the nearest semantic UI type.
   if (name === 'AbortError' || msg.includes('aborted') || msg.includes('abort')) {
-    return 'Request timed out — the AI took too long to respond. Please try again.';
+    return UI_ERROR_MESSAGES.TEMP_DOWN;
   }
   if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('network')) {
-    return 'Network error. Check your connection and try again.';
+    return UI_ERROR_MESSAGES.TRY_AGAIN;
   }
   if (msg.startsWith('API error 5') || msg.includes('502') || msg.includes('503')) {
-    return 'AI service temporarily unavailable. Please try again in a moment.';
+    return UI_ERROR_MESSAGES.TEMP_DOWN;
   }
-  if (msg === 'UNAUTHENTICATED') {
-    return 'Your session has expired. Please sign in again.';
-  }
-  if (msg === 'CREDITS_EXHAUSTED') {
-    return "You've used all available credits.";
+  // Named codes emitted by api.js for specific HTTP statuses
+  if (msg === 'UNAUTHENTICATED' || msg === 'CREDITS_EXHAUSTED') {
+    return UI_ERROR_MESSAGES.UNKNOWN;   // auth / credit flows handle these separately
   }
   if (msg === 'RATE_LIMITED') {
-    return 'Too many requests. Please wait a moment and try again.';
+    return UI_ERROR_MESSAGES.SLOW_DOWN;
   }
+  // Remaining HTTP 4xx (400 validation, 403 recovery-session, etc.)
   if (msg.startsWith('API error 4')) {
-    return 'Request rejected by the AI service. Please try again.';
+    return UI_ERROR_MESSAGES.TRY_AGAIN;
   }
 
-  // ── Stream-phase errors (backend AIErrorCode values) ─────────────────────────
-  // backendCode is the exact string from `parsed.code` in api.js — no transformation.
+  // ── Stream-phase: backend AIErrorCode values via SSE ──────────────────────
   if (phase === 'stream') {
-    const mapped = STREAM_ERROR_MESSAGES[backendCode];
-    if (mapped) return mapped;
-    // Unknown code from a future backend version — surface it rather than hiding it.
-    return `AI error (${backendCode}). Please try again.`;
+    return UI_ERROR_MESSAGES[mapBackendErrorToUI(backendCode)];
   }
 
-  // ── Post-stream errors ────────────────────────────────────────────────────────
-  if (msg.includes('Empty response')) {
-    return 'AI returned an empty response. Please try again.';
-  }
-  if (msg.includes('AI_PROVIDER_VIOLATION')) {
-    return 'AI service configuration error. Please contact support.';
-  }
-
-  // ── Catch-all ─────────────────────────────────────────────────────────────────
-  return 'Could not reach the AI. Please check your connection and try again.';
+  // ── Post-stream and catch-all ──────────────────────────────────────────────
+  return UI_ERROR_MESSAGES.TRY_AGAIN;
 }
 
 function classifyImageError(err) {
