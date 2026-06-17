@@ -1,0 +1,116 @@
+IB AI ZERO-CONFUSION DEPLOYMENT CHECKLIST (PRODUCTION STABILIZATION)
+
+GOAL:
+Ensure IB AI runs from ONE clean, deterministic state before any further development or pushes.
+
+──────────────────────────────────────────────
+
+1. STOP ALL RUNNING PROCESSES
+- Kill ALL backend instances
+- Stop preview / artifact servers
+- Stop dev servers (no parallel runtimes allowed)
+- Ensure ONLY ONE server will run after restart
+
+──────────────────────────────────────────────
+
+2. HARD CLEAN BUILD STATE
+Run:
+
+rm -rf dist
+rm -rf node_modules/.cache
+
+Then reinstall dependencies:
+
+pnpm install
+
+Then rebuild from scratch:
+
+pnpm run build
+
+IMPORTANT:
+- Confirm build completes with no errors
+- Ensure dist/index.mjs is newly generated (fresh timestamp)
+
+──────────────────────────────────────────────
+
+3. VERIFY SOURCE VS BUILD ALIGNMENT
+Check:
+
+- aiOrchestrator.ts (source) matches expected logic
+- dist/index.mjs contains latest normalizeAIError changes
+- No old strings exist:
+  ❌ "provider"
+  ❌ "service"
+  ❌ "network" (inside provider_unavailable rule)
+
+If mismatch exists → DO NOT RUN SERVER
+
+──────────────────────────────────────────────
+
+4. START ONLY ONE BACKEND INSTANCE
+
+- Start backend once
+- Confirm single process only
+- Confirm no duplicate workflows running
+
+LOG MUST SHOW:
+- latest boot timestamp
+- correct build version
+- no "stale dist" indicators
+
+──────────────────────────────────────────────
+
+5. FRONTEND VERIFICATION
+
+Ensure frontend is not cached:
+- hard refresh (or rebuild dev server if needed)
+- confirm useChat.js latest version is active
+- confirm UI_ERROR_MESSAGES or STREAM_ERROR_MESSAGES mapping is live
+
+──────────────────────────────────────────────
+
+6. MINIMUM SMOKE TESTS (ONLY 3)
+
+TEST 1: Normal chat
+Input: "Hello"
+Expected: normal AI response, no errors
+
+TEST 2: Invalid request
+Input: empty / malformed request
+Expected: clean UI error (NOT raw API error text)
+
+TEST 3: Stress test
+Input: 10–15 rapid messages
+Expected: rate limit message ONCE, then recovery
+
+──────────────────────────────────────────────
+
+7. SUCCESS CRITERIA (ALL MUST PASS)
+
+✔ No raw backend errors visible in UI
+✔ No "API error", "Request rejected", or HTTP codes shown
+✔ No duplicate server processes
+✔ No stale dist execution
+✔ Errors are user-friendly and recoverable
+✔ Chat never freezes or gets stuck
+✔ System returns to normal after failure
+
+──────────────────────────────────────────────
+
+8. IF ANY TEST FAILS
+
+DO NOT CODE.
+
+Instead:
+- Check which server is actually running
+- Confirm dist vs source mismatch
+- Restart clean build cycle again
+- Re-run only the 3 smoke tests
+
+──────────────────────────────────────────────
+
+FINAL RULE:
+
+Never modify architecture again until runtime is fully stable and verified.
+
+Only after this checklist passes should new features or improvements be added.
