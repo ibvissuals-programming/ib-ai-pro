@@ -25,6 +25,13 @@ import { normalizeAIError } from "../lib/aiOrchestrator";
 
 const router = Router();
 
+// ─── Per-user in-flight guard ─────────────────────────────────────────────────
+// Prevents overlapping Gemini calls for the same authenticated user. A second
+// request arriving while one is active immediately receives rate_limit_app so
+// the client can show a clear "please wait" message rather than queuing two
+// simultaneous provider calls.
+const inFlightByUser = new Set<string>();
+
 // ─── Adaptive context window ──────────────────────────────────────────────────
 
 type ConversationMode = "coding" | "reasoning" | "chat";
@@ -195,6 +202,21 @@ router.post(
     const userId  = req.user?.userId;
     incChatRequest();
     pushEvent("chat_request_started", { userId, route: "/api/chat" });
+
+    // ── In-flight guard ────────────────────────────────────────────────────────
+    // Reject the second concurrent request for the same user immediately so we
+    // never queue two Gemini calls from the same account at the same time.
+    if (userId && inFlightByUser.has(userId)) {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.flushHeaders();
+      res.write(": connected\n\n");
+      res.write(sseEvent({ error: true, code: "rate_limit_app" }));
+      res.end();
+      return;
+    }
+    if (userId) inFlightByUser.add(userId);
 
     logger.info(
       { userId, messageCount: rawMessages.length },
@@ -379,6 +401,7 @@ router.post(
       // Remove the close listener — it fires once at most, but removing it
       // keeps the req event emitter tidy on normal completion.
       req.off("close", onClientClose);
+      if (userId) inFlightByUser.delete(userId);
 
       if (streamSucceeded) {
         // ── Phase 4: Latency breakdown ───────────────────────────────────────

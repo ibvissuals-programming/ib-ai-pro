@@ -1,0 +1,79 @@
+You are working on IB AI Studio Lab.
+
+Current state:
+- Backend is stable and functional
+- Auth, DB, JWT, SSE chat pipeline all work correctly
+- Main issue is NOT bugs, but unstable user experience under Gemini free-tier limits
+- Errors seen: "rate_limit", "service temporarily unavailable", first-message occasional failure
+- Root cause confirmed: external Gemini API throttling + lack of resilience layer (NOT backend failure)
+
+GOAL:
+Do NOT refactor architecture. Do NOT rewrite systems.
+Only add minimal resilience improvements so the app behaves stably under API limits.
+
+TASKS:
+
+1. ERROR CLASSIFICATION LAYER
+Create a single unified error mapper that classifies all AI/chat failures into:
+
+- RATE_LIMIT_APP (from policyEngine)
+- RATE_LIMIT_PROVIDER (Gemini/API response)
+- SERVICE_UNAVAILABLE (network/startup/proxy failure)
+- UNKNOWN_ERROR (fallback)
+
+Ensure frontend never sees raw ambiguous strings like:
+- "Service temporarily unavailable"
+- "You're sending messages too fast"
+
+Instead map all errors into structured codes.
+
+2. CHAT REQUEST QUEUE (LIGHTWEIGHT)
+Add a minimal per-session queue in backend OR frontend (choose simplest implementation):
+
+Requirements:
+- Prevent multiple overlapping Gemini requests per sessionId
+- Ensure requests are processed sequentially per user session
+- No full architecture rewrite (in-memory queue is fine)
+
+3. GEMINI RETRY / BACKOFF
+When Gemini returns rate_limit or resource_exhausted:
+
+- Retry 1: after 500–800ms
+- Retry 2: after 2–3 seconds
+- If still failing → return clean provider error (do not spam frontend with raw errors)
+
+4. FIRST MESSAGE STABILITY FIX
+Ensure first chat message is stable:
+
+- Prevent auto-double triggers from frontend
+- Add optional small debounce (300–600ms) before first Gemini call
+- OR queue first request if system is initializing
+
+5. FRONTEND ERROR MAPPING
+Update UI handling so it shows:
+
+- "AI is temporarily busy, retrying..." for provider limits
+- "You're sending messages too fast" only for app-level rate limit
+- "System is starting up" only for backend unavailable
+
+Never show raw backend strings.
+
+6. DO NOT CHANGE:
+- Auth system
+- Database schema
+- JWT logic
+- SSE structure
+- Existing API routes
+
+7. OUTPUT REQUIREMENTS:
+After implementation, provide:
+- list of files changed
+- what error codes were standardized
+- confirmation that chat still returns SSE format:
+  connected → content → sessionId → [DONE]
+- confirmation that login still works
+- confirmation that rate limit no longer leaks raw strings to UI
+
+IMPORTANT:
+This is a stability + resilience patch, not a refactor.
+Keep changes minimal and isolated.

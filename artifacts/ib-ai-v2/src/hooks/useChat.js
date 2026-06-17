@@ -24,6 +24,8 @@ import { fetchLatestSession } from '../services/chatHistoryApi';
 /** @type {Record<string, string>} */
 const UI_ERROR_MESSAGES = {
   rate_limit:              "You're sending messages too fast. Please wait a moment.",
+  rate_limit_app:          "You're sending messages too fast. Please wait a moment.",
+  rate_limit_provider:     "AI is temporarily busy. Please wait a moment and try again.",
   invalid_request:         "Your message couldn't be processed. Try rephrasing.",
   safety_block:            "This request was blocked by safety filters.",
   timeout:                 "Request timed out. Please try again.",
@@ -143,6 +145,9 @@ export function useChat(username, { onCreditExhausted } = {}) {
   const [chatError, setChatError] = useState(null);
   const streamAbortRef = useRef(null);
   const userStopRef   = useRef(false); // true when user explicitly clicks Stop
+  // sendingRef prevents a second concurrent send while a stream is in-flight.
+  // State-based guards have async timing gaps; a ref fires synchronously.
+  const sendingRef    = useRef(false);
 
   useEffect(() => {
     if (!username) return;
@@ -271,6 +276,10 @@ export function useChat(username, { onCreditExhausted } = {}) {
   // ── Text message send ──────────────────────────────────────────────────────
   const sendMessage = useCallback(async (text) => {
     if (!chatData || !activeChatId) return;
+    // Synchronous guard: drop the call if a send is already in flight.
+    // Prevents double-submit races that React state updates cannot catch.
+    if (sendingRef.current) return;
+    sendingRef.current = true;
 
     const streamController = new AbortController();
     streamAbortRef.current?.abort();
@@ -403,6 +412,7 @@ export function useChat(username, { onCreditExhausted } = {}) {
         // On error: withUserMsg already persisted pre-stream; no further action.
         setIsTyping(false);
       }
+      sendingRef.current = false;
     }
   }, [chatData, activeChatId, persist, onCreditExhausted]);
 
@@ -420,6 +430,8 @@ export function useChat(username, { onCreditExhausted } = {}) {
   // discarded — no duplicate messages, no appended threads.
   const regenerateFrom = useCallback(async (index, newText) => {
     if (!chatData || !activeChatId) return;
+    if (sendingRef.current) return;
+    sendingRef.current = true;
 
     streamAbortRef.current?.abort();
     userStopRef.current = false;
@@ -531,6 +543,7 @@ export function useChat(username, { onCreditExhausted } = {}) {
         }
         setIsTyping(false);
       }
+      sendingRef.current = false;
     }
   }, [chatData, activeChatId, persist, onCreditExhausted]);
 

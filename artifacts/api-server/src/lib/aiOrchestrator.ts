@@ -38,6 +38,8 @@ export type AIErrorCode =
   | "provider_unavailable"
   | "provider_not_configured"
   | "rate_limit"
+  | "rate_limit_provider"
+  | "rate_limit_app"
   | "timeout"
   | "invalid_request"
   | "safety_block"
@@ -205,6 +207,8 @@ const USER_MESSAGES: Record<AIErrorCode, string> = {
   provider_unavailable:    "AI service is temporarily unavailable.",
   provider_not_configured: "AI service is not configured.",
   rate_limit:              "You're sending messages too fast. Please wait a moment.",
+  rate_limit_provider:     "AI is temporarily busy. Please wait a moment and try again.",
+  rate_limit_app:          "You're sending messages too fast. Please wait a moment.",
   timeout:                 "Request timed out. Please try again.",
   invalid_request:         "Your message couldn't be processed. Try rephrasing.",
   safety_block:            "This request was blocked by safety filters.",
@@ -259,14 +263,16 @@ export function normalizeAIError(err: unknown, system = "unknown"): NormalizedAI
   )
     code = "provider_not_configured";
 
-  // ── 3. rate_limit — 429 / resource_exhausted / quota (without limit:0) ────────
+  // ── 3. rate_limit_provider — 429 / resource_exhausted / quota from provider ───
+  // Distinguished from rate_limit_app (policyEngine HTTP 429) so the frontend
+  // can show "AI is temporarily busy" vs "slow down" appropriately.
   else if (
     lower.includes("rate limit") || lower.includes("rate-limit") ||
     lower.includes("ratelimit")  || lower.includes("too many requests") ||
     lower.includes("resource_exhausted") ||
     http === 429 || lower.includes("quota")
   )
-    code = "rate_limit";
+    code = "rate_limit_provider";
 
   // ── 4. provider_not_configured — bad key / auth failure (401/403) ─────────────
   else if (

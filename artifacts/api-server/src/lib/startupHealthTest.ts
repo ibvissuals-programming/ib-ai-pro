@@ -377,13 +377,13 @@ async function testErrorLayer(): Promise<SubsystemResult> {
       failures.push(`timeout error: expected code="timeout", got "${n1.code}"`);
     }
 
-    // 2. Rate limit error → code "rate_limit"
+    // 2. Rate limit error → code "rate_limit_provider" (provider 429, not app-level)
     const rateLimitErr = new Error("429 Too Many Requests — rate limit exceeded");
     const n2 = normalizeAIError(rateLimitErr);
-    if (n2.code === "rate_limit") {
-      details.push("✔ rate limit error → code=rate_limit");
+    if (n2.code === "rate_limit_provider") {
+      details.push("✔ rate limit error → code=rate_limit_provider");
     } else {
-      failures.push(`rate limit error: expected code="rate_limit", got "${n2.code}"`);
+      failures.push(`rate limit error: expected code="rate_limit_provider", got "${n2.code}"`);
     }
 
     // 3. Unknown error → code "internal_error"

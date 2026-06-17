@@ -1,7 +1,7 @@
 import { logger } from "../lib/logger";
 import { ai } from "@workspace/integrations-gemini-ai";
 import { recordCompletion, type AiProvider } from "../lib/aiMetrics";
-import { isTransientError, withProviderTimeout } from "../lib/providerGuard";
+import { isTransientError, withProviderTimeout, withProviderRetry } from "../lib/providerGuard";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -367,7 +367,14 @@ export async function createChatStream(
       "[llm] routing to Gemini (Groq not configured)",
     );
     try {
-      const stream = await createGeminiStream(messages, signal);
+      // 2 retries on transient errors (rate_limit / 429 / quota): 600 ms → 1.2 s.
+      // Non-transient failures (auth, safety) throw immediately without retry.
+      const stream = await withProviderRetry(
+        () => createGeminiStream(messages, signal),
+        2,
+        600,
+        "gemini",
+      );
       logger.debug({ model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini stream ready");
       return wrapTracked(stream, "gemini", false, requestStartMs, onComplete);
     } catch (geminiErr) {
@@ -411,7 +418,13 @@ export async function createChatStream(
   );
 
   try {
-    const stream = await createGeminiStream(messages, signal);
+    // Same retry policy as the primary Gemini path.
+    const stream = await withProviderRetry(
+      () => createGeminiStream(messages, signal),
+      2,
+      600,
+      "gemini",
+    );
     logger.debug({ model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini fallback stream ready");
     return wrapTracked(stream, "gemini", true, requestStartMs, onComplete);
   } catch (geminiErr) {
