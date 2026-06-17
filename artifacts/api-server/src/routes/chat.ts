@@ -6,6 +6,7 @@
 // ║  Do NOT add: /api/generate, /api/ai, /api/message, or any      ║
 // ║  route that calls createChatStream() or the Gemini client.     ║
 // ╚══════════════════════════════════════════════════════════════════╝
+import { randomUUID } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { createChatStream, type LastProviderResult, type ChatMessage } from "../services/llm";
@@ -200,13 +201,19 @@ router.post(
     // ── Phase 4: Request timing ────────────────────────────────────────────────
     const tStart  = Date.now();
     const userId  = req.user?.userId;
+    // Trace ID — forwarded from the frontend (X-Request-ID header) or generated here.
+    // Flows through every log line so a single request can be traced end-to-end.
+    const requestId = (req.headers["x-request-id"] as string | undefined) ?? randomUUID();
     incChatRequest();
     pushEvent("chat_request_started", { userId, route: "/api/chat" });
+
+    logger.info({ requestId, userId, messageCount: rawMessages.length }, "[chat] request received");
 
     // ── In-flight guard ────────────────────────────────────────────────────────
     // Reject the second concurrent request for the same user immediately so we
     // never queue two Gemini calls from the same account at the same time.
     if (userId && inFlightByUser.has(userId)) {
+      logger.warn({ requestId, userId }, "[chat] in-flight guard triggered — duplicate request rejected");
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
@@ -217,11 +224,6 @@ router.post(
       return;
     }
     if (userId) inFlightByUser.add(userId);
-
-    logger.info(
-      { userId, messageCount: rawMessages.length },
-      "[chat] request received",
-    );
 
     // Capture the last user message for session title + persistence.
     // Uses raw input — not the context-windowed version.
@@ -320,14 +322,16 @@ router.post(
       // If the client already disconnected during memory retrieval, skip the
       // LLM call entirely — there is nobody to receive the response.
       if (clientDisconnected) {
-        logger.debug({ userId }, "[chat] client gone before LLM call — skipping");
+        logger.debug({ requestId, userId }, "[chat] client gone before LLM call — skipping");
         return;
       }
 
+      logger.debug({ requestId, userId }, "[chat] invoking createChatStream");
       const stream = await createChatStream(
         messages,
         streamController.signal,
         (r) => { providerResult = r; },
+        requestId,
       );
 
       for await (const chunk of stream) {
@@ -357,7 +361,7 @@ router.post(
       if (clientDisconnected) {
         // Client disconnected mid-stream — not an error, just cleanup.
         // The provider stream was already aborted via streamController.
-        logger.debug({ userId }, "[chat] stream cancelled by client disconnect");
+        logger.debug({ requestId, userId }, "[chat] stream cancelled by client disconnect");
       } else {
         // Genuine provider or timeout error — log and emit error SSE.
         pushEvent("error_occurred", {
@@ -366,11 +370,12 @@ router.post(
           meta: { error: err instanceof Error ? err.message : String(err) },
         });
         const errMsg = err instanceof Error ? err.message : String(err);
-        logger.error({ err: errMsg }, "LLM stream error");
+        logger.error({ requestId, err: errMsg }, "[chat] LLM stream error");
 
         // ── [DIAG] Pre-normalizeAIError ── temporary forensic logging ──────────
         logger.error(
           {
+            requestId,
             RAW_CHAT_ERROR_TYPE:  err instanceof Error ? err.constructor.name : typeof err,
             RAW_CHAT_ERROR_MSG:   errMsg,
             RAW_CHAT_ERROR_STACK: err instanceof Error
@@ -388,7 +393,7 @@ router.post(
         const { code: errCode } = normalizeAIError(err, "chat");
 
         // ── [DIAG] Post-normalizeAIError ── temporary forensic logging ─────────
-        logger.error({ CLASSIFIED_CHAT_ERROR: errCode }, "[DIAG] post-normalizeAIError");
+        logger.error({ requestId, CLASSIFIED_CHAT_ERROR: errCode }, "[DIAG] post-normalizeAIError");
         // ── end [DIAG] ───────────────────────────────────────────────────────────
         res.write(
           sseEvent({
@@ -408,7 +413,7 @@ router.post(
         const tAiMs    = Date.now() - tAiStart;
         const tTotalMs = Date.now() - tStart;
         logger.info(
-          { retrieval: tMemRetrievalMs, model: tAiMs, total: tTotalMs },
+          { requestId, retrieval: tMemRetrievalMs, model: tAiMs, total: tTotalMs },
           "[chat] latency_breakdown",
         );
         pushEvent("chat_request_completed", {

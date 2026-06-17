@@ -22,6 +22,10 @@ const STREAM_TIMEOUT_MS = 55_000;
 export async function* streamChat(messages, options = {}) {
   const { sessionId, onSessionId, signal: externalSignal, onRateLimit } = options;
 
+  // Unique trace ID for this request — logged end-to-end on frontend, backend, and LLM.
+  // Retry ownership: ONLY backend llm.ts may retry Gemini. Frontend never retries.
+  const requestId = crypto.randomUUID();
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), STREAM_TIMEOUT_MS);
 
@@ -31,12 +35,15 @@ export async function* streamChat(messages, options = {}) {
     externalSignal.addEventListener('abort', () => controller.abort(), { once: true });
   }
 
+  console.debug('[IB AI] streamChat start', { requestId, sessionId });
+
   let response;
   try {
     response = await fetch(CHAT_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-Request-ID': requestId,
         ...getAuthHeaders(),
       },
       body: JSON.stringify({
@@ -50,25 +57,8 @@ export async function* streamChat(messages, options = {}) {
     throw err;
   }
 
-  // One automatic retry on 429 — wait Retry-After (capped 5 s), then try once more
-  if (response.status === 429) {
-    const retryAfterMs = Math.min(
-      parseInt(response.headers.get('Retry-After') ?? '2', 10) * 1000,
-      5_000,
-    );
-    await new Promise(r => setTimeout(r, retryAfterMs));
-    try {
-      response = await fetch(CHAT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ messages, ...(sessionId ? { sessionId } : {}) }),
-        signal: controller.signal,
-      });
-    } catch (retryErr) {
-      clearTimeout(timer);
-      throw retryErr;
-    }
-  }
+  // NOTE: No frontend retry — ONLY backend llm.ts is authorised to retry Gemini.
+  // If the backend returns 429, propagate it immediately so the error banner shows.
 
   if (!response.ok) {
     clearTimeout(timer);

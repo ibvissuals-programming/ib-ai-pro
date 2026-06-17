@@ -28,7 +28,7 @@ const UI_ERROR_MESSAGES = {
   rate_limit_provider:     "AI is temporarily busy. Please wait a moment and try again.",
   invalid_request:         "Your message couldn't be processed. Try rephrasing.",
   safety_block:            "This request was blocked by safety filters.",
-  timeout:                 "Request timed out. Please try again.",
+  timeout:                 "AI is taking too long. Please try again.",
   provider_unavailable:    "AI service is temporarily unavailable.",
   provider_not_configured: "AI service is not configured.",
   internal_error:          "Something went wrong. Please try again.",

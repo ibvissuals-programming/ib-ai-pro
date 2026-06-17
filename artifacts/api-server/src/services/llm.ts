@@ -31,6 +31,13 @@ const RETRY_DELAY_MS = 600;
 // Does not cover stream reading time — that is guarded by STREAM_INACTIVITY_MS.
 const GROQ_TIMEOUT_MS = 30_000;
 
+// Hard deadline for Gemini to start returning a stream (time-to-first-byte).
+// If generateContentStream does not resolve within this window, a ProviderError
+// of type "timeout" is thrown. withProviderRetry will retry up to MAX_RETRIES
+// additional times before propagating the error to the chat boundary, which maps
+// it to code "timeout" → "AI is taking too long. Please try again."
+const GEMINI_TTFB_MS = 10_000;
+
 // Per-chunk inactivity deadline for both Groq and Gemini stream readers.
 // If no chunk arrives within this window the provider is considered stalled
 // and the stream is aborted. Chosen to match GROQ_TIMEOUT_MS so both
@@ -275,6 +282,7 @@ async function createGroqStream(
 async function createGeminiStream(
   messages: ChatMessage[],
   signal?: AbortSignal,
+  requestId?: string,
 ): Promise<AsyncIterable<string>> {
   const systemMessage = messages.find((m) => m.role === "system");
   const conversationMessages = messages.filter((m) => m.role !== "system");
@@ -284,14 +292,25 @@ async function createGeminiStream(
     parts: [{ text: m.content }],
   }));
 
-  const stream = await ai.models.generateContentStream({
-    model: GEMINI_FALLBACK_MODEL,
-    contents,
-    config: {
-      ...(systemMessage ? { systemInstruction: systemMessage.content } : {}),
-      maxOutputTokens: 8192,
-    },
-  });
+  logger.debug({ requestId, model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini generateContentStream — start");
+
+  // TTFB guard: if Gemini does not start returning a stream within GEMINI_TTFB_MS,
+  // throw ProviderError("timeout"). This is the ONLY timeout applied at the
+  // connection/handshake level; per-chunk inactivity is handled by the watchdog below.
+  const stream = await withProviderTimeout(
+    () => ai.models.generateContentStream({
+      model: GEMINI_FALLBACK_MODEL,
+      contents,
+      config: {
+        ...(systemMessage ? { systemInstruction: systemMessage.content } : {}),
+        maxOutputTokens: 8192,
+      },
+    }),
+    GEMINI_TTFB_MS,
+    "gemini",
+  );
+
+  logger.debug({ requestId, model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini stream initiated");
 
   // Obtain the raw iterator so we can race each .next() call against the
   // watchdog and disconnect signals. The SDK's for-await loop cannot be
@@ -356,33 +375,38 @@ export async function createChatStream(
   messages: ChatMessage[],
   signal?: AbortSignal,
   onComplete?: (result: LastProviderResult) => void,
+  requestId?: string,
 ): Promise<AsyncIterable<string>> {
   const hasGroqKey = !!process.env.GROQ_API_KEY;
   const requestStartMs = Date.now();
 
+  logger.debug({ requestId, hasGroqKey, provider: hasGroqKey ? "groq" : "gemini" }, "[llm] createChatStream — entry");
+
   // ── Fast path: Groq key absent — route directly to Gemini ────────────────────
   if (!hasGroqKey) {
     logger.debug(
-      { provider: "gemini", model: GEMINI_FALLBACK_MODEL, reason: "groq_key_absent" },
+      { requestId, provider: "gemini", model: GEMINI_FALLBACK_MODEL, reason: "groq_key_absent" },
       "[llm] routing to Gemini (Groq not configured)",
     );
     try {
-      // 2 retries on transient errors (rate_limit / 429 / quota): 600 ms → 1.2 s.
-      // Non-transient failures (auth, safety) throw immediately without retry.
+      // ── RETRY OWNERSHIP RULE ─────────────────────────────────────────────────
+      // withProviderRetry is the ONLY retry layer in this entire pipeline.
+      // Frontend (api.js) must NOT retry. policyEngine only blocks/allows.
+      // Budget: retries=2 → 3 total attempts maximum.
       const stream = await withProviderRetry(
-        () => createGeminiStream(messages, signal),
+        () => createGeminiStream(messages, signal, requestId),
         2,
         600,
         "gemini",
       );
-      logger.debug({ model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini stream ready");
+      logger.debug({ requestId, model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini stream ready");
       return wrapTracked(stream, "gemini", false, requestStartMs, onComplete);
     } catch (geminiErr) {
       const msg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
       recordCompletion("gemini", false, Date.now() - requestStartMs, false);
-      logger.error({ err: msg, model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini failed — no fallback available");
+      logger.error({ requestId, err: msg, model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini failed — no fallback available");
       logger.debug(
-        { provider: "gemini", rawError: msg },
+        { requestId, provider: "gemini", rawError: msg },
         "[llm:debug] propagating original Gemini error to chat boundary",
       );
       throw geminiErr;
@@ -393,11 +417,11 @@ export async function createChatStream(
   let groqErrMsg = "";
   let groqErrIsTransient = false;
   const groqStartMs = Date.now();
-  logger.debug({ model: CHAT_MODEL, provider: "groq" }, "[llm] routing to Groq (primary)");
+  logger.debug({ requestId, model: CHAT_MODEL, provider: "groq" }, "[llm] routing to Groq (primary)");
 
   try {
     const stream = await createGroqStream(messages, signal);
-    logger.debug({ model: CHAT_MODEL }, "[llm] Groq stream ready");
+    logger.debug({ requestId, model: CHAT_MODEL }, "[llm] Groq stream ready");
     return wrapTracked(stream, "groq", false, requestStartMs, onComplete);
   } catch (groqErr) {
     groqErrMsg = groqErr instanceof Error ? groqErr.message : String(groqErr);
@@ -406,36 +430,36 @@ export async function createChatStream(
 
     const logLevel = groqErrIsTransient ? "warn" : "error";
     logger[logLevel](
-      { err: groqErrMsg, model: CHAT_MODEL, fallback: GEMINI_FALLBACK_MODEL, transient: groqErrIsTransient },
+      { requestId, err: groqErrMsg, model: CHAT_MODEL, fallback: GEMINI_FALLBACK_MODEL, transient: groqErrIsTransient },
       "[llm] Groq failure — activating Gemini fallback",
     );
   }
 
   // ── Gemini fallback ────────────────────────────────────────────────────────
   logger.info(
-    { model: GEMINI_FALLBACK_MODEL, trigger: "groq_transient_failure" },
+    { requestId, model: GEMINI_FALLBACK_MODEL, trigger: "groq_transient_failure" },
     "[llm] Gemini fallback activated",
   );
 
   try {
-    // Same retry policy as the primary Gemini path.
+    // Same retry ownership rule: withProviderRetry is the ONLY retry layer.
     const stream = await withProviderRetry(
-      () => createGeminiStream(messages, signal),
+      () => createGeminiStream(messages, signal, requestId),
       2,
       600,
       "gemini",
     );
-    logger.debug({ model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini fallback stream ready");
+    logger.debug({ requestId, model: GEMINI_FALLBACK_MODEL }, "[llm] Gemini fallback stream ready");
     return wrapTracked(stream, "gemini", true, requestStartMs, onComplete);
   } catch (geminiErr) {
     const geminiErrMsg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
     recordCompletion("gemini", true, Date.now() - requestStartMs, false);
     logger.error(
-      { geminiErr: geminiErrMsg, groqErr: groqErrMsg },
+      { requestId, geminiErr: geminiErrMsg, groqErr: groqErrMsg },
       "[llm] Both providers failed — no AI response possible",
     );
     logger.debug(
-      { provider: "both", groqRawError: groqErrMsg, geminiRawError: geminiErrMsg },
+      { requestId, provider: "both", groqRawError: groqErrMsg, geminiRawError: geminiErrMsg },
       "[llm:debug] both providers failed — propagating Gemini error for classification",
     );
     throw new Error(`Both providers failed. Gemini: ${geminiErrMsg}.`);
