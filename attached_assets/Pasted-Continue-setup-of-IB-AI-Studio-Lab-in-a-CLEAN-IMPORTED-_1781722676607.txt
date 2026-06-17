@@ -1,0 +1,105 @@
+Continue setup of IB AI Studio Lab in a CLEAN IMPORTED ENVIRONMENT.
+
+You are NOT allowed to:
+- perform deep debugging
+- rewrite architecture
+- introduce new features
+- or investigate unrelated systems
+
+GOAL:
+Stabilize the system and verify end-to-end functionality in a controlled sequence.
+
+──────────────────────────────
+STEP 1 — ENVIRONMENT VALIDATION (DO FIRST)
+──────────────────────────────
+Confirm and log:
+
+1. Only ONE backend process is running
+2. Backend is bound to ONE port (expected: 8099)
+3. Frontend is running (port 5000)
+4. Database connection is ACTIVE
+5. All required secrets exist:
+   - GEMINI_API_KEY
+   - JWT_SECRET
+   - CEO_PASSWORD
+   - CEO_RECOVERY_KEY (if optional, note status)
+6. Health endpoint returns 200
+
+If ANY of the above fails:
+STOP and report ONLY the failure (no fixes yet).
+
+──────────────────────────────
+STEP 2 — AUTH VERIFICATION (NO CHANGES)
+──────────────────────────────
+Run these exact tests:
+
+A. Register new user
+B. Immediate login with same credentials
+C. Login again after 10 seconds delay
+D. CEO login (if configured)
+
+Record:
+- HTTP status
+- response body
+- backend logs
+
+Do NOT modify any code if login fails.
+
+──────────────────────────────
+STEP 3 — CHAT VERIFICATION
+──────────────────────────────
+For the same user:
+
+1. Send: "Hello"
+2. Send: "How are you?"
+3. Send a new conversation message (no sessionId)
+
+Capture:
+- SSE stream output
+- sessionId generation
+- response time
+- any STREAM_ERROR or rate-limit codes
+
+──────────────────────────────
+STEP 4 — FAILURE SIMULATION (CONTROLLED)
+──────────────────────────────
+Run ONLY these:
+
+- invalid login attempt
+- empty login payload
+- rapid 5-message burst to /api/chat
+
+Observe:
+- rate limiting behavior
+- error classification
+- HTTP status codes
+
+──────────────────────────────
+RULES (CRITICAL)
+──────────────────────────────
+
+- Do NOT fix anything
+- Do NOT refactor anything
+- Do NOT add features
+- Do NOT optimize
+- Do NOT assume root causes
+
+ONLY:
+→ run tests
+→ collect logs
+→ report behavior
+
+──────────────────────────────
+OUTPUT FORMAT REQUIRED
+──────────────────────────────
+
+Return:
+
+1. SYSTEM STATUS (PASS/FAIL per component)
+2. AUTH RESULTS TABLE
+3. CHAT RESULTS TABLE
+4. FAILURES (if any, with exact file + line if known from logs)
+5. RAW OBSERVATION NOTES
+
+End with:
+"READY FOR NEXT INSTRUCTION"
