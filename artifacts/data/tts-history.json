@@ -1,5 +1,18 @@
 [
   {
+    "userId": "d17a9913-0da6-4464-aa73-7ba09af6a2fb",
+    "type": "tts",
+    "text": "IB AI system verification test. Systems operational.",
+    "voiceStyle": "neutral_assistant",
+    "voiceLabel": "Neutral Assistant",
+    "jobId": "job_mqitmvj5_7c98hw",
+    "audioUrl": "/api/tts/serve/job_mqitmvj5_7c98hw",
+    "durationMs": 5731,
+    "textLength": 52,
+    "timestamp": 1781746122103,
+    "id": "f93d7234-5841-4f75-9f53-66546510f6e0"
+  },
+  {
     "userId": "cd34017e-c72a-4c7f-b18d-274753f7f33f",
     "type": "tts",
     "text": "Audit verification test",
