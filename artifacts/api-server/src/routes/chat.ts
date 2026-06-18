@@ -13,6 +13,7 @@ import { createChatStream, type LastProviderResult, type ChatMessage } from "../
 import { SYSTEM_PROMPT } from "../prompts/system";
 import { logger } from "../lib/logger";
 import { policyEngine, deductRequestCredits } from "../middleware/policyEngine";
+import { acquireGeminiSlot } from "../lib/geminiQueue";
 import { CREDIT_COSTS } from "../lib/userStore";
 import { isGeminiConfigured } from "../lib/geminiEnv";
 import { isSafeMode } from "../lib/safeMode";
@@ -25,13 +26,6 @@ import { incChatRequest, incChatMessage } from "../lib/statsCounter";
 import { normalizeAIError } from "../lib/aiOrchestrator";
 
 const router = Router();
-
-// ─── Per-user in-flight guard ─────────────────────────────────────────────────
-// Prevents overlapping Gemini calls for the same authenticated user. A second
-// request arriving while one is active immediately receives rate_limit_app so
-// the client can show a clear "please wait" message rather than queuing two
-// simultaneous provider calls.
-const inFlightByUser = new Set<string>();
 
 // ─── Adaptive context window ──────────────────────────────────────────────────
 
@@ -209,22 +203,6 @@ router.post(
 
     logger.info({ requestId, userId, messageCount: rawMessages.length }, "[chat] request received");
 
-    // ── In-flight guard ────────────────────────────────────────────────────────
-    // Reject the second concurrent request for the same user immediately so we
-    // never queue two Gemini calls from the same account at the same time.
-    if (userId && inFlightByUser.has(userId)) {
-      logger.warn({ requestId, userId }, "[chat] in-flight guard triggered — duplicate request rejected");
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Connection", "keep-alive");
-      res.flushHeaders();
-      res.write(": connected\n\n");
-      res.write(sseEvent({ error: true, code: "rate_limit_app" }));
-      res.end();
-      return;
-    }
-    if (userId) inFlightByUser.add(userId);
-
     // Capture the last user message for session title + persistence.
     // Uses raw input — not the context-windowed version.
     const lastUserContent =
@@ -315,6 +293,8 @@ router.post(
     let tAiStart = 0;
     // Provider result delivered via callback — avoids module-global race under concurrency.
     let providerResult: LastProviderResult | null = null;
+    // Queue slot handle — released in finally so the next queued request can proceed.
+    let releaseSlot: (() => void) | null = null;
 
     try {
       tAiStart = Date.now();
@@ -323,6 +303,19 @@ router.post(
       // LLM call entirely — there is nobody to receive the response.
       if (clientDisconnected) {
         logger.debug({ requestId, userId }, "[chat] client gone before LLM call — skipping");
+        return;
+      }
+
+      // ── Gemini Load Shield ────────────────────────────────────────────────────
+      // Acquire a concurrency slot before calling the provider. If the per-user
+      // cap (1) or global cap (3) is currently full, this awaits until a slot
+      // opens — it never rejects. The SSE connection is already open so the
+      // client's browser stays alive while it waits.
+      releaseSlot = await acquireGeminiSlot(userId ?? "anonymous", requestId);
+
+      // Re-check disconnect: client may have closed while we were waiting in queue.
+      if (clientDisconnected) {
+        logger.debug({ requestId, userId }, "[chat] client gone while queued — skipping");
         return;
       }
 
@@ -406,7 +399,8 @@ router.post(
       // Remove the close listener — it fires once at most, but removing it
       // keeps the req event emitter tidy on normal completion.
       req.off("close", onClientClose);
-      if (userId) inFlightByUser.delete(userId);
+      // Release the Gemini slot — unblocks the next queued request (if any).
+      releaseSlot?.();
 
       if (streamSucceeded) {
         // ── Phase 4: Latency breakdown ───────────────────────────────────────
