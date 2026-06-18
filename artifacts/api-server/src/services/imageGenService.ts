@@ -748,7 +748,7 @@ export async function generateImage(prompt: string, userId?: string): Promise<st
   const enhanced = enhancePrompt(prompt);
 
   if (!isHfConfigured()) {
-    throw new Error("Image generation requires HF_API_KEY — add it to Replit Secrets to enable this feature.");
+    throw new Error("provider_not_configured — Image generation requires HF_API_KEY. Add HF_API_KEY to Replit Secrets (huggingface.co → Settings → Access Tokens).");
   }
 
   logger.info({ provider: "huggingface", model: HF_PRIMARY_MODEL, prompt: enhanced.slice(0, 100) }, "[imageGen] generating");

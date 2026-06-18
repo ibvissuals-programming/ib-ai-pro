@@ -126,16 +126,19 @@ router.get(["/health", "/healthz"], async (_req, res) => {
     const aiSt = getAiStatus();
     geminiOk   = aiSt.geminiAvailable;
     const videoOk  = isVideoEnabled();
+    const imageOk  = !!process.env["HF_API_KEY"]?.trim();
 
     if (!geminiOk) systemsDegraded = true;
 
     checks["systems"] = {
       image: {
-        ok:             true,   // FLUX (generate) is always available
-        featureEnabled: true,
-        providerReady:  true,
-        provider:       "pollinations/gemini",
-        description:    "Image generation (FLUX) + editing (Gemini)",
+        ok:             imageOk,
+        featureEnabled: imageOk,
+        providerReady:  imageOk,
+        provider:       "huggingface/gemini",
+        description:    imageOk
+          ? "Image generation (HuggingFace FLUX) + editing (Gemini)"
+          : "Image generation disabled — HF_API_KEY not configured",
       },
       tts: {
         ok:             geminiOk,
