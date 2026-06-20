@@ -75,6 +75,14 @@ const VALID_INTENSITIES = ["LOW", "MEDIUM", "HIGH", "EXTREME"] as const;
 
 const VALID_EDIT_MODES = ["portrait_safe", "cinematic", "style_transfer", "creative", "polish", "social", "luxury", "restore"] as const;
 
+const DIRECT_EDIT_TYPES = [
+  "cinematic_grade",
+  "remove_background",
+  "upscale",
+  "remove_watermark",
+  "retouch",
+] as const;
+
 const EditSchema = z.object({
   image: z
     .string()
@@ -85,8 +93,10 @@ const EditSchema = z.object({
     ),
   prompt: z
     .string()
-    .min(1, "Edit instruction is required")
-    .max(2000, "Prompt too long"),
+    .min(0)
+    .max(2000, "Prompt too long")
+    .default(""),
+  editType: z.enum(DIRECT_EDIT_TYPES).optional(),
   editMode: z.enum(VALID_EDIT_MODES).optional(),
   cinematicProfile: z.enum(VALID_CINEMATIC_PROFILES).optional(),
   intensity: z.enum(VALID_INTENSITIES).optional(),
@@ -254,9 +264,38 @@ router.post(
     }
 
     logger.info(
-      { userId: req.user?.userId, promptLength: parsed.data.prompt.length, hasImage: !!parsed.data.image, prompt: parsed.data.prompt.slice(0, 80) },
+      { userId: req.user?.userId, promptLength: parsed.data.prompt.length, hasImage: !!parsed.data.image, editType: parsed.data.editType ?? "legacy", prompt: parsed.data.prompt.slice(0, 80) },
       "[imageEdit] edit request received",
     );
+
+    // ── Direct edit pipeline (editType present) ───────────────────────────────
+    // Bypasses Gemini analysis, APRE, FRAE, and Safe Enhancement Mode entirely.
+    // Each capability runs its own algorithm and always returns a real b64Image.
+    if (parsed.data.editType) {
+      const { runDirectEdit } = await import("../services/imageEditService");
+      try {
+        const t0 = Date.now();
+        const b64Image = await runDirectEdit(
+          parsed.data.image,
+          parsed.data.editType,
+          parsed.data.prompt,
+        );
+        res.json({
+          success:         true,
+          mode:            "image",
+          b64Image,
+          editType:        parsed.data.editType,
+          latencyMs:       Date.now() - t0,
+          status:          "success",
+          enhancementMode: false,
+        });
+      } catch (err) {
+        logger.warn({ err, editType: parsed.data.editType }, "[imageEdit] direct edit failed");
+        const msg = toRouteError(err, "edit");
+        res.status(503).json(buildErrorResponse("image", msg));
+      }
+      return;
+    }
 
     const { useCinematicAnalysis, editMode } = parsed.data;
 

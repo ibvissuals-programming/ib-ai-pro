@@ -808,9 +808,18 @@ function EnhancementPlanPanel({ insight }) {
 }
 
 // ── Edit tab ──────────────────────────────────────────────────────────────────
+const DIRECT_EDIT_TYPES = [
+  { key: 'cinematic_grade',   label: 'Cinematic Grade',   badge: '🎬', desc: 'Teal-orange film grade, grain & vignette',    promptRequired: false },
+  { key: 'remove_background', label: 'Background Blur',   badge: '🖼', desc: 'Keep subject sharp, blur the background',      promptRequired: false },
+  { key: 'upscale',           label: 'Upscale 2×',        badge: '⬆', desc: 'Double resolution + unsharp-mask sharpening',  promptRequired: false },
+  { key: 'remove_watermark',  label: 'Remove Watermark',  badge: '✂', desc: 'Describe the mark to remove below',            promptRequired: true  },
+  { key: 'retouch',           label: 'Retouch',           badge: '✨', desc: 'Smooth skin, lift brightness, boost colour',   promptRequired: false },
+];
+
 function EditTab() {
   const [sourceImage, setSourceImage] = useState(null);
   const [editPrompt, setEditPrompt] = useState('');
+  const [selectedEditType, setSelectedEditType] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
@@ -820,6 +829,9 @@ function EditTab() {
   const checkRate = useRateLimit();
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  const activeType = DIRECT_EDIT_TYPES.find(t => t.key === selectedEditType);
+  const promptRequired = selectedEditType ? (activeType?.promptRequired ?? false) : true;
 
   const readFile = (file) => {
     if (!file || !file.type.startsWith('image/')) {
@@ -843,7 +855,8 @@ function EditTab() {
   };
 
   const handleEdit = async () => {
-    if (loading || !sourceImage || !editPrompt.trim()) return;
+    if (loading || !sourceImage) return;
+    if (promptRequired && !editPrompt.trim()) return;
     const wait = checkRate();
     if (wait > 0) { setError(`Please wait ${wait}s before trying again.`); return; }
     abortRef.current?.abort();
@@ -853,7 +866,15 @@ function EditTab() {
     setError(null);
     setResult(null);
     try {
-      const data = await editImage(sourceImage, editPrompt.trim(), undefined, undefined, undefined, controller.signal);
+      const data = await editImage(
+        sourceImage,
+        editPrompt.trim(),
+        undefined,
+        undefined,
+        undefined,
+        controller.signal,
+        selectedEditType ? { editType: selectedEditType } : {},
+      );
       setResult(data);
     } catch (err) {
       if (err.name !== 'AbortError') setError(err.message);
@@ -914,16 +935,58 @@ function EditTab() {
         )}
       </div>
 
-      {/* Edit instruction */}
+      {/* Edit type picker */}
       {sourceImage && (
         <div className="space-y-2">
-          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Edit Instruction</label>
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Quick Edit</label>
+            {selectedEditType && (
+              <button
+                onClick={() => setSelectedEditType(null)}
+                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {DIRECT_EDIT_TYPES.map(type => (
+              <button
+                key={type.key}
+                onClick={() => { setSelectedEditType(selectedEditType === type.key ? null : type.key); setResult(null); setError(null); }}
+                className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all ${
+                  selectedEditType === type.key
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border/40 hover:border-primary/40 hover:bg-primary/5 text-foreground'
+                }`}
+              >
+                <span className="text-base leading-none mb-1">{type.badge}</span>
+                <span className="text-[11px] font-semibold leading-tight">{type.label}</span>
+                <span className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{type.desc}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Edit instruction */}
+      {sourceImage && (promptRequired || !selectedEditType) && (
+        <div className="space-y-2">
+          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+            {selectedEditType === 'remove_watermark' ? 'What to remove' : selectedEditType ? 'Custom instruction (optional)' : 'Edit Instruction'}
+          </label>
           <textarea
             value={editPrompt}
             onChange={(e) => setEditPrompt(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleEdit(); }}
-            placeholder="Describe the edit — e.g. cinematic sunset grade, remove background clutter, soft studio lighting…"
-            rows={3}
+            placeholder={
+              selectedEditType === 'remove_watermark'
+                ? 'Describe the watermark or object — e.g. "white logo in top-right corner"…'
+                : selectedEditType
+                ? 'Optional — leave blank to use defaults…'
+                : 'Describe the edit — e.g. cinematic sunset grade, remove background clutter, soft studio lighting…'
+            }
+            rows={selectedEditType && selectedEditType !== 'remove_watermark' ? 2 : 3}
             className="w-full bg-background/60 border border-input rounded-xl px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/40 outline-none focus:ring-2 focus:ring-ring/40 focus:border-primary/50 transition-all resize-none leading-relaxed"
           />
         </div>
@@ -933,11 +996,13 @@ function EditTab() {
       {sourceImage && (
         <button
           onClick={handleEdit}
-          disabled={loading || !editPrompt.trim()}
+          disabled={loading || (promptRequired && !editPrompt.trim())}
           className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/20"
         >
           {loading
-            ? <><Loader2 size={14} className="animate-spin" />Editing…</>
+            ? <><Loader2 size={14} className="animate-spin" />Applying…</>
+            : activeType
+            ? <><span className="text-base leading-none">{activeType.badge}</span>{activeType.label}</>
             : <><Pencil size={14} />Edit Image</>}
         </button>
       )}

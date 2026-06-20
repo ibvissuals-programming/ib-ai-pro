@@ -1,0 +1,25 @@
+Do not regenerate or replace any working code yet — read first, then implement incrementally and test each piece before moving to the next.
+
+GOAL: Replace the current Edit tab's "Safe Enhancement Mode" (which only returns text suggestions, no image) with a real, free, permanent image editing pipeline. Do not use FAL_KEY or any paid provider — this must work entirely on free tiers or local processing.
+
+Build these capabilities, each callable independently from the Edit tab, each operating on the user's actual uploaded photo:
+
+1. Cinematic color grading — implement directly in code (curves/LUT/contrast/teal-orange grade/film grain), no external API call needed. Should run instantly and free, forever.
+
+2. Background removal/replacement — integrate a free Hugging Face background-removal model (e.g. briaai/RMBG-1.4 or similar) via HF_API_KEY, consistent with how imageGenService.ts already calls HF for generation.
+
+3. Upscaling/sharpening — integrate a free Hugging Face upscaling model (e.g. a Real-ESRGAN-class model) via HF_API_KEY, to fix low-resolution/screenshot-quality images.
+
+4. Text/watermark/object removal — integrate a free Hugging Face inpainting model via HF_API_KEY, letting the user mark or auto-detect text/watermarks/unwanted objects for removal.
+
+5. Light retouching (skin smoothing, basic blemish cleanup) — combine simple code-based filters with the inpainting model from #4 where needed.
+
+Requirements:
+- Each of these must return an actual b64Image of the EDITED photo, not text suggestions, not a regenerated unrelated image.
+- Preserve the existing /api/image/edit route structure where reasonable, but add the real image-output path instead of always falling into Safe Enhancement Mode.
+- Keep Safe Enhancement Mode's text-suggestion behavior as a fallback ONLY if a specific edit type fails (e.g. HF rate-limited) — never as the default behavior.
+- Do not touch /api/image/generate — it's already working correctly.
+- Check current HF model availability before integrating, since the Hugging Face Inference API has been changing freely-available models over time. Confirm whichever specific models you pick (for background removal, upscaling, inpainting) are still live and free via Inference Providers before wiring them in.
+- After implementing each capability, test it with a real sample image and show me the result (success/failure, response time, any errors) before moving to the next one.
+
+Report back after each of the 5 capabilities individually — do not build all 5 then report at the end.

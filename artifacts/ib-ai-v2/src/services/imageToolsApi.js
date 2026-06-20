@@ -91,20 +91,23 @@ export async function generateImage(prompt) {
 }
 
 /**
- * Edit an existing image using a natural-language instruction.
+ * Edit an existing image using a natural-language instruction or a direct editType.
  * @param {string} imageBase64 — data URL (data:image/...;base64,...)
- * @param {string} prompt — edit instruction
+ * @param {string} prompt — edit instruction (optional when editType is set)
  * @param {string} [editMode]
  * @param {string} [intensity]
  * @param {boolean} [useCinematicAnalysis]
+ * @param {AbortSignal} [signal]
+ * @param {{ editType?: string }} [options] — pass editType to use the direct pixel pipeline
  * @returns {Promise<{ b64Image: string, status: string, mode?: string, intensity?: string }>}
  */
-export async function editImage(imageBase64, prompt, editMode, intensity, useCinematicAnalysis, signal) {
+export async function editImage(imageBase64, prompt, editMode, intensity, useCinematicAnalysis, signal, options = {}) {
   let res;
-  const body = { image: imageBase64, prompt };
+  const body = { image: imageBase64, prompt: prompt ?? '' };
   if (editMode)             body.editMode             = editMode;
   if (intensity)            body.intensity            = intensity;
   if (useCinematicAnalysis) body.useCinematicAnalysis = true;
+  if (options.editType)     body.editType             = options.editType;
 
   try {
     res = await fetchWithTimeout(
