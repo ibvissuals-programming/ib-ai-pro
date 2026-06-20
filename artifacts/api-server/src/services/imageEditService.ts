@@ -275,21 +275,30 @@ export async function upscaleImage(imageDataUrl: string): Promise<string> {
 
 // ── CAPABILITY 4: Watermark / Text Removal (Jimp inpainting) ─────────────────
 //
-// Pure pixel-based inpainting that detects and removes semi-transparent or
-// opaque text/logo overlays from photographs. No external API calls.
+// Detects and inpaints watermarks, text overlays, logos, and UI chrome.
+// Pure pixel-ops, no external API calls.
 //
-// Algorithm:
-//   1. Compute local average luminance per region (box filter, radius 8)
-//   2. Flag pixels as "candidate watermark" if their luma is significantly
-//      higher than the local average (bright text overlay) OR they match
-//      a near-white semi-transparent pattern.
-//   3. For each flagged pixel, reconstruct by sampling non-flagged neighbors
-//      via an inverse-distance weighted average (content-aware patching).
-//   4. Three passes with shrinking candidate thresholds to handle blended edges.
-//   5. Light blur on patched regions to blend seams.
+// Why the old approach failed:
+//   The original 3-pass detection only checked lum > localAvg (bright-on-dark),
+//   so dark text on light backgrounds, semi-transparent logos, and social-media
+//   corner overlays (TikTok/Instagram) triggered nothing — mask stayed empty and
+//   the original image was returned.
 //
-// Works well on:  diagonal watermarks, small logos, corner text, opacity marks.
-// Does not work well on: large opaque solid objects covering significant area.
+// New algorithm:
+//   1. Parse hint string → hintRegions[] (corner/edge/platform keywords → areas)
+//   2. Compute local-average luma (box filter, radius 8)
+//   3. Build watermark mask using THREE signals, all bidirectional:
+//        a) |lum − localAvg| > effectiveThresh  (both bright- AND dark-on-bg)
+//        b) Low-saturation (near-grayscale) pixel with contrast > 14 near an edge
+//           (grayscale = text/logo; color photos are saturated)
+//        c) Near-black or near-white absolute pixel within any hint region
+//      effectiveThresh scales from BASE_THRESH=28 down to ~15 at image edges,
+//      and further down to 11 inside explicitly named hint regions.
+//   4. Dilate mask (radius 2) to close gaps in partially-transparent edges.
+//   5. Single inpainting pass: inverse-distance weighted fill from non-masked
+//      neighbors (sample radius 14).
+//   6. 1-pixel blur to blend seams.
+//
 // Returns JPEG data URL.
 
 export async function removeWatermark(imageDataUrl: string, _hint = ""): Promise<string> {
@@ -298,20 +307,56 @@ export async function removeWatermark(imageDataUrl: string, _hint = ""): Promise
   const img = await Jimp.read(buffer);
   const { width, height } = img.bitmap;
   const data = img.bitmap.data as Buffer;
-  const snap = Buffer.from(data); // original snapshot
+  const snap = Buffer.from(data); // original snapshot — detection always reads this
 
-  // ── Step 1: Compute local average luma (box filter, radius 8) ───────────
+  // ── Step 1: Parse hint for position bias ─────────────────────────────────
+  // Hint regions are expressed as fractional [0,1] coordinates.
+  // We normalise after building the list.
+  const hint = _hint.toLowerCase();
+
+  interface HintRegion { x0: number; y0: number; x1: number; y1: number }
+  const hintRegions: HintRegion[] = [];
+
+  // Named corner hints
+  if (/top.?left|left.?top/.test(hint))    hintRegions.push({ x0: 0,    y0: 0,    x1: 0.35, y1: 0.35 });
+  if (/top.?right|right.?top/.test(hint))  hintRegions.push({ x0: 0.65, y0: 0,    x1: 1,    y1: 0.35 });
+  if (/bot.?left|left.?bot/.test(hint))    hintRegions.push({ x0: 0,    y0: 0.65, x1: 0.35, y1: 1    });
+  if (/bot.?right|right.?bot/.test(hint))  hintRegions.push({ x0: 0.65, y0: 0.65, x1: 1,    y1: 1    });
+
+  // Single-edge hints (only if no corner matched)
+  if (!hintRegions.length) {
+    if (/\btop\b/.test(hint))    hintRegions.push({ x0: 0, y0: 0,    x1: 1, y1: 0.22 });
+    if (/\bbottom\b/.test(hint)) hintRegions.push({ x0: 0, y0: 0.78, x1: 1, y1: 1    });
+    if (/\bleft\b/.test(hint))   hintRegions.push({ x0: 0, y0: 0,    x1: 0.22, y1: 1  });
+    if (/\bright\b/.test(hint))  hintRegions.push({ x0: 0.78, y0: 0, x1: 1, y1: 1    });
+  }
+
+  // Social-media platform heuristics (typical watermark positions)
+  if (!hintRegions.length && /tiktok|tik.?tok/.test(hint))
+    hintRegions.push({ x0: 0, y0: 0.72, x1: 1, y1: 1 }); // bottom strip
+  if (!hintRegions.length && /instagram|insta\b/.test(hint))
+    hintRegions.push({ x0: 0, y0: 0.82, x1: 1, y1: 1 }); // bottom bar
+  if (!hintRegions.length && /youtube/.test(hint))
+    hintRegions.push({ x0: 0, y0: 0,    x1: 1, y1: 0.18 }); // top bar
+  if (!hintRegions.length && /twitter|x\.com/.test(hint))
+    hintRegions.push({ x0: 0.65, y0: 0.65, x1: 1, y1: 1 }); // bottom-right
+
+  const inHintRegion = (x: number, y: number): boolean => {
+    const fx = x / Math.max(1, width  - 1);
+    const fy = y / Math.max(1, height - 1);
+    return hintRegions.some(r => fx >= r.x0 && fx <= r.x1 && fy >= r.y0 && fy <= r.y1);
+  };
+
+  // ── Step 2: Compute local average luma (box filter, radius 8) ────────────
   const RADIUS = 8;
   const localAvg = new Float32Array(width * height);
-
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      let sum = 0;
-      let count = 0;
+      let sum = 0, count = 0;
       for (let dy = -RADIUS; dy <= RADIUS; dy++) {
         for (let dx = -RADIUS; dx <= RADIUS; dx++) {
           const ny = Math.min(height - 1, Math.max(0, y + dy));
-          const nx = Math.min(width - 1, Math.max(0, x + dx));
+          const nx = Math.min(width  - 1, Math.max(0, x + dx));
           const si = (ny * width + nx) * 4;
           sum += 0.299 * snap[si]! + 0.587 * snap[si + 1]! + 0.114 * snap[si + 2]!;
           count++;
@@ -321,70 +366,104 @@ export async function removeWatermark(imageDataUrl: string, _hint = ""): Promise
     }
   }
 
-  // ── Step 2–4: Three inpainting passes, decreasing threshold ──────────────
-  // Pass 1: strong anomalies (>55 luma above local avg)
-  // Pass 2: medium anomalies (>35 luma above local avg)
-  // Pass 3: mild remnants (>20 luma above local avg)
-  const thresholds = [55, 35, 20];
+  // ── Step 3: Build watermark candidate mask ────────────────────────────────
+  const BASE_THRESH  = 28;                               // bidirectional contrast base
+  const EDGE_BAND    = Math.min(width, height) * 0.18;   // 18 % from any edge → threshold ↓
 
-  for (const threshold of thresholds) {
-    const mask = new Uint8Array(width * height);
+  const candidateMask = new Uint8Array(width * height);
 
-    for (let i = 0; i < width * height; i++) {
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i   = y * width + x;
       const idx = i * 4;
-      const r = data[idx]!;
-      const g = data[idx + 1]!;
-      const b = data[idx + 2]!;
-      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-      // High-luma anomaly (bright text/logo over darker background)
-      if (lum - localAvg[i]! > threshold) {
-        mask[i] = 1;
+      const r = snap[idx]!, g = snap[idx + 1]!, b = snap[idx + 2]!;
+      const lum      = 0.299 * r + 0.587 * g + 0.114 * b;
+      const contrast = Math.abs(lum - localAvg[i]!);         // ← BIDIRECTIONAL
+
+      // Position-aware threshold: reduced near corners/edges where overlays live
+      const edgeDist   = Math.min(x, width - 1 - x, y, height - 1 - y);
+      const edgeFactor = Math.max(0, 1 - edgeDist / EDGE_BAND); // 1 at edge, 0 inside
+      const posThresh  = BASE_THRESH * (1 - 0.46 * edgeFactor); // 28 → ~15 at edge
+
+      // Hint-region boost: threshold halved inside explicitly named areas
+      const inHint     = hintRegions.length > 0 && inHintRegion(x, y);
+      const finalThresh = inHint ? BASE_THRESH * 0.39 : posThresh; // ~11 in hint zone
+
+      // Signal A — bidirectional contrast anomaly
+      if (contrast > finalThresh) { candidateMask[i] = 1; continue; }
+
+      // Signal B — low-saturation (grayscale) pixel near an edge with any contrast
+      // Text/logos are almost always near-grayscale; photo content is colourful.
+      const maxC       = Math.max(r, g, b);
+      const minC       = Math.min(r, g, b);
+      const saturation = maxC > 0 ? (maxC - minC) / maxC : 0;
+      if (saturation < 0.14 && contrast > 13 && edgeFactor > 0.25) {
+        candidateMask[i] = 1; continue;
       }
-      // Near-white semi-transparent overlay (r,g,b all > 200 and similarly bright)
-      if (r > 200 && g > 200 && b > 200 && lum - localAvg[i]! > 15) {
-        mask[i] = 1;
+
+      // Signal C — near-black or near-white absolute value inside a hint region
+      // Catches fully-opaque logos and usernames that may not contrast with avg.
+      if (inHint && (lum > 220 || lum < 35) && saturation < 0.25) {
+        candidateMask[i] = 1;
       }
     }
+  }
 
-    // Inpaint masked pixels from non-masked neighbors (inverse-distance weighted)
-    const SAMPLE_R = 12;
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        if (!mask[y * width + x]) continue;
-
-        let wR = 0, wG = 0, wB = 0, totalW = 0;
-        for (let dy = -SAMPLE_R; dy <= SAMPLE_R; dy++) {
-          for (let dx = -SAMPLE_R; dx <= SAMPLE_R; dx++) {
-            const ny = y + dy;
-            const nx = x + dx;
-            if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
-            if (mask[ny * width + nx]) continue; // skip other masked pixels
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist === 0) continue;
-            const w = 1 / (dist * dist);
-            const si = (ny * width + nx) * 4;
-            wR += data[si]! * w;
-            wG += data[si + 1]! * w;
-            wB += data[si + 2]! * w;
-            totalW += w;
-          }
-        }
-
-        if (totalW > 0) {
-          const idx = (y * width + x) * 4;
-          data[idx]     = clamp(wR / totalW);
-          data[idx + 1] = clamp(wG / totalW);
-          data[idx + 2] = clamp(wB / totalW);
+  // ── Step 4: Dilate mask (radius 2) to cover partially-transparent edges ──
+  const DILATE_R = 2;
+  const mask     = new Uint8Array(candidateMask);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (!candidateMask[y * width + x]) continue;
+      for (let dy = -DILATE_R; dy <= DILATE_R; dy++) {
+        for (let dx = -DILATE_R; dx <= DILATE_R; dx++) {
+          const ny = y + dy, nx = x + dx;
+          if (ny >= 0 && ny < height && nx >= 0 && nx < width)
+            mask[ny * width + nx] = 1;
         }
       }
     }
   }
 
-  // ── Step 5: Light blur on inpainted regions to blend seams ───────────────
+  // ── Step 5: Inpaint masked pixels (inverse-distance weighted fill) ────────
+  const SAMPLE_R = 14;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (!mask[y * width + x]) continue;
+      let wR = 0, wG = 0, wB = 0, totalW = 0;
+      for (let dy = -SAMPLE_R; dy <= SAMPLE_R; dy++) {
+        for (let dx = -SAMPLE_R; dx <= SAMPLE_R; dx++) {
+          const ny = y + dy, nx = x + dx;
+          if (ny < 0 || ny >= height || nx < 0 || nx >= width) continue;
+          if (mask[ny * width + nx]) continue; // skip other masked pixels
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist === 0) continue;
+          const w  = 1 / (dist * dist);
+          const si = (ny * width + nx) * 4;
+          wR += data[si]! * w; wG += data[si + 1]! * w; wB += data[si + 2]! * w;
+          totalW += w;
+        }
+      }
+      if (totalW > 0) {
+        const idx     = (y * width + x) * 4;
+        data[idx]     = clamp(wR / totalW);
+        data[idx + 1] = clamp(wG / totalW);
+        data[idx + 2] = clamp(wB / totalW);
+      }
+    }
+  }
+
+  // ── Step 6: Light blur to blend seams ────────────────────────────────────
   img.blur(1);
 
-  const outBuf = await img.getBuffer("image/jpeg");
-  logger.info({ width, height, outBytes: outBuf.length }, "[imageEdit] removeWatermark complete");
+  const outBuf    = await img.getBuffer("image/jpeg");
+  const maskedPct = Math.round(
+    (mask.reduce((s, v) => s + v, 0) / (width * height)) * 100,
+  );
+  logger.info(
+    { width, height, maskedPct, hintRegions: hintRegions.length, outBytes: outBuf.length },
+    "[imageEdit] removeWatermark complete",
+  );
   return toJpegDataUrl(outBuf);
 }
 
