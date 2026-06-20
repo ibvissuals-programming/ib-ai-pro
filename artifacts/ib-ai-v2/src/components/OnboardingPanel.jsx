@@ -70,7 +70,11 @@ export function OnboardingPanel({ onSend }) {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
       className="flex flex-col items-center justify-start h-full text-center px-4 sm:px-6 py-8 overflow-y-auto"
-      style={{ scrollbarWidth: 'thin', scrollbarColor: 'hsl(217 33% 20%) transparent' }}
+      style={{
+        scrollbarWidth: 'thin',
+        scrollbarColor: 'hsl(217 33% 20%) transparent',
+        willChange: 'transform',
+      }}
     >
       <motion.div
         variants={containerVariants}
