@@ -136,7 +136,26 @@ function classifyImageError(err) {
  * @param {{ onCreditExhausted?: () => void }} [options]
  */
 export function useChat(username, { onCreditExhausted } = {}) {
-  const [chatData, setChatData] = useState(null);
+  // Track whether this is a brand-new device (no local chat history).
+  // Stored in a ref so it survives the first render and can be read inside
+  // the useEffect without needing to be a dependency.
+  const isNewDeviceRef = useRef(false);
+
+  // Initialize chatData synchronously from localStorage so activeChatId is
+  // stable on the very first render. If we start as null and set it in a
+  // useEffect, activeChatId flips null → uuid which forces ChatWindow to
+  // remount (key={activeChatId}) and interrupts the stagger animation.
+  const [chatData, setChatData] = useState(() => {
+    if (!username) return null;
+    let data = getChats(username);
+    if (!data) {
+      isNewDeviceRef.current = true;
+      data = createDefaultChats();
+      saveChats(username, data);
+    }
+    return data;
+  });
+
   const [isTyping, setIsTyping] = useState(false);
   const [rateLimitState, setRateLimitState] = useState(null);
   // chatError holds the current transient error string shown to the user.
@@ -152,20 +171,24 @@ export function useChat(username, { onCreditExhausted } = {}) {
   useEffect(() => {
     if (!username) return;
 
-    let data = getChats(username);
-    const isNewDevice = !data;
-
-    if (!data) {
-      data = createDefaultChats();
-      saveChats(username, data);
+    // If chatData is already populated (sync init succeeded), only run
+    // new-device server hydration. Otherwise load from localStorage now
+    // (covers the username===undefined-at-mount edge case).
+    if (!chatData) {
+      let data = getChats(username);
+      if (!data) {
+        isNewDeviceRef.current = true;
+        data = createDefaultChats();
+        saveChats(username, data);
+      }
+      setChatData(data);
     }
 
-    setChatData(data);
-
     // ── New-device hydration ───────────────────────────────────────────────
-    // If this device has no chat history at all, try to load the latest
-    // session from the server. Best-effort — failures are silently ignored.
-    if (isNewDevice) {
+    // If this device had no chat history, try to load the latest session
+    // from the server. Best-effort — failures are silently ignored.
+    if (isNewDeviceRef.current) {
+      isNewDeviceRef.current = false;
       fetchLatestSession()
         .then((serverSession) => {
           if (!serverSession?.messages?.length) return;

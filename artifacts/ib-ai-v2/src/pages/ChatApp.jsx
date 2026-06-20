@@ -33,18 +33,12 @@ function RateLimitBadge({ remaining, resetAt }) {
   );
 }
 
-const ONBOARDING_KEY = 'ib_onboarding_completed';
-
 export default function ChatApp() {
   const [, setLocation] = useLocation();
   const { user, logout } = useAuth();
 
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-
-  const [onboardingDone, setOnboardingDone] = useState(
-    () => localStorage.getItem(ONBOARDING_KEY) === 'true'
-  );
 
   const { credits, refresh: refreshCredits } = useCredits(user?.username);
 
@@ -77,20 +71,13 @@ export default function ChatApp() {
     return 'chat';
   }, [messages]);
 
-  const dismissOnboarding = useCallback(() => {
-    localStorage.setItem(ONBOARDING_KEY, 'true');
-    setOnboardingDone(true);
-  }, []);
-
   const handleSendMessage = useCallback((text) => {
-    dismissOnboarding();
     sendMessage(text);
-  }, [sendMessage, dismissOnboarding]);
+  }, [sendMessage]);
 
   const handleSuggest = useCallback((prompt) => {
-    dismissOnboarding();
     sendMessage(prompt);
-  }, [sendMessage, dismissOnboarding]);
+  }, [sendMessage]);
 
   const handleLogout = () => {
     logout();
@@ -201,7 +188,7 @@ export default function ChatApp() {
           isTyping={isTyping}
           onEditMessage={regenerateFrom}
           onSuggest={handleSuggest}
-          showOnboarding={!onboardingDone}
+          showOnboarding={true}
         />
 
         {/* Transient AI error banner — never stored in chat history */}
