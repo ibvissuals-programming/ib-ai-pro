@@ -59,7 +59,10 @@ export default defineConfig({
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on("error", (_err, _req, res) => {
-            res.writeHead(503, { "Content-Type": "application/json" });
+            res.writeHead(503, {
+              "Content-Type": "application/json",
+              "Retry-After": "2",
+            });
             res.end(
               JSON.stringify({
                 success: false,

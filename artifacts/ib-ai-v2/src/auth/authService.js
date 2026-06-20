@@ -28,6 +28,10 @@ const IB_TOKEN_KEY = 'ib_token';
 const IB_USER_KEY = 'ib_cached_user';
 
 const RETRY_DELAY_MS = 800;
+// 503 startup retry — backend takes up to ~20-30s to build+start on restart.
+// Retry up to 8 times at 2s intervals = ~16s total coverage before giving up.
+const STARTUP_503_DELAY_MS  = 2000;
+const STARTUP_503_MAX_RETRIES = 8;
 
 const BASE = (() => {
   try {
@@ -183,17 +187,23 @@ function isNetworkError(err) {
 /**
  * signup() — create a new account.
  *
- * Attempts immediately. One retry on network-level failure only.
- * Hard server errors (400/409) are returned immediately without retry.
+ * Retry policy:
+ *   - 503 (proxy startup): up to STARTUP_503_MAX_RETRIES retries at STARTUP_503_DELAY_MS
+ *   - Network error (TypeError): one retry at RETRY_DELAY_MS
+ *   - Hard server errors (400/409): immediate return, never retry
  */
 export async function signup(username, password) {
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  let networkRetried  = false;
+  let startup503Count = 0;
+
+  while (true) {
     let res, data;
     try {
       res  = await post('/auth/register', { username, password });
       data = await safeParseJson(res);
     } catch (err) {
-      if (attempt === 1 && isNetworkError(err)) {
+      if (!networkRetried && isNetworkError(err)) {
+        networkRetried = true;
         await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
         continue;
       }
@@ -204,6 +214,12 @@ export async function signup(username, password) {
       // Hard validation / conflict — never retry
       if (res.status === 400 || res.status === 409) {
         return { success: false, error: data.error || data.message || 'Registration failed' };
+      }
+      // 503 from Vite proxy = backend still starting up — retry with delay
+      if (res.status === 503 && startup503Count < STARTUP_503_MAX_RETRIES) {
+        startup503Count++;
+        await new Promise(r => setTimeout(r, STARTUP_503_DELAY_MS));
+        continue;
       }
       return { success: false, error: data.error || data.message || 'Service temporarily unavailable' };
     }
@@ -216,24 +232,31 @@ export async function signup(username, password) {
     saveUser(data.user);
     return { success: true, user: data.user };
   }
-
-  return { success: false, error: 'Cannot reach server — please try again' };
 }
 
 /**
  * login() — authenticate with username + password.
  *
- * Attempts immediately. One retry on network-level failure only.
- * Hard auth failures (401/400) are returned immediately without retry.
+ * Retry policy:
+ *   - 503 (proxy startup): up to STARTUP_503_MAX_RETRIES retries at STARTUP_503_DELAY_MS.
+ *     The Vite proxy returns 503 when the backend is still building/starting.
+ *     fetch() never throws in this case (a real HTTP response is received), so
+ *     the catch-based network-error retry cannot handle it — 503 is tracked separately.
+ *   - Network error (TypeError): one retry at RETRY_DELAY_MS
+ *   - Hard auth failures (401/400): immediate return, never retry
  */
 export async function login(username, password) {
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  let networkRetried  = false;
+  let startup503Count = 0;
+
+  while (true) {
     let res, data;
     try {
       res  = await post('/auth/login', { username, password });
       data = await safeParseJson(res);
     } catch (err) {
-      if (attempt === 1 && isNetworkError(err)) {
+      if (!networkRetried && isNetworkError(err)) {
+        networkRetried = true;
         await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
         continue;
       }
@@ -245,13 +268,10 @@ export async function login(username, password) {
       if (res.status === 401 || res.status === 400) {
         return { success: false, error: data.error || data.message || 'Invalid username or password' };
       }
-      // 503 from the Vite proxy means the backend process is still starting up.
-      // Unlike network-level errors (TypeError), the proxy returns a real HTTP
-      // response so fetch() never throws — the catch-based retry never fires.
-      // Retry once explicitly here so a login attempt made during the brief
-      // startup window succeeds automatically instead of surfacing the error.
-      if (res.status === 503 && attempt === 1) {
-        await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+      // 503 from Vite proxy = backend still starting up — retry with delay
+      if (res.status === 503 && startup503Count < STARTUP_503_MAX_RETRIES) {
+        startup503Count++;
+        await new Promise(r => setTimeout(r, STARTUP_503_DELAY_MS));
         continue;
       }
       return { success: false, error: data.error || data.message || 'Service temporarily unavailable' };
@@ -265,8 +285,6 @@ export async function login(username, password) {
     saveUser(data.user);
     return { success: true, user: data.user, recoveryLogin: data.recoveryLogin ?? false };
   }
-
-  return { success: false, error: 'Cannot reach server — please try again' };
 }
 
 /**
