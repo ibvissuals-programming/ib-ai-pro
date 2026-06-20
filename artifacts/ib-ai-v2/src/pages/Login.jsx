@@ -25,8 +25,12 @@ export default function Login() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  // null = unknown, true = ready, false = starting up
+  // null = unknown, true = ready, false = starting up (only shown after debounce)
   const [serverReady, setServerReady] = useState(null);
+  // showNotReadyBanner is only set true after 1500ms of the probe returning false.
+  // This prevents a flash of the amber banner on healthy servers where the first
+  // probe response arrives quickly.
+  const [showNotReadyBanner, setShowNotReadyBanner] = useState(false);
 
   // Clear any stale token/cache whenever the login page mounts.
   // Prevents redirect loops from tokens that became invalid while the tab was closed.
@@ -44,32 +48,31 @@ export default function Login() {
 
   useEffect(() => {
     let cancelled = false;
-    // resolved = true once the backend confirms ready OR the cutoff fires.
-    // Any in-flight probe that resolves after this must not touch state.
     let resolved = false;
     let retryTimer = null;
+    let bannerTimer = null;
 
     // ── 6-second absolute cutoff ──────────────────────────────────────────────
-    // After 6s, dismiss the banner unconditionally and stop all retries.
-    // The login button was never blocked — this just removes the spinner.
     const cutoffTimer = setTimeout(() => {
       if (!cancelled) {
         resolved = true;
+        clearTimeout(bannerTimer);
         setServerReady(true);
+        setShowNotReadyBanner(false);
       }
     }, 6_000);
 
     async function probe() {
-      // Hard-stop: bail immediately if already resolved (success or cutoff) or unmounted.
       if (resolved || cancelled) return;
 
       const result = await checkServerHealth();
 
       if (result.ready) {
-        // Mark resolved first so no subsequent probe can call setServerReady(false).
         resolved = true;
         clearTimeout(cutoffTimer);
+        clearTimeout(bannerTimer);
         setServerReady(true);
+        setShowNotReadyBanner(false);
         setError(prev =>
           prev === 'Server is still starting up — please wait a moment and try again'
             ? ''
@@ -78,18 +81,25 @@ export default function Login() {
         return;
       }
 
-      // Backend not ready. Re-check resolved/cancelled AFTER the async fetch —
-      // the cutoff timer may have fired while the request was in-flight.
       if (resolved || cancelled) return;
       setServerReady(false);
+      // Only show the banner after 1500ms of the probe returning not-ready.
+      // This prevents a one-frame flash of the banner on healthy servers where
+      // the probe fires before the first response arrives.
+      if (!bannerTimer) {
+        bannerTimer = setTimeout(() => {
+          if (!resolved && !cancelled) setShowNotReadyBanner(true);
+        }, 1_500);
+      }
       retryTimer = setTimeout(probe, 2_500);
     }
 
     probe();
     return () => {
       cancelled = true;
-      resolved = true; // Stop any in-flight fetch from updating state after unmount.
+      resolved = true;
       clearTimeout(cutoffTimer);
+      clearTimeout(bannerTimer);
       if (retryTimer) clearTimeout(retryTimer);
     };
   }, []);
@@ -208,9 +218,9 @@ export default function Login() {
         className="w-full max-w-sm"
       >
 
-        {/* Server-starting banner — shown until /api/auth/health confirms ready */}
+        {/* Server-starting banner — shown only after 1500ms of failed probes */}
         <AnimatePresence>
-          {serverReady === false && (
+          {showNotReadyBanner && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
@@ -312,7 +322,7 @@ export default function Login() {
 
                 <button
                   type="submit"
-                  disabled={loading || serverReady === false}
+                  disabled={loading}
                   data-testid="button-login"
                   className="w-full bg-primary text-primary-foreground rounded-xl py-2.5 text-sm font-medium hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed mt-2 shadow-lg shadow-primary/20"
                 >
@@ -325,12 +335,11 @@ export default function Login() {
                       />
                       Signing in...
                     </span>
-                  ) : serverReady === false ? 'Server Starting...' : 'Sign In'}
+                  ) : 'Sign In'}
                 </button>
 
                 <button
                   type="button"
-                  disabled={serverReady === false}
                   onClick={() => { setMode('recovery'); setError(''); }}
                   className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
@@ -402,7 +411,7 @@ export default function Login() {
 
                 <button
                   type="submit"
-                  disabled={loading || serverReady === false}
+                  disabled={loading}
                   className="w-full bg-amber-500 text-white rounded-xl py-2.5 text-sm font-medium hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-lg"
                 >
                   {loading ? (
@@ -414,7 +423,7 @@ export default function Login() {
                       />
                       Verifying…
                     </span>
-                  ) : serverReady === false ? 'Server Starting...' : 'Access with recovery key'}
+                  ) : 'Access with recovery key'}
                 </button>
 
                 <button

@@ -7,7 +7,9 @@ export function useAuth() {
   // useAuth() starts with user=null, causing a one-frame flash of empty/null
   // state in the sidebar, header, and chat list immediately after login.
   const [user, setUser] = useState(() => getCurrentUser());
-  const [loading, setLoading] = useState(true);
+  // Start as false when a user is already cached — no need to block on loading state.
+  // Start as true only when we have a token but no cached user yet (rare edge case).
+  const [loading, setLoading] = useState(() => !getCurrentUser());
 
   useEffect(() => {
     // Verify the cached token against the server (refreshes credits, role, etc.)
