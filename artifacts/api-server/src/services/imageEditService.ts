@@ -119,7 +119,7 @@ export async function cinematicGrade(imageDataUrl: string): Promise<string> {
     }
   }
 
-  const outBuf = await img.getBuffer("image/jpeg");
+  const outBuf = await img.getBuffer("image/jpeg", { quality: 85 });
   logger.info({ width, height, outBytes: outBuf.length }, "[imageEdit] cinematicGrade complete");
   return toJpegDataUrl(outBuf);
 }
@@ -224,7 +224,7 @@ export async function blurBackground(imageDataUrl: string): Promise<string> {
     }
   }
 
-  const outBuf      = await img.getBuffer("image/jpeg");
+  const outBuf      = await img.getBuffer("image/jpeg", { quality: 85 });
   const blurredPct  = Math.round((blurredPixels / (width * height)) * 100);
   logger.info(
     { width, height, blurredPct, outBytes: outBuf.length },
@@ -268,7 +268,7 @@ export async function upscaleImage(imageDataUrl: string): Promise<string> {
     sharpData[i] = clamp(sharpData[i]! * (1 + SHARP_AMT) - blurData[i]! * SHARP_AMT);
   }
 
-  const outBuf = await sharp.getBuffer("image/jpeg");
+  const outBuf = await sharp.getBuffer("image/jpeg", { quality: 85 });
   logger.info({ origW: width, origH: height, newW, newH, outBytes: outBuf.length }, "[imageEdit] upscaleImage complete");
   return toJpegDataUrl(outBuf);
 }
@@ -550,7 +550,7 @@ export async function removeWatermark(imageDataUrl: string, _hint = ""): Promise
     data[idx + 2] = clamp(snap[idx + 2]! * (1 - fw) + inpainted[idx + 2]! * fw);
   }
 
-  const outBuf    = await img.getBuffer("image/jpeg");
+  const outBuf    = await img.getBuffer("image/jpeg", { quality: 85 });
   const maskedPct = Math.round(
     (dilatedMask.reduce((s, v) => s + v, 0) / (width * height)) * 100,
   );
@@ -650,7 +650,7 @@ export async function lightRetouch(imageDataUrl: string): Promise<string> {
     data[idx + 2] = newB;
   }
 
-  const outBuf = await img.getBuffer("image/jpeg");
+  const outBuf = await img.getBuffer("image/jpeg", { quality: 85 });
   logger.info({ width, height, outBytes: outBuf.length }, "[imageEdit] lightRetouch complete");
   return toJpegDataUrl(outBuf);
 }
