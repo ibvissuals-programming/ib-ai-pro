@@ -272,6 +272,13 @@ router.post(
     // Bypasses Gemini analysis, APRE, FRAE, and Safe Enhancement Mode entirely.
     // Each capability runs its own algorithm and always returns a real b64Image.
     if (parsed.data.editType) {
+      // Safety net: remove_watermark is temporarily disabled.
+      if (parsed.data.editType === "remove_watermark") {
+        res.status(503).json(
+          buildErrorResponse("image", "remove_watermark is temporarily unavailable."),
+        );
+        return;
+      }
       const { runDirectEdit } = await import("../services/imageEditService");
       try {
         const t0 = Date.now();

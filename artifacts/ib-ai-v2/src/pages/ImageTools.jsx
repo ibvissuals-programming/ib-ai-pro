@@ -812,7 +812,6 @@ const DIRECT_EDIT_TYPES = [
   { key: 'cinematic_grade',   label: 'Cinematic Grade',   badge: '🎬', desc: 'Teal-orange film grade, grain & vignette',    promptRequired: false },
   { key: 'remove_background', label: 'Background Blur',   badge: '🖼', desc: 'Keep subject sharp, blur the background',      promptRequired: false },
   { key: 'upscale',           label: 'Upscale 2×',        badge: '⬆', desc: 'Double resolution + unsharp-mask sharpening',  promptRequired: false },
-  { key: 'remove_watermark',  label: 'Remove Watermark',  badge: '✂', desc: 'Describe the mark to remove below',            promptRequired: true  },
   { key: 'retouch',           label: 'Retouch',           badge: '✨', desc: 'Smooth skin, lift brightness, boost colour',   promptRequired: false },
 ];
 
@@ -973,20 +972,18 @@ function EditTab() {
       {sourceImage && (promptRequired || !selectedEditType) && (
         <div className="space-y-2">
           <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
-            {selectedEditType === 'remove_watermark' ? 'What to remove' : selectedEditType ? 'Custom instruction (optional)' : 'Edit Instruction'}
+            {selectedEditType ? 'Custom instruction (optional)' : 'Edit Instruction'}
           </label>
           <textarea
             value={editPrompt}
             onChange={(e) => setEditPrompt(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleEdit(); }}
             placeholder={
-              selectedEditType === 'remove_watermark'
-                ? 'Describe the watermark or object — e.g. "white logo in top-right corner"…'
-                : selectedEditType
+              selectedEditType
                 ? 'Optional — leave blank to use defaults…'
                 : 'Describe the edit — e.g. cinematic sunset grade, remove background clutter, soft studio lighting…'
             }
-            rows={selectedEditType && selectedEditType !== 'remove_watermark' ? 2 : 3}
+            rows={selectedEditType ? 2 : 3}
             className="w-full bg-background/60 border border-input rounded-xl px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/40 outline-none focus:ring-2 focus:ring-ring/40 focus:border-primary/50 transition-all resize-none leading-relaxed"
           />
         </div>
