@@ -278,26 +278,30 @@ export async function upscaleImage(imageDataUrl: string): Promise<string> {
 // Detects and inpaints watermarks, text overlays, logos, and UI chrome.
 // Pure pixel-ops, no external API calls.
 //
-// Why the old approach failed:
-//   The original 3-pass detection only checked lum > localAvg (bright-on-dark),
-//   so dark text on light backgrounds, semi-transparent logos, and social-media
-//   corner overlays (TikTok/Instagram) triggered nothing — mask stayed empty and
-//   the original image was returned.
+// Detection (unchanged from v2):
+//   Bidirectional contrast |lum−localAvg|, edge-proximity threshold reduction,
+//   low-saturation near-edge heuristic, hint-region boost, platform heuristics.
 //
-// New algorithm:
-//   1. Parse hint string → hintRegions[] (corner/edge/platform keywords → areas)
-//   2. Compute local-average luma (box filter, radius 8)
-//   3. Build watermark mask using THREE signals, all bidirectional:
-//        a) |lum − localAvg| > effectiveThresh  (both bright- AND dark-on-bg)
-//        b) Low-saturation (near-grayscale) pixel with contrast > 14 near an edge
-//           (grayscale = text/logo; color photos are saturated)
-//        c) Near-black or near-white absolute pixel within any hint region
-//      effectiveThresh scales from BASE_THRESH=28 down to ~15 at image edges,
-//      and further down to 11 inside explicitly named hint regions.
-//   4. Dilate mask (radius 2) to close gaps in partially-transparent edges.
-//   5. Single inpainting pass: inverse-distance weighted fill from non-masked
-//      neighbors (sample radius 14).
-//   6. 1-pixel blur to blend seams.
+// Fill pipeline (v3 — fixes blur bleed and ghosting):
+//   1. Parse hint → hintRegions[]
+//   2. Compute local-average luma (box filter r=8)
+//   3. Build candidateMask (same 3-signal detection as v2)
+//   4. Dilate by DILATE_R=3 → dilatedMask
+//      Build featherWeight[]:
+//        candidateMask pixel → 1.0 (fully replaced)
+//        dilated-but-not-candidate → 0.5 (blend seam)
+//        outside → 0.0 (never written — pixel-identical to input)
+//   5. Two-pass inpainting into a separate `inpainted` buffer:
+//        Pass 1 — IDW fill (w=1/dist, r=22) from clean `snap` neighbors
+//                 (skips all dilatedMask pixels, reads only unmasked originals)
+//        Pass 2 — re-fill pixels where pass 1 had no/few clean neighbors
+//                 (handles thick watermark centers) using pass-1 results as source
+//   6. Targeted patch smooth: 3×3 box avg within candidateMask, sourcing ONLY
+//      from dilatedMask neighbors — dissolves ghost shapes without touching
+//      pixels outside the mask zone
+//   7. Feathered composite: data[i] = lerp(snap[i], inpainted[i], featherWeight[i])
+//      weight-0 pixels are NEVER written — the rest of the image is untouched.
+//      NO whole-image blur.
 //
 // Returns JPEG data URL.
 
@@ -409,9 +413,14 @@ export async function removeWatermark(imageDataUrl: string, _hint = ""): Promise
     }
   }
 
-  // ── Step 4: Dilate mask (radius 2) to cover partially-transparent edges ──
-  const DILATE_R = 2;
-  const mask     = new Uint8Array(candidateMask);
+  // ── Step 4: Dilate → dilatedMask; build featherWeight array ─────────────
+  // dilatedMask = candidateMask expanded by DILATE_R pixels.
+  // featherWeight:
+  //   1.0  → candidateMask pixel    (fully replaced by inpainting)
+  //   0.5  → dilation-ring pixel    (soft 50/50 blend — seam feather)
+  //   0.0  → everything else        (NEVER written — pixel-identical to input)
+  const DILATE_R      = 3;
+  const dilatedMask   = new Uint8Array(candidateMask);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       if (!candidateMask[y * width + x]) continue;
@@ -419,46 +428,131 @@ export async function removeWatermark(imageDataUrl: string, _hint = ""): Promise
         for (let dx = -DILATE_R; dx <= DILATE_R; dx++) {
           const ny = y + dy, nx = x + dx;
           if (ny >= 0 && ny < height && nx >= 0 && nx < width)
-            mask[ny * width + nx] = 1;
+            dilatedMask[ny * width + nx] = 1;
         }
       }
     }
   }
 
-  // ── Step 5: Inpaint masked pixels (inverse-distance weighted fill) ────────
-  const SAMPLE_R = 14;
+  const featherWeight = new Float32Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    if (candidateMask[i])  featherWeight[i] = 1.0;
+    else if (dilatedMask[i]) featherWeight[i] = 0.5;
+    // else stays 0.0 — outside zone, never modified
+  }
+
+  // ── Step 5: Two-pass inpainting into a separate `inpainted` buffer ────────
+  // NEVER modifies `data` or `snap` during sampling.
+  // Pass 1: IDW fill (w = 1/dist, radius 22) from unmasked `snap` neighbors.
+  //   w = 1/dist (not 1/dist²) → more balanced sampling across the background.
+  //   Skips all dilatedMask pixels so it reads only untouched original pixels.
+  // Pass 2: pixels where pass 1 found no clean neighbors (thick watermark centers)
+  //   are re-filled from the pass-1 inpainted buffer.
+  const inpainted  = Buffer.from(snap); // starts as copy of original
+  const SAMPLE_R   = 22;
+  const MIN_TOTAL_W = 1.0;              // if pass 1 < this, flag for pass 2
+  const needsP2    = new Uint8Array(width * height);
+
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      if (!mask[y * width + x]) continue;
+      if (!dilatedMask[y * width + x]) continue;
       let wR = 0, wG = 0, wB = 0, totalW = 0;
       for (let dy = -SAMPLE_R; dy <= SAMPLE_R; dy++) {
         for (let dx = -SAMPLE_R; dx <= SAMPLE_R; dx++) {
           const ny = y + dy, nx = x + dx;
           if (ny < 0 || ny >= height || nx < 0 || nx >= width) continue;
-          if (mask[ny * width + nx]) continue; // skip other masked pixels
+          if (dilatedMask[ny * width + nx]) continue; // only unmasked originals
           const dist = Math.sqrt(dx * dx + dy * dy);
           if (dist === 0) continue;
-          const w  = 1 / (dist * dist);
+          const w  = 1 / dist; // ← 1/dist not 1/dist² for balanced background avg
           const si = (ny * width + nx) * 4;
-          wR += data[si]! * w; wG += data[si + 1]! * w; wB += data[si + 2]! * w;
+          wR += snap[si]! * w; wG += snap[si + 1]! * w; wB += snap[si + 2]! * w;
           totalW += w;
         }
       }
-      if (totalW > 0) {
-        const idx     = (y * width + x) * 4;
-        data[idx]     = clamp(wR / totalW);
-        data[idx + 1] = clamp(wG / totalW);
-        data[idx + 2] = clamp(wB / totalW);
+      const idx = (y * width + x) * 4;
+      if (totalW >= MIN_TOTAL_W) {
+        inpainted[idx]     = clamp(wR / totalW);
+        inpainted[idx + 1] = clamp(wG / totalW);
+        inpainted[idx + 2] = clamp(wB / totalW);
+      } else {
+        needsP2[y * width + x] = 1; // thick center pixel — handle in pass 2
       }
     }
   }
 
-  // ── Step 6: Light blur to blend seams ────────────────────────────────────
-  img.blur(1);
+  // Pass 2: stranded center pixels → fill from pass-1 inpainted buffer
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (!needsP2[y * width + x]) continue;
+      let wR = 0, wG = 0, wB = 0, totalW = 0;
+      for (let dy = -SAMPLE_R; dy <= SAMPLE_R; dy++) {
+        for (let dx = -SAMPLE_R; dx <= SAMPLE_R; dx++) {
+          const ny = y + dy, nx = x + dx;
+          if (ny < 0 || ny >= height || nx < 0 || nx >= width) continue;
+          if (needsP2[ny * width + nx]) continue; // skip other unresolved pixels
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist === 0) continue;
+          const w  = 1 / dist;
+          const si = (ny * width + nx) * 4;
+          wR += inpainted[si]! * w; wG += inpainted[si + 1]! * w; wB += inpainted[si + 2]! * w;
+          totalW += w;
+        }
+      }
+      if (totalW > 0) {
+        const idx         = (y * width + x) * 4;
+        inpainted[idx]     = clamp(wR / totalW);
+        inpainted[idx + 1] = clamp(wG / totalW);
+        inpainted[idx + 2] = clamp(wB / totalW);
+      }
+    }
+  }
+
+  // ── Step 6: Targeted patch smooth (ghost dissolution) ────────────────────
+  // Applies a 3×3 box average ONLY to candidateMask pixels, reading ONLY from
+  // dilatedMask neighbors. This dissolves residual ghost shapes at the boundary
+  // of the inpainted patch without touching any pixel outside the mask zone.
+  const preSm = Buffer.from(inpainted);
+  const SM_R  = 3;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (!candidateMask[y * width + x]) continue; // only core mask pixels
+      let rS = 0, gS = 0, bS = 0, cnt = 0;
+      for (let dy = -SM_R; dy <= SM_R; dy++) {
+        for (let dx = -SM_R; dx <= SM_R; dx++) {
+          const ny = y + dy, nx = x + dx;
+          if (ny < 0 || ny >= height || nx < 0 || nx >= width) continue;
+          if (!dilatedMask[ny * width + nx]) continue; // mask-zone values only
+          const si = (ny * width + nx) * 4;
+          rS += preSm[si]!; gS += preSm[si + 1]!; bS += preSm[si + 2]!; cnt++;
+        }
+      }
+      if (cnt > 0) {
+        const idx         = (y * width + x) * 4;
+        inpainted[idx]     = clamp(rS / cnt);
+        inpainted[idx + 1] = clamp(gS / cnt);
+        inpainted[idx + 2] = clamp(bS / cnt);
+      }
+    }
+  }
+
+  // ── Step 7: Feathered composite — pixel-safe write ────────────────────────
+  // Pixels with featherWeight = 0 are NEVER written.
+  // The only pixels that change are those in candidateMask (weight 1.0) and
+  // the 3-pixel dilation ring (weight 0.5).
+  // NO whole-image blur — seam blending is handled entirely by featherWeight.
+  for (let i = 0; i < width * height; i++) {
+    const fw = featherWeight[i];
+    if (fw === 0) continue; // outside zone — untouched
+    const idx   = i * 4;
+    data[idx]     = clamp(snap[idx]!     * (1 - fw) + inpainted[idx]!     * fw);
+    data[idx + 1] = clamp(snap[idx + 1]! * (1 - fw) + inpainted[idx + 1]! * fw);
+    data[idx + 2] = clamp(snap[idx + 2]! * (1 - fw) + inpainted[idx + 2]! * fw);
+  }
 
   const outBuf    = await img.getBuffer("image/jpeg");
   const maskedPct = Math.round(
-    (mask.reduce((s, v) => s + v, 0) / (width * height)) * 100,
+    (dilatedMask.reduce((s, v) => s + v, 0) / (width * height)) * 100,
   );
   logger.info(
     { width, height, maskedPct, hintRegions: hintRegions.length, outBytes: outBuf.length },
