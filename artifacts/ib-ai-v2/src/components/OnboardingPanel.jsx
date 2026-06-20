@@ -48,72 +48,50 @@ const QUICK_CARDS = [
   { text: 'Improve this AI prompt: "sunset over mountains"', icon: Zap },
 ];
 
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.065, delayChildren: 0.05 },
-  },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 10 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } },
-};
-
 export function OnboardingPanel({ onSend }) {
   return (
-    <motion.div
-      key="onboarding"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.25 }}
+    <div
       className="flex flex-col items-center justify-start h-full text-center px-4 sm:px-6 py-8 overflow-y-auto"
       style={{
         scrollbarWidth: 'thin',
         scrollbarColor: 'hsl(217 33% 20%) transparent',
-        willChange: 'transform',
       }}
     >
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="flex flex-col items-center w-full max-w-sm"
-      >
-        {/* Logo */}
+      <div className="flex flex-col items-center w-full max-w-sm">
+
+        {/* Logo — subtle scale-in */}
         <motion.div
           initial={{ opacity: 0, scale: 0.85, y: 14 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
           className="mb-5 mt-2"
         >
           <IbLogo variant="mark" size={64} />
         </motion.div>
 
-        {/* Heading */}
+        {/* Heading — quick fade-up */}
         <motion.h2
-          variants={itemVariants}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
           className="text-xl font-bold text-foreground mb-2"
           style={{ letterSpacing: '-0.025em', fontFamily: 'Inter, sans-serif' }}
         >
           Welcome to IB <span className="text-primary">AI</span> Studio Lab
         </motion.h2>
 
-        {/* Subtitle */}
+        {/* Subtitle — quick fade-up */}
         <motion.p
-          variants={itemVariants}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.13, ease: [0.22, 1, 0.36, 1] }}
           className="text-sm text-muted-foreground leading-relaxed mb-7 max-w-[280px]"
         >
           Create images, generate prompts, explore ideas, and build with AI.
         </motion.p>
 
-        {/* 4 action buttons — 2×2 grid */}
-        <motion.div
-          variants={itemVariants}
-          className="grid grid-cols-2 gap-2.5 w-full mb-7"
-        >
+        {/* 4 action buttons — 2×2 grid — IMMEDIATELY visible, no delay */}
+        <div className="grid grid-cols-2 gap-2.5 w-full mb-7">
           {WELCOME_ACTIONS.map(({ label, prompt, icon: Icon, gradient, border, iconBg, iconColor }) => (
             <button
               key={label}
@@ -136,11 +114,13 @@ export function OnboardingPanel({ onSend }) {
               </span>
             </button>
           ))}
-        </motion.div>
+        </div>
 
         {/* Divider */}
         <motion.div
-          variants={itemVariants}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3, delay: 0.2 }}
           className="flex items-center gap-3 w-full mb-4"
         >
           <div className="flex-1 h-px bg-border/50" />
@@ -151,16 +131,13 @@ export function OnboardingPanel({ onSend }) {
         </motion.div>
 
         {/* Quick-start cards */}
-        <motion.div
-          variants={itemVariants}
-          className="flex flex-col gap-2 w-full"
-        >
+        <div className="flex flex-col gap-2 w-full">
           {QUICK_CARDS.map(({ text, icon: Icon }, i) => (
             <motion.button
               key={text}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3, delay: 0.42 + i * 0.06, ease: 'easeOut' }}
+              transition={{ duration: 0.3, delay: 0.25 + i * 0.06, ease: 'easeOut' }}
               whileHover={{ x: 2 }}
               onClick={() => onSend(text)}
               className="
@@ -182,8 +159,9 @@ export function OnboardingPanel({ onSend }) {
               </span>
             </motion.button>
           ))}
-        </motion.div>
-      </motion.div>
-    </motion.div>
+        </div>
+
+      </div>
+    </div>
   );
 }

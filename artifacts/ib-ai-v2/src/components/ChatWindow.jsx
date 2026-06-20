@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Cpu, Copy, Check, Download, X, CheckSquare, Square, ImagePlus, ChevronDown } from 'lucide-react';
+import { Cpu, Copy, Check, Download, X, CheckSquare, Square, ChevronDown } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
 import { useSelection } from '../hooks/useSelection';
-import { IbLogo } from './IbLogo';
 import { OnboardingPanel } from './OnboardingPanel';
 
 // ─── Typing indicator ─────────────────────────────────────────────────────────
@@ -36,63 +35,6 @@ function TypingIndicator() {
   );
 }
 
-// ─── Empty state ──────────────────────────────────────────────────────────────
-
-function EmptyState() {
-  return (
-    <div className="flex flex-col items-center justify-center h-full text-center px-6">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.88, y: 12 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-        className="mb-5"
-      >
-        <IbLogo variant="mark" size={52} />
-      </motion.div>
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.38, delay: 0.08, ease: 'easeOut' }}
-      >
-        <h3 className="text-[17px] font-bold text-foreground mb-2 tracking-tight" style={{ letterSpacing: '-0.03em' }}>
-          IB <span className="text-primary">AI</span> Studio Lab
-        </h3>
-        <p className="text-sm text-muted-foreground/70 max-w-[280px] leading-relaxed mb-7">
-          Ask anything — code, ideas, writing, or just a conversation.
-        </p>
-      </motion.div>
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.32, delay: 0.18, ease: 'easeOut' }}
-        className="flex flex-col gap-2 w-full max-w-[320px]"
-      >
-        {[
-          { text: 'Explain a concept simply' },
-          { text: 'Help me write or improve content' },
-          { icon: <ImagePlus size={11} />, text: 'Drop an image to analyze or edit' },
-        ].map((item, i) => (
-          <div
-            key={i}
-            className="text-left text-xs text-muted-foreground/60 px-3.5 py-3 rounded-xl border border-border/40 bg-secondary/20 flex items-center gap-2.5 leading-relaxed hover:border-primary/25 hover:text-muted-foreground hover:bg-secondary/40 transition-all cursor-default"
-          >
-            {item.icon ? (
-              <>
-                <span className="text-primary/70 shrink-0">{item.icon}</span>
-                {item.text}
-              </>
-            ) : (
-              <>
-                <span className="w-1 h-1 rounded-full bg-border shrink-0" />
-                {item.text}
-              </>
-            )}
-          </div>
-        ))}
-      </motion.div>
-    </div>
-  );
-}
 
 // ─── Selection toolbar ────────────────────────────────────────────────────────
 
@@ -220,22 +162,7 @@ export function ChatWindow({ messages, isTyping, onEditMessage, onSuggest, showO
   if (messages.length === 0 && !isTyping) {
     return (
       <div className="flex-1 overflow-y-auto">
-        <AnimatePresence mode="wait">
-          {showOnboarding && onSuggest ? (
-            <OnboardingPanel key="onboarding" onSend={onSuggest} />
-          ) : (
-            <motion.div
-              key="empty"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="h-full"
-            >
-              <EmptyState />
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <OnboardingPanel onSend={onSuggest ?? (() => {})} />
       </div>
     );
   }

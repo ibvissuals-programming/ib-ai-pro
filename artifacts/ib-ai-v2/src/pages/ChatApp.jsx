@@ -183,7 +183,7 @@ export default function ChatApp() {
         )}
 
         <ChatWindow
-          key={activeChatId}
+          key={activeChatId ?? 'chat'}
           messages={messages}
           isTyping={isTyping}
           onEditMessage={regenerateFrom}
