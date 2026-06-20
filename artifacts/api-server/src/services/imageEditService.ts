@@ -565,9 +565,9 @@ export async function removeWatermark(imageDataUrl: string, _hint = ""): Promise
 //
 // Applies a non-destructive beauty pass using pure pixel operations:
 //   1. Gaussian-approximation skin smoothing (selective blur on low-saturation regions)
-//   2. Subtle brightness lift (+8)
-//   3. Contrast enhancement (×1.08)
-//   4. Mild saturation boost (×1.10 on Cb/Cr components)
+//   2. Brightness lift (+15)
+//   3. Contrast enhancement (×1.18)
+//   4. Saturation boost (×1.22 on Cb/Cr components)
 //
 // No external API. Returns JPEG data URL.
 
@@ -615,14 +615,14 @@ export async function lightRetouch(imageDataUrl: string): Promise<string> {
     }
   }
 
-  // Step 2: Brightness lift (+8)
+  // Step 2: Brightness lift (+15)
   for (let i = 0; i < data.length; i++) {
     if (i % 4 === 3) continue;
-    data[i] = clamp(data[i]! + 8);
+    data[i] = clamp(data[i]! + 15);
   }
 
-  // Step 3: Contrast (×1.08)
-  const cf = 1.08;
+  // Step 3: Contrast (×1.18)
+  const cf = 1.18;
   for (let i = 0; i < data.length; i++) {
     if (i % 4 === 3) continue;
     const v = data[i]! / 255;
@@ -640,7 +640,7 @@ export async function lightRetouch(imageDataUrl: string): Promise<string> {
     const cb  = -0.169 * r - 0.331 * g + 0.500 * b;
     const cr  =  0.500 * r - 0.419 * g - 0.081 * b;
 
-    const SAT = 1.10;
+    const SAT = 1.22;
     const newR = clamp(y2 + 1.402 * (cr * SAT));
     const newG = clamp(y2 - 0.344 * (cb * SAT) - 0.714 * (cr * SAT));
     const newB = clamp(y2 + 1.772 * (cb * SAT));
