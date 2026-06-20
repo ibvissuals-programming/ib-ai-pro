@@ -1,11 +1,11 @@
 import { motion } from 'framer-motion';
-import { ImagePlus, Wand2, Lightbulb, MessageCircle, Camera, Palette, Sparkles, Zap } from 'lucide-react';
+import { ImagePlus, Wand2, Lightbulb, MessageCircle, Video, TrendingUp, Clapperboard, Flame } from 'lucide-react';
 import { IbLogo } from './IbLogo';
 
 const WELCOME_ACTIONS = [
   {
     label: 'Create an Image',
-    prompt: 'Create a luxury cinematic portrait with dramatic golden lighting',
+    prompt: 'Create a scroll-stopping, cinematic AI image for a TikTok or Instagram Reel — dramatic lighting, bold colors, high contrast. The concept: a glowing transformation reveal with a before/after split. Make it feel like a viral thumbnail.',
     icon: ImagePlus,
     gradient: 'from-blue-500/15 to-violet-500/8 hover:from-blue-500/25 hover:to-violet-500/15',
     border: 'border-blue-500/20 hover:border-blue-400/40',
@@ -14,7 +14,7 @@ const WELCOME_ACTIONS = [
   },
   {
     label: 'Improve a Prompt',
-    prompt: 'Improve this AI image prompt for better results: "a dog in a park"',
+    prompt: 'Improve this AI image prompt so it produces a cinematic, scroll-stopping visual for a short-form video thumbnail: "glowing portrait of a confident woman with dramatic light". Make it ultra-specific — lighting, color palette, mood, composition, and camera angle.',
     icon: Wand2,
     gradient: 'from-violet-500/15 to-fuchsia-500/8 hover:from-violet-500/25 hover:to-fuchsia-500/15',
     border: 'border-violet-500/20 hover:border-violet-400/40',
@@ -23,7 +23,7 @@ const WELCOME_ACTIONS = [
   },
   {
     label: 'Brainstorm an Idea',
-    prompt: 'Brainstorm 5 creative and viral content ideas that combine AI and visual storytelling',
+    prompt: 'Give me 5 viral TikTok and Instagram Reels content ideas for a before/after transformation series. For each idea include: the hook (first 3 seconds), the reveal angle, the visual treatment, and the suggested caption style. Make them feel native to current trends.',
     icon: Lightbulb,
     gradient: 'from-amber-500/15 to-orange-500/8 hover:from-amber-500/25 hover:to-orange-500/15',
     border: 'border-amber-500/20 hover:border-amber-400/40',
@@ -32,7 +32,7 @@ const WELCOME_ACTIONS = [
   },
   {
     label: 'Ask Anything',
-    prompt: 'What are the most creative and impressive things you can help me build today?',
+    prompt: 'What are the highest-performing content formats on TikTok and Instagram Reels right now, and how can I use AI-generated images to make them go viral faster?',
     icon: MessageCircle,
     gradient: 'from-emerald-500/15 to-teal-500/8 hover:from-emerald-500/25 hover:to-teal-500/15',
     border: 'border-emerald-500/20 hover:border-emerald-400/40',
@@ -42,10 +42,10 @@ const WELCOME_ACTIONS = [
 ];
 
 const QUICK_CARDS = [
-  { text: 'Create a luxury cinematic portrait', icon: Camera },
-  { text: 'Design a futuristic logo concept', icon: Palette },
-  { text: 'Write a viral TikTok idea about AI', icon: Sparkles },
-  { text: 'Improve this AI prompt: "sunset over mountains"', icon: Zap },
+  { text: 'Write 5 scroll-stopping hooks for a glow-up reveal video', icon: Flame },
+  { text: 'Caption ideas for a cinematic AI portrait post', icon: Clapperboard },
+  { text: 'Content ideas for a 7-day transformation series', icon: Video },
+  { text: "What's trending on TikTok for AI-generated content?", icon: TrendingUp },
 ];
 
 export function OnboardingPanel({ onSend }) {
@@ -87,10 +87,10 @@ export function OnboardingPanel({ onSend }) {
           transition={{ duration: 0.3, delay: 0.13, ease: [0.22, 1, 0.36, 1] }}
           className="text-sm text-muted-foreground leading-relaxed mb-7 max-w-[280px]"
         >
-          Create images, generate prompts, explore ideas, and build with AI.
+          Create viral content, write hooks, generate visuals, and build your short-form video strategy with AI.
         </motion.p>
 
-        {/* 4 action buttons — 2×2 grid — IMMEDIATELY visible, no delay */}
+        {/* 4 action buttons — 2×2 grid — immediately visible, no delay */}
         <div className="grid grid-cols-2 gap-2.5 w-full mb-7">
           {WELCOME_ACTIONS.map(({ label, prompt, icon: Icon, gradient, border, iconBg, iconColor }) => (
             <button
