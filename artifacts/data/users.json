@@ -1,11 +1,11 @@
 [
   {
-    "id": "707aa190-88cb-4300-87dc-65f7f597d94d",
+    "id": "8f65a611-79af-4ecc-97e6-1aa5ecf7c000",
     "username": "ibaiceo",
-    "passwordHash": "2aec1c9bc04176cdfee317573f22240c:b51197d1942251e63ab79d603f917a3d86b4bbe18c864938baeb766ec2108e9c870cdecc7e2c7bdf8010da462004d8aabf0d58efc118a915828fe0bf46f940fa",
+    "passwordHash": "564ed192b0153f7e0d8b7598751ef4fc:d47048cf854df7b13ff4f651472cb379d069e65c74a7447a124d4247544ece028d68662f556e568aa669ebc20038b2e2c6ecfbc7650ed1661321161e448df018",
     "role": "ceo",
-    "credits": 7,
-    "lastReset": 1780029381664,
-    "createdAt": 1780029381664
+    "credits": 100,
+    "lastReset": 1781972314790,
+    "createdAt": 1781972314790
   }
 ]
