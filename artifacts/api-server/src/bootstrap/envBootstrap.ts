@@ -116,6 +116,80 @@ function printSetupInstructions(keys: string[]): void {
   }
 }
 
+function printSecretsChecklist(): void {
+  const DIVIDER = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+
+  const checks: Array<{ key: string; present: boolean; note: string; missingNote: string }> = [
+    {
+      key:         "DATABASE_URL",
+      present:     checkVar("DATABASE_URL"),
+      note:        "Replit PostgreSQL connected",
+      missingNote: "enable Replit DB integration — CRITICAL, server will not start",
+    },
+    {
+      key:         "GEMINI_API_KEY",
+      present:     checkVar("GEMINI_API_KEY"),
+      note:        "AI features enabled (image gen, TTS, chat fallback)",
+      missingNote: "add in Replit Secrets → safe mode active, all AI routes blocked",
+    },
+    {
+      key:         "GROQ_API_KEY",
+      present:     checkVar("GROQ_API_KEY"),
+      note:        "fast Llama chat enabled",
+      missingNote: "Gemini fallback active — chat still works (optional)",
+    },
+    {
+      key:         "JWT_SECRET",
+      present:     !isJwtInsecure(),
+      note:        "token signing secure",
+      missingNote: "add in Replit Secrets → insecure dev fallback active (sessions reset on restart)",
+    },
+    {
+      key:         "CEO_PASSWORD",
+      present:     checkVar("CEO_PASSWORD"),
+      note:        "CEO account bootstrap ready",
+      missingNote: "add in Replit Secrets → CEO login disabled on fresh import (required once per reimport)",
+    },
+    {
+      key:         "FAL_KEY",
+      present:     checkVar("FAL_KEY"),
+      note:        "img2img editing enabled (identity-preserving)",
+      missingNote: "image editing falls back to text-to-image — subject identity not preserved (optional)",
+    },
+    {
+      key:         "HF_API_KEY",
+      present:     checkVar("HF_API_KEY"),
+      note:        "HuggingFace image generation enabled",
+      missingNote: "HF image generation disabled (optional)",
+    },
+    {
+      key:         "CEO_RECOVERY_KEY",
+      present:     checkVar("CEO_RECOVERY_KEY"),
+      note:        "emergency CEO account reset enabled",
+      missingNote: "emergency CEO reset disabled (optional)",
+    },
+    {
+      key:         "SESSION_SECRET",
+      present:     checkVar("SESSION_SECRET"),
+      note:        "session signing secure",
+      missingNote: "random session fallback active (optional)",
+    },
+  ];
+
+  logger.info(DIVIDER);
+  logger.info("  SECRETS CHECKLIST — re-add all of these after every reimport from GitHub");
+  logger.info(DIVIDER);
+  for (const { key, present, note, missingNote } of checks) {
+    const label = key.padEnd(22);
+    if (present) {
+      logger.info(`  ✅ ${label} ${note}`);
+    } else {
+      logger.warn(`  ❌ ${label} missing — ${missingNote}`);
+    }
+  }
+  logger.info(DIVIDER);
+}
+
 function printBootstrapBanner(s: BootstrapStatus): void {
   const tick = (v: boolean) => (v ? "✓" : "✗");
   const LINE = "========================";
@@ -136,6 +210,8 @@ function printBootstrapBanner(s: BootstrapStatus): void {
   logger.info(`FAL_KEY:   ${tick(falKey)}  ${falKey ? "image editing enabled" : "image editing disabled"}`);
   logger.info(`AI MODE:   ${s.aiMode}`);
   logger.info(LINE);
+
+  printSecretsChecklist();
 
   if (s.critical.length > 0) {
     logger.error(

@@ -8,6 +8,7 @@
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
     "health": "node scripts/health-check.cjs",
+    "secrets:check": "node startup-secrets-check.cjs",
     "guard": "node scripts/import-guard.cjs",
     "guard:fix": "node scripts/import-guard.cjs --fix",
     "db:guard": "node scripts/db-guard.cjs",

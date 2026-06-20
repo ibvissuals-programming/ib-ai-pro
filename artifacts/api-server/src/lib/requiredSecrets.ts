@@ -93,6 +93,15 @@ export const REQUIRED_SECRETS: SecretDefinition[] = [
       "Sign up free at fal.ai (includes $10 credit ≈ 3000+ edits). Add FAL_KEY to Replit Secrets (fal.ai → Account → API Keys).",
     example: "your-fal-api-key",
   },
+  {
+    key: "CEO_PASSWORD",
+    tier: "OPTIONAL",
+    description:
+      "Password for the CEO (admin) account 'ibaiceo'. Required on every fresh import to bootstrap the account into the new database. Once the account exists in the database this is no longer needed.",
+    setup:
+      "Add CEO_PASSWORD to Replit Secrets — choose any secure password. Required on first boot after each reimport; the account persists in the database after that.",
+    example: "your-secure-admin-password",
+  },
 ];
 
 export const CRITICAL_SECRETS = REQUIRED_SECRETS.filter(
