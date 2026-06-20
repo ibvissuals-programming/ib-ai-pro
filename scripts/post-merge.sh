@@ -33,3 +33,8 @@ echo "[post-merge] Checking database schema..."
 node "$SCRIPT_DIR/db-guard.cjs"
 
 echo "[post-merge] ✔ Bootstrap complete"
+
+# ── Step 3: Secrets checklist (informational — never blocks merge) ─────────────
+echo ""
+echo "[post-merge] Checking secrets for this Replit instance..."
+node "$ROOT/startup-secrets-check.cjs" || true
