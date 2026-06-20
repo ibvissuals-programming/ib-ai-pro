@@ -76,10 +76,6 @@
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
 
-  /* Ambient glow — single electric blue family */
-  --blob-primary: rgba(59, 130, 246, 0.042);
-  --blob-secondary: rgba(37, 99, 235, 0.020);
-
   --background: 222 18% 7%;
   --foreground: 215 16% 90%;
   --border: 217 14% 18%;
@@ -129,10 +125,6 @@
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .06);
 
-  /* Ambient glow blob colors — softer in light mode */
-  --blob-primary: rgba(59, 130, 246, 0.032);
-  --blob-secondary: rgba(99, 102, 241, 0.022);
-
   --background: 210 20% 98%;
   --foreground: 222 47% 11%;
   --border: 214 32% 88%;
@@ -175,14 +167,6 @@
   --radius: .75rem;
 }
 
-@keyframes blob-drift-a {
-  from { transform: translate(0, 0) scale(1); }
-  to   { transform: translate(2%, 4%) scale(1.06); }
-}
-@keyframes blob-drift-b {
-  from { transform: translate(0, 0) scale(1); }
-  to   { transform: translate(-3%, -2%) scale(1.04); }
-}
 @keyframes shimmer {
   0%   { background-position: -400% 0; }
   100% { background-position: 400% 0; }
@@ -202,34 +186,6 @@
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-  }
-
-  /* Ambient glow blobs — CSS only, zero JS, pointer-events none */
-  body::before,
-  body::after {
-    content: '';
-    position: fixed;
-    border-radius: 50%;
-    pointer-events: none;
-    z-index: -1;
-  }
-
-  body::before {
-    top: -25%;
-    left: -15%;
-    width: 55%;
-    height: 55%;
-    background: radial-gradient(ellipse, var(--blob-primary) 0%, transparent 70%);
-    animation: blob-drift-a 20s ease-in-out infinite alternate;
-  }
-
-  body::after {
-    bottom: -20%;
-    right: -10%;
-    width: 48%;
-    height: 48%;
-    background: radial-gradient(ellipse, var(--blob-secondary) 0%, transparent 70%);
-    animation: blob-drift-b 26s ease-in-out infinite alternate;
   }
 
   h1, h2, h3, h4 {
