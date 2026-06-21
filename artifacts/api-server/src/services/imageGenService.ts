@@ -42,6 +42,9 @@ const HF_PRIMARY_MODEL           = "black-forest-labs/FLUX.1-schnell";
 const HF_REQUEST_TIMEOUT_MS      = 60_000;   // HF generation timeout per attempt
 const HF_MAX_RETRIES             = 1;        // one retry on 503 (model loading) or timeout
 const HF_RETRY_DELAY_MS          = 10_000;   // wait 10 s before retry (model warm-up)
+// Pollinations.ai — free text-to-image, no API key required (primary provider)
+const POLLINATIONS_BASE_URL      = "https://image.pollinations.ai/prompt";
+const POLLINATIONS_TIMEOUT_MS    = 60_000;
 const MAX_IMAGE_BYTES            = 10 * 1024 * 1024;
 const ACCEPTED_MIMES             = ["image/png", "image/jpeg", "image/webp"] as const;
 const RESPONSE_PATTERN           = /^data:image\/(png|jpeg|jpg|webp);base64,/;
@@ -742,18 +745,44 @@ async function hfFetch(prompt: string): Promise<Response> {
   throw new Error("Image generation is temporarily unavailable. Please retry.");
 }
 
+// ── Pollinations.ai (primary text-to-image, no API key required) ─────────────
+
+async function pollinationsGenFetch(prompt: string): Promise<Response> {
+  const url = `${POLLINATIONS_BASE_URL}/${encodeURIComponent(prompt)}?width=1024&height=1024&model=flux&nologo=true`;
+  logger.info({ provider: "pollinations", url: url.slice(0, 120) }, "[imageGen] Pollinations fetch");
+  const response = await fetch(url, {
+    method: "GET",
+    signal: AbortSignal.timeout(POLLINATIONS_TIMEOUT_MS),
+  });
+  if (!response.ok) {
+    throw new Error(`Pollinations HTTP ${response.status}`);
+  }
+  return response;
+}
+
 // ── TEXT-TO-IMAGE ─────────────────────────────────────────────────────────────
 
 export async function generateImage(prompt: string, userId?: string): Promise<string> {
   const enhanced = enhancePrompt(prompt);
 
-  if (!isHfConfigured()) {
-    throw new Error("provider_not_configured — Image generation requires HF_API_KEY. Add HF_API_KEY to Replit Secrets (huggingface.co → Settings → Access Tokens).");
+  // ── Provider priority: Pollinations (primary, no key) → HuggingFace (fallback) ──
+  let response: Response;
+  let providerUsed = "pollinations";
+
+  logger.info({ provider: "pollinations", prompt: enhanced.slice(0, 100) }, "[imageGen] generating (primary: Pollinations)");
+
+  try {
+    response = await pollinationsGenFetch(enhanced);
+  } catch (pollinationsErr) {
+    const msg = pollinationsErr instanceof Error ? pollinationsErr.message : String(pollinationsErr);
+    logger.warn({ provider: "pollinations", err: msg }, "[imageGen] Pollinations failed — falling back to HuggingFace");
+    if (!isHfConfigured()) {
+      throw new Error("provider_not_configured — Image generation requires HF_API_KEY. Add HF_API_KEY to Replit Secrets (huggingface.co → Settings → Access Tokens).");
+    }
+    logger.info({ provider: "huggingface", model: HF_PRIMARY_MODEL }, "[imageGen] HuggingFace fallback");
+    providerUsed = "huggingface";
+    response = await hfFetch(enhanced);
   }
-
-  logger.info({ provider: "huggingface", model: HF_PRIMARY_MODEL, prompt: enhanced.slice(0, 100) }, "[imageGen] generating");
-
-  const response = await hfFetch(enhanced);
 
   const buffer = await response.arrayBuffer();
   if (buffer.byteLength < 500) {
@@ -766,7 +795,7 @@ export async function generateImage(prompt: string, userId?: string): Promise<st
   const result = `data:${mime};base64,${base64}`;
   validateImageResponse(result);
 
-  logger.info({ bytes: buffer.byteLength, mime, provider: "huggingface" }, "[imageGen] generation complete");
+  logger.info({ bytes: buffer.byteLength, mime, provider: providerUsed }, "[imageGen] generation complete");
 
   if (userId) {
     saveToHistory({ userId, type: "generate", prompt, mode: "IMAGE_GENERATION", intensity: "HIGH", b64Image: result })
