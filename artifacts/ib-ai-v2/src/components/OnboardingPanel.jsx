@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { motion } from 'framer-motion';
 import { ImagePlus, Wand2, Lightbulb, MessageCircle, Video, TrendingUp, Clapperboard, Flame } from 'lucide-react';
 import { IbLogo } from './IbLogo';
@@ -48,7 +49,15 @@ const QUICK_CARDS = [
   { text: "What's trending on TikTok for AI-generated content?", icon: TrendingUp },
 ];
 
-export function OnboardingPanel({ onSend }) {
+/**
+ * OnboardingPanel — the welcome screen shown when a chat has no messages yet.
+ *
+ * Wrapped in React.memo so that parent re-renders (from verifySession, credit
+ * polling, etc.) never reach this component while its stagger animations are
+ * playing. The onSend prop is safe to memoize against because ChatApp provides
+ * a ref-backed stable handleSuggest that never changes reference.
+ */
+export const OnboardingPanel = memo(function OnboardingPanel({ onSend }) {
   return (
     <div
       className="flex flex-col items-center justify-start h-full text-center px-4 sm:px-6 py-8 overflow-y-auto"
@@ -164,4 +173,4 @@ export function OnboardingPanel({ onSend }) {
       </div>
     </div>
   );
-}
+});

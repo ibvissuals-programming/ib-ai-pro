@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { AlertCircle, Clock, WifiOff, X } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { useAuth } from '../hooks/useAuth';
@@ -42,6 +42,10 @@ export default function ChatApp() {
 
   const { credits, refresh: refreshCredits } = useCredits(user?.username);
 
+  // Stable callback — never changes reference, so sendMessage's useCallback
+  // dep doesn't invalidate on every ChatApp re-render.
+  const onCreditExhausted = useCallback(() => setUpgradeModalOpen(true), []);
+
   const {
     chats,
     activeChatId,
@@ -60,9 +64,7 @@ export default function ChatApp() {
     newChat,
     deleteChat,
     renameChat,
-  } = useChat(user?.username, {
-    onCreditExhausted: () => setUpgradeModalOpen(true),
-  });
+  } = useChat(user?.username, { onCreditExhausted });
 
   const currentMode = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -75,9 +77,15 @@ export default function ChatApp() {
     sendMessage(text);
   }, [sendMessage]);
 
+  // Keep a ref to the latest sendMessage so handleSuggest never changes
+  // reference — this stops OnboardingPanel (React.memo'd) from re-rendering
+  // while its stagger animations are playing.
+  const sendMessageRef = useRef(sendMessage);
+  sendMessageRef.current = sendMessage;
+
   const handleSuggest = useCallback((prompt) => {
-    sendMessage(prompt);
-  }, [sendMessage]);
+    sendMessageRef.current(prompt);
+  }, []); // stable — reads latest sendMessage via ref, never recreated
 
   const handleLogout = () => {
     logout();

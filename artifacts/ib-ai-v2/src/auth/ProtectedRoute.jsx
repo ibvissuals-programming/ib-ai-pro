@@ -14,6 +14,11 @@ import { isAuthenticated, verifySession } from './authService';
  *
  * The component renders children during the async check so there is no flash.
  * If verifySession() invalidates the session, a Redirect replaces the render.
+ *
+ * Note: useEffect deps are [] (not [location]) — wouter mounts a fresh
+ * ProtectedRoute instance per-route, so each route gets its own verification
+ * on mount. Re-running verifySession() on every in-page location event was
+ * causing a re-render cascade through ChatApp during the onboarding animations.
  */
 export function ProtectedRoute({ children }) {
   const [location] = useLocation();
@@ -27,7 +32,7 @@ export function ProtectedRoute({ children }) {
     verifySession().then((user) => {
       setVerified(!!user);
     });
-  }, [location]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Phase 1: definitely not authenticated (no token) → redirect immediately
   if (!isAuthenticated()) {

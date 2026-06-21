@@ -17,7 +17,20 @@ export function useAuth() {
     // so we skip the redundant setUser(cached) call here.
     verifySession().then((serverUser) => {
       if (serverUser) {
-        setUser(serverUser);
+        // Use a functional update so React can bail out (no re-render) when the
+        // meaningful fields haven't changed. This prevents a cascading re-render
+        // through ChatApp → ChatWindow → OnboardingPanel while the welcome
+        // animations are still playing (first ~500 ms after login).
+        setUser((prev) => {
+          if (
+            prev &&
+            prev.username === serverUser.username &&
+            prev.role    === serverUser.role
+          ) {
+            return prev; // same reference → React skips re-render
+          }
+          return serverUser;
+        });
       } else {
         // Token invalid or expired — clear local state
         setUser(null);
