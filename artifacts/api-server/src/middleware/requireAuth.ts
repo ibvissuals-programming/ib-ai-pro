@@ -10,7 +10,7 @@
  */
 import { type Request, type Response, type NextFunction } from "express";
 import { verifyToken, type TokenPayload } from "../lib/token";
-import { isSessionActive, touchSession }  from "../lib/sessionStore";
+import { getSession, touchSession }  from "../lib/sessionStore";
 
 // ── Request type augmentation ─────────────────────────────────────────────────
 
@@ -49,7 +49,12 @@ export function requireAuth(
   try {
     const payload = verifyToken(token);
     if (payload.sessionId) {
-      if (!isSessionActive(payload.sessionId)) {
+      // Only reject if the session is found AND explicitly marked inactive
+      // (i.e. the user logged out). If not found — e.g. after a backend
+      // restart that wiped the in-memory store — trust the JWT signature,
+      // which is already HMAC-SHA256 verified above.
+      const session = getSession(payload.sessionId);
+      if (session && !session.isActive) {
         res.status(401).json({
           error: "Session has been revoked — please log in again",
           code:  "SESSION_REVOKED",
@@ -98,7 +103,9 @@ export function requireNormalAuth(
     return;
   }
   if (payload.sessionId) {
-    if (!isSessionActive(payload.sessionId)) {
+    // Same restart-safe logic: only reject if explicitly revoked.
+    const session = getSession(payload.sessionId);
+    if (session && !session.isActive) {
       res.status(401).json({
         error: "Session has been revoked — please log in again",
         code:  "SESSION_REVOKED",

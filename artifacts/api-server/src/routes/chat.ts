@@ -10,7 +10,8 @@ import { randomUUID } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { createChatStream, type LastProviderResult, type ChatMessage } from "../services/llm";
-import { SYSTEM_PROMPT } from "../prompts/system";
+import { buildSystemPrompt } from "../prompts/system";
+import type { UserRole } from "../lib/userStore";
 import { logger } from "../lib/logger";
 import { policyEngine, deductRequestCredits } from "../middleware/policyEngine";
 import { acquireGeminiSlot } from "../lib/geminiQueue";
@@ -76,7 +77,7 @@ function detectMode(messages: Array<{ role: string; content: string }>): Convers
 
 const WAT_OFFSET_MS = 60 * 60 * 1000; // UTC+1
 
-function buildDatedSystemPrompt(memoryBlock?: string | null): string {
+function buildDatedSystemPrompt(role: UserRole, memoryBlock?: string | null): string {
   const d = new Date(Date.now() + WAT_OFFSET_MS);
   const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -96,7 +97,7 @@ function buildDatedSystemPrompt(memoryBlock?: string | null): string {
   const dateStr = `${dayName}, ${month} ${date}, ${year}`;
   const timeStr = `${hours}:${mins} WAT (West Africa Time)`;
 
-  let prompt = `${SYSTEM_PROMPT}\n\n## Current Date & Time\n${dateStr} — ${timeStr}`;
+  let prompt = `${buildSystemPrompt(role)}\n\n## Current Date & Time\n${dateStr} — ${timeStr}`;
   if (memoryBlock) {
     prompt += `\n\n${memoryBlock}`;
   }
@@ -125,7 +126,7 @@ function sseEvent(data: Record<string, unknown>): string {
 
 type RawMessage = { role: "user" | "assistant"; content: string };
 
-function buildContext(raw: RawMessage[], memoryBlock?: string | null): ChatMessage[] {
+function buildContext(raw: RawMessage[], role: UserRole, memoryBlock?: string | null): ChatMessage[] {
   const safeRaw = Array.isArray(raw) ? raw : [];
 
   const cleaned = safeRaw
@@ -148,7 +149,7 @@ function buildContext(raw: RawMessage[], memoryBlock?: string | null): ChatMessa
   logger.debug({ mode, window, total: cleaned.length, hasMemory: !!memoryBlock }, "context built");
 
   return [
-    { role: "system", content: buildDatedSystemPrompt(memoryBlock) },
+    { role: "system", content: buildDatedSystemPrompt(role, memoryBlock) },
     ...cleaned.slice(-window),
   ];
 }
@@ -262,7 +263,8 @@ router.post(
       }
     }
 
-    const messages = buildContext(rawMessages, memoryBlock);
+    const userRole: UserRole = (req.user?.role as UserRole) ?? "free";
+    const messages = buildContext(rawMessages, userRole, memoryBlock);
 
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
