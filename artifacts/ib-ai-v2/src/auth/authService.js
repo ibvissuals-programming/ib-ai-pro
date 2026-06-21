@@ -28,10 +28,11 @@ const IB_TOKEN_KEY = 'ib_token';
 const IB_USER_KEY = 'ib_cached_user';
 
 const RETRY_DELAY_MS = 800;
-// 503 startup retry — backend takes up to ~20-30s to build+start on restart.
-// Retry up to 8 times at 2s intervals = ~16s total coverage before giving up.
-const STARTUP_503_DELAY_MS  = 2000;
-const STARTUP_503_MAX_RETRIES = 8;
+// 503 startup retry — backend builds in ~1s (esbuild). Retry up to 4 times
+// at 1.5s intervals = ~6s total coverage. The health probe runs in parallel
+// and clears any stuck error messages as soon as the server responds.
+const STARTUP_503_DELAY_MS  = 1500;
+const STARTUP_503_MAX_RETRIES = 4;
 
 const BASE = (() => {
   try {

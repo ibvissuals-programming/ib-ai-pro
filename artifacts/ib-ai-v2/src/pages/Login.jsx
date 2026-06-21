@@ -59,6 +59,15 @@ export default function Login() {
         clearTimeout(bannerTimer);
         setServerReady(true);
         setShowNotReadyBanner(false);
+        setError(prev => {
+          const lower = prev.toLowerCase();
+          const isTransientError =
+            lower.includes('starting up') ||
+            lower.includes('temporarily unavailable') ||
+            lower.includes('service unavailable') ||
+            lower.includes('please try again in a moment');
+          return isTransientError ? '' : prev;
+        });
       }
     }, 6_000);
 
@@ -73,11 +82,15 @@ export default function Login() {
         clearTimeout(bannerTimer);
         setServerReady(true);
         setShowNotReadyBanner(false);
-        setError(prev =>
-          prev === 'Server is still starting up — please wait a moment and try again'
-            ? ''
-            : prev
-        );
+        setError(prev => {
+          const lower = prev.toLowerCase();
+          const isTransientError =
+            lower.includes('starting up') ||
+            lower.includes('temporarily unavailable') ||
+            lower.includes('service unavailable') ||
+            lower.includes('please try again in a moment');
+          return isTransientError ? '' : prev;
+        });
         return;
       }
 
@@ -91,7 +104,7 @@ export default function Login() {
           if (!resolved && !cancelled) setShowNotReadyBanner(true);
         }, 1_500);
       }
-      retryTimer = setTimeout(probe, 2_500);
+      retryTimer = setTimeout(probe, 2_000);
     }
 
     probe();
