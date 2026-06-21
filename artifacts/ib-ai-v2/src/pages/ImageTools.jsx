@@ -5,7 +5,7 @@ import {
   Cpu, ArrowLeft, Upload, ImageIcon,
   Download, X, Loader2, AlertCircle, Sparkles, Copy, Check,
   History, Trash2, RefreshCw, Clock, Film,
-  Lightbulb, Eye, Sun, Moon, Palette, Aperture, Wand2, Pencil,
+  Lightbulb, Eye, Sun, Moon, Palette, Aperture, Wand2,
 } from 'lucide-react';
 import { expandPrompt, fetchImageHistory, deleteHistoryEntry, generateCinematicPrompt, generateImage, editImage } from '../services/imageToolsApi';
 import { useTheme } from '../contexts/ThemeContext';
@@ -807,18 +807,10 @@ function EnhancementPlanPanel({ insight }) {
   );
 }
 
-// ── Edit tab ──────────────────────────────────────────────────────────────────
-const DIRECT_EDIT_TYPES = [
-  { key: 'cinematic_grade',   label: 'Cinematic Grade',   badge: '🎬', desc: 'Teal-orange film grade, grain & vignette',    promptRequired: false },
-  { key: 'remove_background', label: 'Background Blur',   badge: '🖼', desc: 'Keep subject sharp, blur the background',      promptRequired: false },
-  { key: 'upscale',           label: 'Upscale 2×',        badge: '⬆', desc: 'Double resolution + unsharp-mask sharpening',  promptRequired: false },
-  { key: 'retouch',           label: 'Retouch',           badge: '✨', desc: 'Smooth skin, lift brightness, boost colour',   promptRequired: false },
-];
+// ── Cinematic Enhancement tab ─────────────────────────────────────────────────
 
 function EditTab() {
   const [sourceImage, setSourceImage] = useState(null);
-  const [editPrompt, setEditPrompt] = useState('');
-  const [selectedEditType, setSelectedEditType] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
@@ -828,9 +820,6 @@ function EditTab() {
   const checkRate = useRateLimit();
 
   useEffect(() => () => abortRef.current?.abort(), []);
-
-  const activeType = DIRECT_EDIT_TYPES.find(t => t.key === selectedEditType);
-  const promptRequired = selectedEditType ? (activeType?.promptRequired ?? false) : true;
 
   const readFile = (file) => {
     if (!file || !file.type.startsWith('image/')) {
@@ -855,7 +844,6 @@ function EditTab() {
 
   const handleEdit = async () => {
     if (loading || !sourceImage) return;
-    if (promptRequired && !editPrompt.trim()) return;
     const wait = checkRate();
     if (wait > 0) { setError(`Please wait ${wait}s before trying again.`); return; }
     abortRef.current?.abort();
@@ -867,12 +855,12 @@ function EditTab() {
     try {
       const data = await editImage(
         sourceImage,
-        editPrompt.trim(),
+        '',
         undefined,
         undefined,
         undefined,
         controller.signal,
-        selectedEditType ? { editType: selectedEditType } : {},
+        { editType: 'cinematic_grade' },
       );
       setResult(data);
     } catch (err) {
@@ -884,6 +872,15 @@ function EditTab() {
 
   return (
     <div className="space-y-4">
+      {/* Feature header */}
+      <div className="flex items-center gap-2.5 px-0.5">
+        <span className="text-xl leading-none">🎬</span>
+        <div>
+          <p className="text-sm font-semibold text-foreground leading-tight">Cinematic Enhancement</p>
+          <p className="text-[11px] text-muted-foreground leading-snug">Teal-orange film grade, cinematic contrast, grain &amp; vignette</p>
+        </div>
+      </div>
+
       {/* Upload zone */}
       <div
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -934,73 +931,16 @@ function EditTab() {
         )}
       </div>
 
-      {/* Edit type picker */}
-      {sourceImage && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Quick Edit</label>
-            {selectedEditType && (
-              <button
-                onClick={() => setSelectedEditType(null)}
-                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {DIRECT_EDIT_TYPES.map(type => (
-              <button
-                key={type.key}
-                onClick={() => { setSelectedEditType(selectedEditType === type.key ? null : type.key); setResult(null); setError(null); }}
-                className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all ${
-                  selectedEditType === type.key
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border/40 hover:border-primary/40 hover:bg-primary/5 text-foreground'
-                }`}
-              >
-                <span className="text-base leading-none mb-1">{type.badge}</span>
-                <span className="text-[11px] font-semibold leading-tight">{type.label}</span>
-                <span className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{type.desc}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Edit instruction */}
-      {sourceImage && (promptRequired || !selectedEditType) && (
-        <div className="space-y-2">
-          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
-            {selectedEditType ? 'Custom instruction (optional)' : 'Edit Instruction'}
-          </label>
-          <textarea
-            value={editPrompt}
-            onChange={(e) => setEditPrompt(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleEdit(); }}
-            placeholder={
-              selectedEditType
-                ? 'Optional — leave blank to use defaults…'
-                : 'Describe the edit — e.g. cinematic sunset grade, remove background clutter, soft studio lighting…'
-            }
-            rows={selectedEditType ? 2 : 3}
-            className="w-full bg-background/60 border border-input rounded-xl px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/40 outline-none focus:ring-2 focus:ring-ring/40 focus:border-primary/50 transition-all resize-none leading-relaxed"
-          />
-        </div>
-      )}
-
-      {/* Edit button */}
+      {/* Apply button */}
       {sourceImage && (
         <button
           onClick={handleEdit}
-          disabled={loading || (promptRequired && !editPrompt.trim())}
+          disabled={loading}
           className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/20"
         >
           {loading
-            ? <><Loader2 size={14} className="animate-spin" />Applying…</>
-            : activeType
-            ? <><span className="text-base leading-none">{activeType.badge}</span>{activeType.label}</>
-            : <><Pencil size={14} />Edit Image</>}
+            ? <><Loader2 size={14} className="animate-spin" />Applying cinematic grade…</>
+            : <><span className="text-base leading-none">🎬</span>Apply Cinematic Enhancement</>}
         </button>
       )}
 
@@ -1009,7 +949,7 @@ function EditTab() {
       <AnimatePresence>
         {loading && (
           <motion.div key="edit-skel" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <ImageSkeleton label="Editing your image…" />
+            <ImageSkeleton label="Applying cinematic grade…" />
           </motion.div>
         )}
       </AnimatePresence>
@@ -1026,7 +966,7 @@ function EditTab() {
           >
             <div className="flex items-center justify-between px-3 py-2 bg-secondary/30 border-b border-border/30">
               <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                <Wand2 size={10} />Edited Image{result.mode ? ` · ${result.mode}` : ''}
+                <span className="leading-none">🎬</span>Cinematic Enhancement
               </span>
               <button
                 onClick={() => { const a = document.createElement('a'); a.href = result.b64Image; a.download = `ib-ai-edit-${Date.now()}.png`; a.click(); }}
@@ -1313,7 +1253,7 @@ export default function ImageTools() {
   const TABS = [
     { id: 'generate', icon: Sparkles, label: 'Generate' },
     { id: 'analyse',  icon: Eye,      label: 'Analyse' },
-    { id: 'edit',     icon: Wand2,    label: 'Edit' },
+    { id: 'edit',     icon: Wand2,    label: 'Cinematic' },
     { id: 'history',  icon: History,  label: 'History' },
   ];
 
