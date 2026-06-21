@@ -36,14 +36,25 @@ const REQUIRED_TABLES = [
   "chat_messages", "user_memory", "image_jobs", "usage_analytics",
 ];
 
-// ── Required secrets ───────────────────────────────────────────────────────────
-// missingSecretsCache: collected once, never re-requested in this session
+// ── Required secrets — ALL tiers, complete list ────────────────────────────────
+// Collected ONCE and shown upfront so a fresh import can request everything in
+// one batch rather than discovering gaps through broken features later.
+//
+// tiers:
+//   CRITICAL  — missing → server cannot start
+//   AI        — missing → all AI routes blocked (safe mode)
+//   SECURITY  — missing → insecure fallback, sessions reset on restart
+//   OPTIONAL  — missing → single feature degraded
 const SECRETS_CONFIG = [
-  { key: "GEMINI_API_KEY",   label: "Gemini AI key",    critical: true  },
-  { key: "DATABASE_URL",     label: "PostgreSQL URL",   critical: true  },
-  { key: "JWT_SECRET",       label: "JWT signing secret", critical: false },
-  { key: "CEO_RECOVERY_KEY", label: "CEO recovery key", critical: false },
-  { key: "CEO_USERNAME",     label: "CEO username",     critical: false },
+  { key: "DATABASE_URL",     tier: "CRITICAL", label: "PostgreSQL connection — auto-set by Replit DB integration" },
+  { key: "GEMINI_API_KEY",   tier: "AI",       label: "Image gen, TTS, AI chat — aistudio.google.com → Get API key" },
+  { key: "CEO_PASSWORD",     tier: "CRITICAL", label: "Bootstraps admin account on every fresh import — any secure password" },
+  { key: "JWT_SECRET",       tier: "SECURITY", label: "Signs session tokens — any random 32+ char string" },
+  { key: "GROQ_API_KEY",     tier: "OPTIONAL", label: "Fast Llama chat — console.groq.com → API keys (Gemini fallback works without)" },
+  { key: "FAL_KEY",          tier: "OPTIONAL", label: "img2img identity-preserving edits — fal.ai → Account → API Keys (free $10 credit)" },
+  { key: "HF_API_KEY",       tier: "OPTIONAL", label: "HuggingFace image gen — huggingface.co → Settings → Access Tokens" },
+  { key: "CEO_RECOVERY_KEY", tier: "OPTIONAL", label: "Emergency CEO account reset — any secure random string" },
+  { key: "SESSION_SECRET",   tier: "OPTIONAL", label: "Server-side session signing — any long random string" },
 ];
 
 const BACKEND_PORTS  = [8099, 8080];
@@ -177,30 +188,44 @@ async function main() {
     }
   }
 
-  // ── PHASE 4: Secrets — collected ONCE, never re-requested ─────────────────
+  // ── PHASE 4: Secrets — full checklist, ALL tiers, shown upfront ───────────
+  // Print every secret (present and missing) so a fresh import reveals the
+  // complete picture in one pass — no discovering gaps through broken features.
   const missingSecretsCache = checkSecrets();
+  const criticalMissing = missingSecretsCache.filter(
+    (s) => s.tier === "CRITICAL" || s.tier === "AI"
+  );
+  const otherMissing = missingSecretsCache.filter(
+    (s) => s.tier === "SECURITY" || s.tier === "OPTIONAL"
+  );
+
+  console.log("");
+  console.log("  ── Secrets checklist (add ALL of these on a fresh import) ──");
+  for (const s of SECRETS_CONFIG) {
+    const ok      = !!process.env[s.key];
+    const tierTag = s.tier === "CRITICAL" ? "[CRITICAL]"
+                  : s.tier === "AI"       ? "[AI]      "
+                  : s.tier === "SECURITY" ? "[SECURITY]"
+                  :                         "[optional]";
+    const keyLabel = s.key.padEnd(22);
+    if (ok) {
+      console.log(`  ✅ ${tierTag} ${keyLabel} present`);
+    } else {
+      console.log(`  ❌ ${tierTag} ${keyLabel} MISSING — ${s.label}`);
+    }
+  }
+  console.log("");
 
   if (missingSecretsCache.length === 0) {
-    log("✔", "Secrets", "all required secrets present");
+    log("✔", "Secrets", "all present — fully configured");
   } else {
-    const criticalMissing = missingSecretsCache.filter((s) => s.critical);
-    const optionalMissing = missingSecretsCache.filter((s) => !s.critical);
-
     if (criticalMissing.length > 0) {
-      log("✗", "Secrets", `CRITICAL missing: ${criticalMissing.map((s) => s.key).join(", ")}`);
+      log("✗", "Secrets", `${criticalMissing.length} required missing: ${criticalMissing.map((s) => s.key).join(", ")}`);
       issues.push("secrets-critical");
     }
-    if (optionalMissing.length > 0) {
-      log("!", "Secrets", `optional missing: ${optionalMissing.map((s) => s.key).join(", ")}`);
+    if (otherMissing.length > 0) {
+      log("!", "Secrets", `${otherMissing.length} optional/security missing — features degraded`);
     }
-    // Log ALL missing secrets in one batch — never request again in this session
-    console.log("");
-    console.log("  Add these secrets via the Replit Secrets tab:");
-    for (const s of missingSecretsCache) {
-      const tag = s.critical ? "[CRITICAL]" : "[optional]";
-      console.log(`    ${tag} ${s.key} — ${s.label}`);
-    }
-    console.log("");
   }
 
   // ── PHASE 5: AI provider guard ─────────────────────────────────────────────

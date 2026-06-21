@@ -139,24 +139,59 @@ async function main() {
     console.log(`  ! Workflows    ${down} not running — start via Replit workflow panel`);
   }
 
-  // ── Step 4: Secrets ────────────────────────────────────────────────────────
+  // ── Step 4: Secrets — full audit, ALL tiers, shown upfront in one pass ───────
+  //
+  // On a fresh import the agent must see every secret at once so it can request
+  // them all in a single batch — not discover gaps later through broken features.
+  //
+  // Tiers:
+  //   CRITICAL  — missing → server cannot start
+  //   AI        — missing → all AI routes blocked (safe mode)
+  //   SECURITY  — missing → insecure fallback, sessions reset on restart
+  //   OPTIONAL  — missing → single feature degraded
+  const ALL_SECRETS = [
+    { key: "DATABASE_URL",     tier: "CRITICAL", note: "PostgreSQL connection — auto-set by Replit DB integration" },
+    { key: "GEMINI_API_KEY",   tier: "AI",       note: "Image gen, TTS, AI chat — aistudio.google.com → Get API key" },
+    { key: "CEO_PASSWORD",     tier: "CRITICAL", note: "Bootstraps admin account on every fresh import — any secure password" },
+    { key: "JWT_SECRET",       tier: "SECURITY", note: "Signs session tokens — any random 32+ char string" },
+    { key: "GROQ_API_KEY",     tier: "OPTIONAL", note: "Fast Llama chat — console.groq.com → API keys (Gemini fallback works without)" },
+    { key: "FAL_KEY",          tier: "OPTIONAL", note: "img2img identity-preserving edits — fal.ai → Account → API Keys (free $10 credit)" },
+    { key: "HF_API_KEY",       tier: "OPTIONAL", note: "HuggingFace image generation — huggingface.co → Settings → Access Tokens" },
+    { key: "CEO_RECOVERY_KEY", tier: "OPTIONAL", note: "Emergency CEO account reset — any secure random string" },
+    { key: "SESSION_SECRET",   tier: "OPTIONAL", note: "Server-side session signing — any long random string" },
+  ];
+
+  const missingSecrets  = ALL_SECRETS.filter((s) => !process.env[s.key]);
+  const presentSecrets  = ALL_SECRETS.filter((s) => !!process.env[s.key]);
+  const missingCritical = missingSecrets.filter((s) => s.tier === "CRITICAL" || s.tier === "AI");
+  const missingOptional = missingSecrets.filter((s) => s.tier === "SECURITY" || s.tier === "OPTIONAL");
+
+  console.log("");
+  console.log("  ── Secrets checklist (add ALL of these on a fresh import) ──");
+  for (const s of ALL_SECRETS) {
+    const ok      = !!process.env[s.key];
+    const tierTag = s.tier === "CRITICAL" ? "[CRITICAL]"
+                  : s.tier === "AI"       ? "[AI]      "
+                  : s.tier === "SECURITY" ? "[SECURITY]"
+                  :                         "[optional]";
+    const label   = s.key.padEnd(22);
+    if (ok) {
+      console.log(`  ✅ ${tierTag} ${label} present`);
+    } else {
+      console.log(`  ❌ ${tierTag} ${label} MISSING — ${s.note}`);
+    }
+  }
+
+  if (missingSecrets.length === 0) {
+    console.log("  ✔ Secrets      all present — fully configured");
+  } else {
+    console.log(`  ✗ Secrets      ${missingCritical.length} required + ${missingOptional.length} optional missing`);
+    console.log("  Add them all via Replit Secrets tab to avoid discovering gaps later.");
+  }
+  console.log("");
+
   const geminiOk = !!process.env.GEMINI_API_KEY;
   const dbOk     = !!process.env.DATABASE_URL;
-
-  if (geminiOk && dbOk) {
-    console.log("  ✔ Secrets      GEMINI_API_KEY + DATABASE_URL present");
-  } else {
-    const missing = [!geminiOk && "GEMINI_API_KEY", !dbOk && "DATABASE_URL"].filter(Boolean);
-    console.log(`  ✗ Secrets      CRITICAL missing: ${missing.join(", ")}`);
-  }
-
-  // Optional secrets — report disabled features, never block
-  const disabledFeatures = [];
-  if (!process.env.GROQ_API_KEY)    disabledFeatures.push("groq-chat");
-  if (!process.env.VIDEO_ENABLED)   disabledFeatures.push("veo-video (set VIDEO_ENABLED=true to enable)");
-  if (disabledFeatures.length > 0) {
-    console.log(`  ℹ Optional     disabled: ${disabledFeatures.join(", ")}`);
-  }
 
   // ── Step 5: Import summary ─────────────────────────────────────────────────
   const fresh = isFreshImport(pkgsValid, dbState.missing);
