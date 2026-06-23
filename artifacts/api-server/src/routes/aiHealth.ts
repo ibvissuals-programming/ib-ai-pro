@@ -165,7 +165,9 @@ router.get("/ai/system-health", (req: Request, res: Response) => {
 
   const payload: Record<string, unknown> = {
     status:          (geminiOk && dbOk) ? "healthy" : "degraded",
-    providerMode:    geminiOk ? "gemini-primary" : "offline",
+    providerMode:    !!process.env["GROQ_API_KEY"]
+      ? "groq-primary"
+      : geminiOk ? "gemini-primary" : "offline",
     importReady:     geminiOk && dbOk,
     bootstrapComplete: ceoState.ready,
     missingOptionalServices,

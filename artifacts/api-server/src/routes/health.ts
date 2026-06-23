@@ -126,7 +126,10 @@ router.get(["/health", "/healthz"], async (_req, res) => {
     const aiSt = getAiStatus();
     geminiOk   = aiSt.geminiAvailable;
     const videoOk  = isVideoEnabled();
-    const imageOk  = !!process.env["HF_API_KEY"]?.trim();
+    // Image generation is powered by Gemini directly — HF_API_KEY is only
+    // needed for the optional HuggingFace pipeline; Gemini image gen works
+    // without it.
+    const imageOk  = geminiOk;
 
     if (!geminiOk) systemsDegraded = true;
 
@@ -135,10 +138,10 @@ router.get(["/health", "/healthz"], async (_req, res) => {
         ok:             imageOk,
         featureEnabled: imageOk,
         providerReady:  imageOk,
-        provider:       "huggingface/gemini",
+        provider:       "gemini",
         description:    imageOk
-          ? "Image generation (HuggingFace FLUX) + editing (Gemini)"
-          : "Image generation disabled — HF_API_KEY not configured",
+          ? "Image generation (Gemini) + editing"
+          : "Image generation disabled — GEMINI_API_KEY not configured",
       },
       tts: {
         ok:             geminiOk,
@@ -186,11 +189,15 @@ router.get(["/health", "/healthz"], async (_req, res) => {
     uptime:            Math.floor(process.uptime()),
     mode:              "full",
     // Semantic aliases consumed by monitoring / Phase 7 spec
-    providerMode:      geminiOk ? "gemini-primary" : "degraded",
+    // Chat provider: Groq is primary when GROQ_API_KEY is present; Gemini is
+    // the fallback. Gemini handles all non-chat AI (image, TTS, cinematic).
+    providerMode:      !!process.env["GROQ_API_KEY"]
+      ? "groq-primary"
+      : geminiOk ? "gemini-primary" : "degraded",
     importReady:       bootState !== "degraded",
     bootstrapComplete: bootState !== "degraded",
     capabilities: {
-      chat:   geminiOk,
+      chat:   geminiOk || !!process.env["GROQ_API_KEY"],
       image:  sys.image?.ok  ?? false,
       tts:    sys.tts?.ok    ?? false,
       video:  sys.video?.ok  ?? false,
