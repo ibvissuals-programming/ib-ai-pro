@@ -7,13 +7,14 @@
  *   2. Critical secrets present
  *   3. Workflows / port check
  *   4. GET /health — status, flags, capabilities
- *   5. Response contract (no HTML on 404)
- *   6. Auth contract (unauthenticated routes return JSON)
- *   7. Rate-limit headers / 401 contract on chat
- *   8. Real CEO login (valid credentials → JWT token)
- *   9. Authenticated chat via Groq stream
- *  10. Authenticated image generation
- *  11. Authenticated Cinematic Enhancement
+ *   5. GET /api/system/ready — latency probe (warn >1 s, fail >3 s)
+ *   6. Response contract (no HTML on 404)
+ *   7. Auth contract (unauthenticated routes return JSON)
+ *   8. Rate-limit headers / 401 contract on chat
+ *   9. Real CEO login (valid credentials → JWT token)
+ *  10. Authenticated chat via Groq stream
+ *  11. Authenticated image generation
+ *  12. Authenticated Cinematic Enhancement
  *
  * Usage:
  *   node scripts/production-check.cjs
@@ -293,7 +294,45 @@ async function run() {
     fail("GET /health", e.message);
   }
 
-  // ── 5. Response contract (no HTML) ────────────────────────────────────────────
+  // ── 5. Readiness probe latency ────────────────────────────────────────────────
+  // /api/system/ready is the exact endpoint the Login page polls to decide whether
+  // to show the "Server is starting up" banner. A response time > 3 s means real
+  // users will see the amber banner before the 6-second hard cutoff kicks in.
+  //
+  // Thresholds:
+  //   < 1 000 ms  → ✔ fast
+  //   1 000–3 000 ms → ⚠ slow (advisory — monitor in production)
+  //   > 3 000 ms  → ✗ FAIL — users will see the starting-up banner
+  //   non-200 or ready !== true → ✗ FAIL
+  console.log("\n  ● Readiness Probe");
+  try {
+    const t0 = Date.now();
+    const r   = await httpGet("/api/system/ready");
+    const ms  = Date.now() - t0;
+    const msLabel = `${ms} ms`;
+
+    if (r.status !== 200) {
+      fail("GET /api/system/ready", `HTTP ${r.status} (${msLabel})`);
+    } else {
+      let rd = {};
+      try { rd = JSON.parse(r.body); } catch { /* non-JSON body */ }
+
+      if (!rd.ready) {
+        fail("GET /api/system/ready", `ready=${rd.ready} phase=${rd.phase ?? "?"} (${msLabel})`);
+      } else if (ms > 3_000) {
+        fail("GET /api/system/ready latency", `${msLabel} — exceeds 3 s threshold; users will see the starting-up banner`);
+      } else if (ms > 1_000) {
+        ok("GET /api/system/ready", `ready=true (${msLabel})`);
+        warn("readiness latency", `${msLabel} — above 1 s; watch in production`);
+      } else {
+        ok("GET /api/system/ready", `ready=true (${msLabel})`);
+      }
+    }
+  } catch (e) {
+    fail("GET /api/system/ready", e.message);
+  }
+
+  // ── 6. Response contract (no HTML) ────────────────────────────────────────────
   console.log("\n  ● Response Contract");
   try {
     const r = await httpGet("/api/nonexistent-route-check");
