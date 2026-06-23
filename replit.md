@@ -15,16 +15,28 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
-- **AI provider**: Gemini (via `GEMINI_API_KEY` secret)
+- **AI providers**: Groq (chat primary, `GROQ_API_KEY`) + Gemini (chat fallback + image/TTS, `GEMINI_API_KEY`)
+
+## First Action on Any Fresh Reimport
+
+**Before doing anything else**, run:
+
+```
+pnpm run secrets:check
+```
+
+This prints a ✅/❌ checklist of every required secret. Fix any ❌ critical secrets before starting workflows or pushing schema. Do not skip this step — missing secrets cause silent failures that are hard to diagnose later.
 
 ## Key Commands
 
-- `pnpm run health`     — quick one-pass system health check (workflows, DB, secrets, API)
-- `pnpm run guard`      — import guard: validates state, reports issues (read-only)
-- `pnpm run guard:fix`  — import guard with auto-fix (installs packages + pushes schema if needed)
-- `pnpm run db:guard`   — push schema only if tables are missing (idempotent)
-- `pnpm run typecheck`  — full typecheck across all packages
-- `pnpm run build`      — typecheck + build all packages
+- `pnpm run secrets:check` — **first action after every reimport** — prints full secrets checklist
+- `pnpm run health`        — quick one-pass system health check (workflows, DB, secrets, API)
+- `pnpm run pre-publish`   — full smoke test: server, DB, auth, Groq chat, image gen, cinematic
+- `pnpm run guard`         — import guard: validates state, reports issues (read-only)
+- `pnpm run guard:fix`     — import guard with auto-fix (installs packages + pushes schema if needed)
+- `pnpm run db:guard`      — push schema only if tables are missing (idempotent)
+- `pnpm run typecheck`     — full typecheck across all packages
+- `pnpm run build`         — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only — prefer `pnpm run db:guard`)
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
@@ -53,31 +65,32 @@ These rules make every import/restart deterministic. ONE PASS only: **scan → v
 - Collect ALL missing secrets → request in ONE single batch
 - **Critical secrets** (block startup if missing): `GEMINI_API_KEY`, `DATABASE_URL`
 - **Auto-generated secrets** (never request, never block startup): `JWT_SECRET`, `CEO_RECOVERY_KEY` — server generates safe fallbacks automatically
-- **Optional secrets** (gracefully disabled if missing, never block): `GROQ_API_KEY`, `VIDEO_ENABLED`, `VEO_MODEL`, `REDIS_URL`
+- **Optional but strongly recommended**: `GROQ_API_KEY` — without it, chat falls back to Gemini direct (20 req/day free-tier limit)
 - `CEO_PASSWORD` — if missing, CEO account is auto-bootstrapped with a temp password logged once at startup
 - If a secret is already set → mark resolved → skip
 
 ### PHASE 5 — AI Provider Guard
-- **Gemini-primary mode**: all systems work with ONLY `GEMINI_API_KEY` — no Groq required
+- **Groq-primary mode**: chat routes use `GROQ_API_KEY` (llama-3.1-8b-instant) as primary; any Groq failure triggers automatic Gemini fallback (`gemini-2.5-flash`)
+- Gemini handles all non-chat AI: image generation, TTS, prompt expansion, cinematic analysis
+- If `GROQ_API_KEY` is present → Groq is primary for chat — do not treat as optional
+- If `GROQ_API_KEY` is absent → chat routes fall back to Gemini direct (subject to 20 req/day free quota)
 - If `GEMINI_API_KEY` exists → **do not** reinitialize or reinstall the Gemini blueprint
-- If `GROQ_API_KEY` is missing → chat routes silently use Gemini fallback, no warnings, no degraded state
-- **NEVER** log startup warnings for missing optional providers (Groq, Veo, Redis)
+- **NEVER** log startup warnings for missing optional providers (Veo, Redis)
 
 ### PHASE 6 — Startup Order
-1. Quick system scan (NOT full codebase re-exploration)
+1. Run `pnpm run secrets:check` (one pass — do not skip)
 2. Validate workflows (port check)
 3. Validate database (table existence check)
-4. Validate secrets (one-pass, batch request if missing)
-5. Start server only if not already running
-6. Run `pnpm run health` for single health check
-7. **STOP** — no loops, no repeated checks
+4. Start server only if not already running
+5. Run `pnpm run health` for single health check
+6. **STOP** — no loops, no repeated checks
 
 ### PHASE 7 — Output Format
 At end of any import/bootstrap, output ONLY:
 ```
 ✔/✗ Workflows    backend :PORT | frontend :PORT
 ✔/✗ Database     connected (N/8 tables)
-✔/✗ API          ok (uptime Xs, gemini: ✔)
+✔/✗ API          ok (uptime Xs, groq: ✔, gemini: ✔)
 ✔/✗ Secrets      all present / missing: KEY1, KEY2
 System READY / NOT READY
 ```
@@ -87,8 +100,9 @@ No extra commentary, no repeated log parsing, no screenshot loops.
 
 | Secret | Required | Purpose |
 |---|---|---|
-| `GEMINI_API_KEY` | **Critical** | AI features (chat, image, TTS, prompt engineering) |
+| `GEMINI_API_KEY` | **Critical** | Image gen, TTS, cinematic analysis, chat fallback |
 | `DATABASE_URL` | **Critical** | PostgreSQL connection (auto-provisioned by Replit) |
+| `GROQ_API_KEY` | **Strongly recommended** | Groq Llama chat (primary provider — avoids Gemini 20 req/day quota) |
 | `JWT_SECRET` | Recommended | Token signing (falls back to insecure dev default) |
 | `CEO_PASSWORD` | Setup only | Bootstrap CEO account (remove after first login) |
 | `CEO_RECOVERY_KEY` | Recommended | Emergency CEO account recovery |
@@ -117,10 +131,20 @@ src/
 │   ├── systemConfig.ts     — storage mode (json/postgres/hybrid)
 │   └── aiOrchestrator.ts   — AI job routing and tracking
 ├── services/
+│   ├── llm.ts              — Groq primary + Gemini fallback chat streaming
 │   ├── imageGenService.ts  — Gemini image generation
 │   ├── ttsService.ts       — Gemini TTS
 │   └── chatStore.ts        — chat history persistence
 └── routes/                 — all API routes under /api/*
+```
+
+### Chat Provider Architecture
+```
+POST /api/chat
+  └─ GROQ_API_KEY present?
+       YES → Groq (llama-3.1-8b-instant)  ←── primary
+               └─ Groq fails? → Gemini fallback (gemini-2.5-flash, 2 retries)
+       NO  → Gemini direct (gemini-2.5-flash, 2 retries)
 ```
 
 #### SaaS Upgrade Path
