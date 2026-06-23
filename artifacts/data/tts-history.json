@@ -1,5 +1,18 @@
 [
   {
+    "userId": "a24d0003-fddc-4388-907c-b718da4ba5b4",
+    "type": "tts",
+    "text": "Verification test audio output",
+    "voiceStyle": "neutral_assistant",
+    "voiceLabel": "Neutral Assistant",
+    "jobId": "job_mqqo4arp_04odv6",
+    "audioUrl": "/api/tts/serve/job_mqqo4arp_04odv6",
+    "durationMs": 1891,
+    "textLength": 30,
+    "timestamp": 1782220584641,
+    "id": "48d2880a-7e58-4402-b510-0a871d617971"
+  },
+  {
     "userId": "d17a9913-0da6-4464-aa73-7ba09af6a2fb",
     "type": "tts",
     "text": "IB AI system verification test. Systems operational.",
@@ -11,18 +24,5 @@
     "textLength": 52,
     "timestamp": 1781746122103,
     "id": "f93d7234-5841-4f75-9f53-66546510f6e0"
-  },
-  {
-    "userId": "cd34017e-c72a-4c7f-b18d-274753f7f33f",
-    "type": "tts",
-    "text": "Audit verification test",
-    "voiceStyle": "neutral_assistant",
-    "voiceLabel": "Neutral Assistant",
-    "jobId": "job_mqarz8fn_5ztx9c",
-    "audioUrl": "/api/tts/serve/job_mqarz8fn_5ztx9c",
-    "durationMs": 2331,
-    "textLength": 23,
-    "timestamp": 1781259608503,
-    "id": "324f9e72-f11a-44d8-a7e1-0d133aa07b2f"
   }
 ]
