@@ -19,6 +19,7 @@
  *   isBootstrapReady()      — true when REQUIRED vars are present
  */
 
+import { randomBytes } from "crypto";
 import { logger } from "../lib/logger";
 import {
   CRITICAL_SECRETS,
@@ -33,6 +34,43 @@ import {
   isBootstrapCached,
   type BootstrapStatus,
 } from "./bootstrapCache";
+
+// ── Auto-generation for optional-but-critical keys ────────────────────────────
+
+/**
+ * Auto-generates CEO_RECOVERY_KEY if absent.
+ *
+ * Sets the value in process.env for this server session only — it is NOT
+ * persisted to disk or Replit Secrets automatically.  The generated key is
+ * logged ONCE with a prominent "save this" banner so the operator can add it
+ * to Replit Secrets for persistence across restarts.
+ *
+ * Why here: called before buildStatus() so every downstream consumer —
+ * the secrets checklist, health endpoint, env.ts, and the auth recovery path —
+ * all see the key as present without any additional changes.
+ *
+ * Behaviour:
+ *   - CEO_RECOVERY_KEY already set → no-op, no log.
+ *   - CEO_RECOVERY_KEY absent → generate 64 hex chars, set process.env,
+ *     log prominently once.
+ */
+function autoGenerateRecoveryKey(): void {
+  const existing = process.env["CEO_RECOVERY_KEY"];
+  if (typeof existing === "string" && existing.trim().length > 0) return;
+
+  const key = randomBytes(32).toString("hex"); // 64 hex chars
+  process.env["CEO_RECOVERY_KEY"] = key;
+
+  const D = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+  logger.warn(D);
+  logger.warn("[system] CEO_RECOVERY_KEY was not set — auto-generated for this session");
+  logger.warn("[system] ▶  SAVE THIS to Replit Secrets as CEO_RECOVERY_KEY:");
+  logger.warn(`[system]    ${key}`);
+  logger.warn("[system]    A NEW key is generated on every restart until saved.");
+  logger.warn("[system]    Any recovery reset done this session will stop working");
+  logger.warn("[system]    after the next restart unless you save the key above.");
+  logger.warn(D);
+}
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -265,6 +303,10 @@ export function validateEnvBootstrap(): BootstrapStatus {
   if (isBootstrapCached()) {
     return getCachedBootstrap()!;
   }
+
+  // Auto-generate CEO_RECOVERY_KEY before buildStatus() so every downstream
+  // consumer (checklist, health endpoint, auth recovery path) sees it as present.
+  autoGenerateRecoveryKey();
 
   const status = buildStatus();
   printBootstrapBanner(status);

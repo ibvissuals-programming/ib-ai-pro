@@ -99,8 +99,8 @@ const SECRETS = [
     tier:    "OPTIONAL",
     present: () => has("CEO_RECOVERY_KEY"),
     found:   "emergency CEO account reset enabled",
-    missing: "emergency CEO reset disabled",
-    where:   "Replit Secrets → CEO_RECOVERY_KEY → any secure random string",
+    missing: "auto-generated in memory at startup — save to Replit Secrets to persist across restarts",
+    where:   "Replit Secrets → CEO_RECOVERY_KEY → copy the value logged at server startup",
   },
   {
     key:     "SESSION_SECRET",
