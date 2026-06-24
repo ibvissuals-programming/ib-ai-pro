@@ -1,6 +1,6 @@
-import { memo } from 'react';
-import { motion } from 'framer-motion';
-import { ImagePlus, Wand2, Lightbulb, MessageCircle, Video, TrendingUp, Clapperboard, Flame } from 'lucide-react';
+import { memo, useState, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ImagePlus, Wand2, Lightbulb, MessageCircle, Video, TrendingUp, Clapperboard, Flame, Zap, ArrowRight, X } from 'lucide-react';
 import { IbLogo } from './IbLogo';
 
 const WELCOME_ACTIONS = [
@@ -50,6 +50,46 @@ const QUICK_CARDS = [
 ];
 
 /**
+ * Builds the structured Hook Generator prompt.
+ * The AI must produce exactly 5 hooks, one per emotional angle,
+ * each labeled and explained — never generic, always topic-specific.
+ *
+ * @param {string} topic
+ * @returns {string}
+ */
+function buildHookPrompt(topic) {
+  return `Generate 5 powerful video hooks for this topic: "${topic}"
+
+Each hook must use a completely different emotional angle. Format your response exactly like this — no deviations:
+
+**1. 🤔 Curiosity Hook**
+[hook text — open a question, tease a mystery, or make them wonder "how?"]
+*Why it works: [one sentence explaining the psychological trigger]*
+
+**2. 😱 Shock / Surprise Hook**
+[hook text — deliver an unexpected fact, counterintuitive truth, or stunning claim]
+*Why it works: [one sentence]*
+
+**3. 🤝 Relatability Hook**
+[hook text — mirror a pain point, shared experience, or "you know that feeling" moment]
+*Why it works: [one sentence]*
+
+**4. ✨ Aspiration Hook**
+[hook text — paint the dream outcome, the transformation, the "what if" possibility]
+*Why it works: [one sentence]*
+
+**5. 🔥 Controversy / Debate Hook**
+[hook text — challenge a popular belief, make a bold claim, or invite pushback]
+*Why it works: [one sentence]*
+
+Rules:
+- Each hook must be written for the FIRST 3 SECONDS of a short-form video — direct, punchy, no warm-up
+- Make every hook specific to "${topic}" — no generic filler that could apply to any topic
+- The five hooks must feel genuinely different in tone and angle, not just reworded versions of each other
+- Keep hook text under 15 words`;
+}
+
+/**
  * OnboardingPanel — the welcome screen shown when a chat has no messages yet.
  *
  * Wrapped in React.memo so that parent re-renders (from verifySession, credit
@@ -58,6 +98,36 @@ const QUICK_CARDS = [
  * a ref-backed stable handleSuggest that never changes reference.
  */
 export const OnboardingPanel = memo(function OnboardingPanel({ onSend }) {
+  const [hookInputOpen, setHookInputOpen] = useState(false);
+  const [topic, setTopic] = useState('');
+  const inputRef = useRef(null);
+
+  const openHookInput = () => {
+    setHookInputOpen(true);
+    // Focus after the AnimatePresence enter animation starts
+    setTimeout(() => inputRef.current?.focus(), 60);
+  };
+
+  const closeHookInput = () => {
+    setHookInputOpen(false);
+    setTopic('');
+  };
+
+  const handleGenerate = () => {
+    const trimmed = topic.trim();
+    if (!trimmed) return;
+    onSend(buildHookPrompt(trimmed));
+    closeHookInput();
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleGenerate();
+    }
+    if (e.key === 'Escape') closeHookInput();
+  };
+
   return (
     <div
       className="flex flex-col items-center justify-start h-full text-center px-4 sm:px-6 py-8 overflow-y-auto"
@@ -94,13 +164,13 @@ export const OnboardingPanel = memo(function OnboardingPanel({ onSend }) {
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.13, ease: [0.22, 1, 0.36, 1] }}
-          className="text-sm text-muted-foreground leading-relaxed mb-7 max-w-[280px]"
+          className="text-sm text-muted-foreground leading-relaxed mb-6 max-w-[280px]"
         >
           Create viral content, write hooks, generate visuals, and build your short-form video strategy with AI.
         </motion.p>
 
         {/* 4 action buttons — 2×2 grid — immediately visible, no delay */}
-        <div className="grid grid-cols-2 gap-2.5 w-full mb-7">
+        <div className="grid grid-cols-2 gap-2.5 w-full mb-2.5">
           {WELCOME_ACTIONS.map(({ label, prompt, icon: Icon, gradient, border, iconBg, iconColor }) => (
             <button
               key={label}
@@ -123,6 +193,109 @@ export const OnboardingPanel = memo(function OnboardingPanel({ onSend }) {
               </span>
             </button>
           ))}
+        </div>
+
+        {/* ── Generate Hooks — full-width featured button ── */}
+        <div className="w-full mb-6">
+          <AnimatePresence mode="wait" initial={false}>
+            {!hookInputOpen ? (
+              <motion.button
+                key="hook-closed"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.16 }}
+                onClick={openHookInput}
+                className="
+                  w-full flex items-center gap-3 p-3.5 rounded-2xl border
+                  bg-gradient-to-br from-rose-500/15 to-pink-500/8
+                  hover:from-rose-500/22 hover:to-pink-500/14
+                  border-rose-500/20 hover:border-rose-400/40
+                  text-left transition-all duration-200 active:scale-[0.97] cursor-pointer
+                "
+              >
+                <span className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 shrink-0">
+                  <Zap size={14} />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div
+                    className="text-xs font-semibold text-foreground"
+                    style={{ fontFamily: 'Inter, sans-serif' }}
+                  >
+                    Generate Hooks
+                  </div>
+                  <div className="text-[10px] text-muted-foreground/55 mt-0.5 leading-tight">
+                    5 angles: curiosity · shock · relatability · aspiration · controversy
+                  </div>
+                </div>
+                <ArrowRight size={13} className="text-rose-400/50 shrink-0" />
+              </motion.button>
+            ) : (
+              <motion.div
+                key="hook-open"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.18 }}
+                className="w-full rounded-2xl border border-rose-500/30 bg-gradient-to-br from-rose-500/10 to-pink-500/5 p-4"
+              >
+                {/* Header row */}
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400">
+                    <Zap size={12} />
+                  </span>
+                  <span
+                    className="text-xs font-semibold text-foreground"
+                    style={{ fontFamily: 'Inter, sans-serif' }}
+                  >
+                    Hook Generator
+                  </span>
+                  <button
+                    onClick={closeHookInput}
+                    className="ml-auto text-muted-foreground/35 hover:text-muted-foreground/65 transition-colors"
+                    aria-label="Close hook generator"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+
+                {/* Topic input */}
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="e.g. wig revamping before/after"
+                  maxLength={120}
+                  className="
+                    w-full bg-background/60 border border-border/50 rounded-xl
+                    px-3.5 py-2.5 text-sm text-foreground
+                    placeholder:text-muted-foreground/40
+                    focus:outline-none focus:border-rose-400/50 focus:ring-1 focus:ring-rose-400/20
+                    transition-colors mb-3
+                  "
+                />
+
+                {/* Generate button */}
+                <button
+                  onClick={handleGenerate}
+                  disabled={!topic.trim()}
+                  className="
+                    w-full py-2 rounded-xl
+                    bg-rose-500/20 hover:bg-rose-500/30
+                    disabled:opacity-40 disabled:cursor-not-allowed
+                    text-rose-300 text-xs font-semibold
+                    transition-all duration-150 active:scale-[0.97]
+                    flex items-center justify-center gap-1.5
+                  "
+                >
+                  <Zap size={11} />
+                  Generate 5 Hooks
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Divider */}
