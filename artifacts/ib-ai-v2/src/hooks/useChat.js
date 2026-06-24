@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { getChats, saveChats, createDefaultChats } from '../utils/storage';
 import { streamChat } from '../services/api';
 import { analyzeImage } from '../services/imageApi';
-import { editImage } from '../services/imageToolsApi';
+import { editImage, generateImage } from '../services/imageToolsApi';
+import { extractImagePrompt } from '../services/aiEngine';
 import { fetchLatestSession } from '../services/chatHistoryApi';
 
 // ── UI error type system ──────────────────────────────────────────────────────

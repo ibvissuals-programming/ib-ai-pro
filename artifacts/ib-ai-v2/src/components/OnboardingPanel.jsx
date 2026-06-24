@@ -60,33 +60,42 @@ const QUICK_CARDS = [
 function buildHookPrompt(topic) {
   return `Generate 5 powerful video hooks for this topic: "${topic}"
 
-Each hook must use a completely different emotional angle. Format your response exactly like this — no deviations:
+STEP 1 — SPECIFICITY ANCHOR (complete this before writing any hooks):
+Identify the ONE most concrete, specific angle for "${topic}" — a real transformation detail, a counterintuitive outcome, a specific number or timeframe, or a defining moment that makes this topic distinct from everything else. It must be something that CANNOT apply to another topic.
+
+Write it out like this:
+**Specificity Anchor:** [1–2 sentences describing the specific angle you will anchor all 5 hooks to]
+
+STEP 2 — GENERATE THE 5 HOOKS (all anchored to your specificity anchor above):
+
+Format each hook exactly like this — no deviations:
 
 **1. 🤔 Curiosity Hook**
-[hook text — open a question, tease a mystery, or make them wonder "how?"]
+[hook text — open a question, tease a mystery, or make them wonder "how?" — anchored to your specific angle]
 *Why it works: [one sentence explaining the psychological trigger]*
 
 **2. 😱 Shock / Surprise Hook**
-[hook text — deliver an unexpected fact, counterintuitive truth, or stunning claim]
+[hook text — deliver an unexpected fact, counterintuitive truth, or stunning claim — specific to your anchor]
 *Why it works: [one sentence]*
 
 **3. 🤝 Relatability Hook**
-[hook text — mirror a pain point, shared experience, or "you know that feeling" moment]
+[hook text — mirror a pain point or shared experience — specific to your anchor, NOT a generic "you know that feeling" opener]
 *Why it works: [one sentence]*
 
 **4. ✨ Aspiration Hook**
-[hook text — paint the dream outcome, the transformation, the "what if" possibility]
+[hook text — paint the dream outcome or transformation — grounded in your specific anchor]
 *Why it works: [one sentence]*
 
 **5. 🔥 Controversy / Debate Hook**
-[hook text — challenge a popular belief, make a bold claim, or invite pushback]
+[hook text — challenge a popular belief or make a bold claim — specific to your anchor]
 *Why it works: [one sentence]*
 
 Rules:
 - Each hook must be written for the FIRST 3 SECONDS of a short-form video — direct, punchy, no warm-up
-- Make every hook specific to "${topic}" — no generic filler that could apply to any topic
+- Every hook must reference your Specificity Anchor — if a hook could apply to a different topic, rewrite it
 - The five hooks must feel genuinely different in tone and angle, not just reworded versions of each other
-- Keep hook text under 15 words`;
+- Keep hook text under 15 words
+- NO generic openers like "Have you ever..." or "Imagine waking up..." — those phrases are banned`;
 }
 
 /**

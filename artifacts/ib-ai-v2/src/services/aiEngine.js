@@ -9,6 +9,18 @@ const normalize = (text) => text.toLowerCase().trim().replace(/\s+/g, ' ');
 
 export function detectMode(input) {
   const text = normalize(input);
+
+  // ── Image generation intent (checked FIRST to avoid overlap with prompt_engineering) ──
+  // Matches phrases like "generate an image of X", "create an image of X", "draw me a sunset".
+  // Requires the generation verb at the START of the message so it doesn't match
+  // embedded phrases like "Create a scroll-stopping, cinematic AI image for TikTok…"
+  // (those contain adjectives between the article "a/an" and the noun "image",
+  //  so the tightly-grouped regex pattern below won't fire on them).
+  if (
+    /^(please\s+)?(generate|create|make)\s+(me\s+)?(a|an)\s+(image|picture|photo|illustration|drawing)(\s|$)/.test(text) ||
+    /^draw\s+(me\s+)?(a|an\s+|\s)/.test(text)
+  ) return 'image_generation';
+
   if (
     text.includes('generate a prompt') ||
     text.includes('improve this prompt') ||
@@ -20,7 +32,23 @@ export function detectMode(input) {
     text.includes('improve this') ||
     text.includes('optimize this')
   ) return 'prompt_engineering';
+
   return 'chat';
+}
+
+// ── Image prompt extractor ─────────────────────────────────────────────────────
+// Strips leading generation trigger phrases to isolate the core image subject.
+// e.g. "generate an image of a sunset" → "a sunset"
+//      "draw me a golden retriever"    → "a golden retriever"
+//      "create a picture showing the Eiffel Tower" → "the Eiffel Tower"
+
+export function extractImagePrompt(text) {
+  const lower = normalize(text);
+  const stripped = lower
+    .replace(/^(please\s+)?(generate|create|make)\s+(me\s+)?(a|an\s+)?(image|picture|photo|illustration|drawing)\s+(of\s+|showing\s+|depicting\s+|with\s+|for\s+me\s+of\s+)?/, '')
+    .replace(/^draw\s+(me\s+)?(a|an\s+)?/, '')
+    .trim();
+  return stripped || lower;
 }
 
 // ── Image edit intent detection ────────────────────────────────────────────────
