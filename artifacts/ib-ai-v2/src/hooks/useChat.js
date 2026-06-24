@@ -356,8 +356,8 @@ export function useChat(username, { onCreditExhausted } = {}) {
     // ── Image-generation intent intercept ──────────────────────────────────────
     // Phrases like "generate an image of X", "create a picture of Y", "draw me Z"
     // are detected by detectMode() and routed directly to /api/image/generate.
-    // The result is inserted as an image-edit-result bubble — reusing the same
-    // rendering path as the image-edit pipeline — instead of going through chat.
+    // Pattern mirrors the image-edit flow exactly: set finalMessages inside
+    // try/catch, then call a SINGLE persist(buildState(finalMessages)) after.
     if (detectMode(text) === 'image_generation') {
       const imagePrompt = extractImagePrompt(text);
 
@@ -375,56 +375,59 @@ export function useChat(username, { onCreditExhausted } = {}) {
         ? text.slice(0, 36) + (text.length > 36 ? '...' : '')
         : currentTitle;
 
-      const withUserMsg = {
+      const buildImgState = (msgs) => ({
         ...chatData,
         chats: {
           ...chatData.chats,
           [activeChatId]: {
             ...chatData.chats[activeChatId],
             title:    autoTitle,
-            messages: updatedMessages,
+            messages: msgs,
           },
         },
-      };
-      persist(withUserMsg);
+      });
+
+      persist(buildImgState(updatedMessages));
       setChatError(null);
       setIsTyping(true);
 
+      const aiMsgId  = Date.now() + 1;
+      const timestamp = new Date().toISOString();
+      let finalMessages = updatedMessages;
+
       try {
         const result = await generateImage(imagePrompt);
-        const raw = result?.b64Image ?? result?.data?.b64Image ?? '';
-        const src = raw.startsWith('data:') ? raw : `data:image/jpeg;base64,${raw}`;
-        const aiMsgId = Date.now() + 1;
-        persist({
-          ...withUserMsg,
-          chats: {
-            ...withUserMsg.chats,
-            [activeChatId]: {
-              ...withUserMsg.chats[activeChatId],
-              messages: [
-                ...updatedMessages,
-                {
-                  id:        aiMsgId,
-                  role:      'assistant',
-                  type:      'image-edit-result',
-                  content:   src,
-                  timestamp: new Date().toISOString(),
-                },
-              ],
-            },
+        const b64 = result?.b64Image ?? '';
+        if (!b64) throw new Error('Image generation returned no image data — please try again.');
+        const src = b64.startsWith('data:') ? b64 : `data:image/jpeg;base64,${b64}`;
+        finalMessages = [
+          ...updatedMessages,
+          {
+            id:        aiMsgId,
+            role:      'assistant',
+            type:      'image-edit-result',
+            content:   src,
+            timestamp,
           },
-        });
+        ];
       } catch (err) {
         console.error('[IB AI] Image generation from chat failed:', err?.message);
-        if (err?.message === 'CREDITS_EXHAUSTED' || err?.code === 'CREDITS_EXHAUSTED') {
+        if (err?.code === 'CREDITS_EXHAUSTED') {
           onCreditExhausted?.();
         }
-        setChatError('Image generation failed. Please try again.');
-        setChatData(withUserMsg);
+        const userFacingError = err?.code === 'CREDITS_EXHAUSTED'
+          ? "You've used all your image generation credits. Your balance resets every 24 hours."
+          : `Image generation failed: ${err?.message ?? 'Please try again.'}`;
+        finalMessages = [
+          ...updatedMessages,
+          { id: aiMsgId, role: 'assistant', content: userFacingError, timestamp },
+        ];
       } finally {
         setIsTyping(false);
         sendingRef.current = false;
       }
+
+      persist(buildImgState(finalMessages));
       return;
     }
 
