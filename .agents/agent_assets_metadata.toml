@@ -1,0 +1,14 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "UM_7uYUFK8dun71jqs-p-"
+uri = "file://artifacts/data/images/ib_concept_portrait.jpg"
+type = "image"
+title = "Post-Ready: Cinematic Editorial Portrait"
+
+[[outputs]]
+id = "mWOONdwg5eA4HNHVy5Jso"
+uri = "file://artifacts/data/images/ib_before_photo.jpg"
+type = "image"
+title = "Before: Flat Everyday Photo (for Cinematic Enhancement)"
