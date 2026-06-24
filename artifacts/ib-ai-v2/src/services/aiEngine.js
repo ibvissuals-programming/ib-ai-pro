@@ -108,6 +108,16 @@ const EDIT_INTENT_KEYWORDS = [
  * @param {string} text
  * @returns {boolean}
  */
+// ── TikTok URL detection ───────────────────────────────────────────────────────
+// ⚠️ Best-effort feature — depends on unofficial tikwm.com proxy.
+// Returns the first TikTok URL found in the text, or null.
+
+export function detectTikTokUrl(text) {
+  if (!text || !text.trim()) return null;
+  const match = text.match(/https?:\/\/(?:www\.|vm\.|vt\.)?tiktok\.com\/[^\s)>\]"']+/i);
+  return match ? match[0].replace(/[.,;!?]+$/, '') : null;
+}
+
 export function hasEditIntent(text) {
   if (!text || !text.trim()) return false;
   const lower = normalize(text);
