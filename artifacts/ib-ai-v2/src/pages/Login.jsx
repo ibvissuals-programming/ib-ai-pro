@@ -1,11 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertCircle, KeyRound, Lock, CheckCircle } from 'lucide-react';
+import { AlertCircle, KeyRound, Lock, CheckCircle, RefreshCw, WifiOff } from 'lucide-react';
 import { IbLogo } from '../components/IbLogo';
 import { login, recoveryLogin, recoveryResetPassword, changePassword, clearToken } from '../auth/authService';
 import { checkServerHealth } from '../utils/serverReadiness';
 import { useAuth } from '../hooks/useAuth';
+
+// Retry loop constants — visible UX handled in Login.jsx, not silently in authService.
+const RECONNECT_MAX_ATTEMPTS = 7;  // 7 × 1.5s ≈ 10.5s total window
+const RECONNECT_DELAY_MS     = 1_500;
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -25,6 +29,12 @@ export default function Login() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Reconnect UX state — active while a connection-error retry loop is running
+  const [reconnecting, setReconnecting]         = useState(false);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [reconnectFailed, setReconnectFailed]   = useState(false);
+
   // null = unknown, true = ready, false = starting up (only shown after debounce)
   const [serverReady, setServerReady] = useState(null);
   // showNotReadyBanner is only set true after 1500ms of the probe returning false.
@@ -32,13 +42,36 @@ export default function Login() {
   // probe response arrives quickly.
   const [showNotReadyBanner, setShowNotReadyBanner] = useState(false);
 
+  // Refs — survive re-renders without causing them
+  // loginCancelledRef: set true on unmount so in-flight retry loops bail out cleanly
+  const loginCancelledRef    = useRef(false);
+  // lastCredentialsRef: stored so the manual Retry button can re-attempt with same creds
+  const lastCredentialsRef   = useRef({ user: '', pass: '' });
+  // reconnectTimerRef: tracks the pending setTimeout so it can be cancelled on unmount
+  const reconnectTimerRef    = useRef(null);
+
   // Clear any stale token/cache whenever the login page mounts.
   // Prevents redirect loops from tokens that became invalid while the tab was closed.
   useEffect(() => { clearToken(); }, []);
 
+  // Cancel any running retry loop on unmount
+  useEffect(() => {
+    loginCancelledRef.current = false;
+    return () => {
+      loginCancelledRef.current = true;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+    };
+  }, []);
+
   // ── Server readiness probe ─────────────────────────────────────────────────
   // Polls /api/system/ready on mount. Shows an advisory "Server is starting…"
   // banner while the backend is booting.
+  //
+  // /api/system/ready is accurate: ready===true only when phase===COMPLETE and
+  // all core services are up. Unlike /api/auth/health which always returns true.
   //
   // This banner is PURELY informational — the login button is always enabled.
   //
@@ -117,15 +150,39 @@ export default function Login() {
     };
   }, []);
 
-  // ── Login attempt ──────────────────────────────────────────────────────────
+  // ── Login attempt with connection-error retry loop ─────────────────────────
+  //
+  // Three outcome paths from authService.login():
+  //
+  //   success: true          → navigate to /chat (or set-password on first-login)
+  //   connectionError: true  → backend unreachable / still building → retry loop
+  //   authError: true        → wrong credentials → show error, never retry
+  //   (other)                → unexpected server error → show error, never retry
+  //
+  // The retry loop runs up to RECONNECT_MAX_ATTEMPTS times at RECONNECT_DELAY_MS
+  // intervals, showing "Reconnecting…" with an attempt counter. After exhaustion,
+  // it shows a permanent "Could not connect" message and a manual Retry button.
 
-  const doLogin = async (user, pass) => {
-    setLoading(true);
-    setError('');
+  const doLogin = async (user, pass, reconnectCount = 0) => {
+    if (loginCancelledRef.current) return;
+
+    if (reconnectCount === 0) {
+      // Fresh attempt — reset all state
+      lastCredentialsRef.current = { user, pass };
+      setLoading(true);
+      setError('');
+      setReconnecting(false);
+      setReconnectFailed(false);
+      setReconnectAttempt(0);
+    }
+
     const result = await login(user, pass);
-    setLoading(false);
+
+    if (loginCancelledRef.current) return;
 
     if (result.success) {
+      setLoading(false);
+      setReconnecting(false);
       setUser(result.user);
       if (result.recoveryLogin) {
         setMode('set-password');
@@ -133,9 +190,46 @@ export default function Login() {
       } else {
         setLocation('/chat');
       }
-    } else {
-      setError(result.error || 'Login failed');
+      return;
     }
+
+    if (result.connectionError) {
+      const nextCount = reconnectCount + 1;
+      if (nextCount <= RECONNECT_MAX_ATTEMPTS) {
+        // Enter / continue "Reconnecting…" state
+        setLoading(false);
+        setReconnecting(true);
+        setReconnectAttempt(nextCount);
+        // Schedule next attempt after delay
+        await new Promise(resolve => {
+          reconnectTimerRef.current = setTimeout(resolve, RECONNECT_DELAY_MS);
+        });
+        reconnectTimerRef.current = null;
+        if (!loginCancelledRef.current) {
+          return doLogin(user, pass, nextCount);
+        }
+        return;
+      }
+
+      // All retries exhausted — surface permanent failure with Retry button
+      setReconnecting(false);
+      setLoading(false);
+      setReconnectFailed(true);
+      return;
+    }
+
+    // Auth or unexpected error — show message immediately, never retry
+    setLoading(false);
+    setReconnecting(false);
+    setError(result.error || 'Login failed');
+  };
+
+  // ── Manual retry (Retry button after exhaustion) ───────────────────────────
+
+  const handleRetry = () => {
+    setReconnectFailed(false);
+    const { user, pass } = lastCredentialsRef.current;
+    doLogin(user, pass, 0);
   };
 
   // ── Recovery attempt ───────────────────────────────────────────────────────
@@ -296,7 +390,8 @@ export default function Login() {
                     data-testid="input-username"
                     autoComplete="username"
                     autoFocus
-                    className="w-full bg-background/60 border border-input rounded-xl px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/40 outline-none focus:ring-2 focus:ring-ring/40 focus:border-primary/50 transition-all"
+                    disabled={reconnecting}
+                    className="w-full bg-background/60 border border-input rounded-xl px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/40 outline-none focus:ring-2 focus:ring-ring/40 focus:border-primary/50 transition-all disabled:opacity-50"
                     placeholder="Your username"
                   />
                 </div>
@@ -311,11 +406,13 @@ export default function Login() {
                     onChange={e => setPassword(e.target.value)}
                     data-testid="input-password"
                     autoComplete="current-password"
-                    className="w-full bg-background/60 border border-input rounded-xl px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/40 outline-none focus:ring-2 focus:ring-ring/40 focus:border-primary/50 transition-all"
+                    disabled={reconnecting}
+                    className="w-full bg-background/60 border border-input rounded-xl px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/40 outline-none focus:ring-2 focus:ring-ring/40 focus:border-primary/50 transition-all disabled:opacity-50"
                     placeholder="Your password"
                   />
                 </div>
 
+                {/* Auth errors — wrong password, validation, unexpected */}
                 <AnimatePresence>
                   {error && (
                     <motion.div
@@ -333,9 +430,59 @@ export default function Login() {
                   )}
                 </AnimatePresence>
 
+                {/* Reconnecting banner — shown during connection-error retry loop */}
+                <AnimatePresence>
+                  {reconnecting && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.18 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="flex items-center gap-2 text-amber-400 text-xs bg-amber-400/10 border border-amber-400/20 rounded-xl px-3 py-2.5">
+                        <motion.div
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                          className="w-3 h-3 border-2 border-amber-400/30 border-t-amber-400 rounded-full shrink-0"
+                        />
+                        Reconnecting… (attempt {reconnectAttempt} of {RECONNECT_MAX_ATTEMPTS})
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Permanent failure banner — shown after retry loop exhausts */}
+                <AnimatePresence>
+                  {reconnectFailed && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.18 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="flex flex-col gap-2.5 text-xs bg-destructive/10 border border-destructive/20 rounded-xl px-3 py-2.5">
+                        <div className="flex items-center gap-2 text-destructive">
+                          <WifiOff size={12} className="shrink-0" />
+                          Could not reach the server. It may be restarting — please wait a moment and try again.
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleRetry}
+                          className="flex items-center justify-center gap-1.5 w-full bg-destructive/20 hover:bg-destructive/30 text-destructive rounded-lg py-1.5 text-xs font-medium transition-colors"
+                        >
+                          <RefreshCw size={11} />
+                          Retry
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || reconnecting}
                   data-testid="button-login"
                   className="w-full bg-primary text-primary-foreground rounded-xl py-2.5 text-sm font-medium hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed mt-2 shadow-lg shadow-primary/20"
                 >
@@ -348,12 +495,22 @@ export default function Login() {
                       />
                       Signing in...
                     </span>
+                  ) : reconnecting ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
+                        className="w-3.5 h-3.5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full"
+                      />
+                      Reconnecting...
+                    </span>
                   ) : 'Sign In'}
                 </button>
 
                 <button
                   type="button"
                   onClick={() => { setMode('recovery'); setError(''); }}
+                  disabled={reconnecting}
                   className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <KeyRound size={11} />
@@ -449,7 +606,7 @@ export default function Login() {
               </motion.form>
             )}
 
-            {/* ── Set new password (post-recovery) ── */}
+            {/* ── Set new password (post-recovery or first-login) ── */}
             {mode === 'set-password' && (
               <motion.form
                 key="set-password"
@@ -475,7 +632,7 @@ export default function Login() {
                     autoFocus
                     autoComplete="new-password"
                     className="w-full bg-background/60 border border-input rounded-xl px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/40 outline-none focus:ring-2 focus:ring-ring/40 focus:border-primary/50 transition-all"
-                    placeholder="At least 6 characters"
+                    placeholder="At least 8 characters"
                   />
                 </div>
 
@@ -549,7 +706,7 @@ export default function Login() {
                   onClick={() => setLocation('/chat')}
                   className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-1.5"
                 >
-                  Skip for now (set password later)
+                  Skip for now
                 </button>
               </motion.form>
             )}
@@ -557,23 +714,6 @@ export default function Login() {
           </AnimatePresence>
         </div>
 
-        {mode === 'login' && (
-          <>
-            <p className="text-center text-sm text-muted-foreground mt-4">
-              No account?{' '}
-              <button
-                onClick={() => setLocation('/signup')}
-                data-testid="link-signup"
-                className="text-primary hover:underline font-medium transition-colors"
-              >
-                Create one
-              </button>
-            </p>
-            <p className="text-center text-xs text-muted-foreground/40 mt-5 leading-relaxed max-w-xs mx-auto">
-              Accounts are securely stored on our servers and persist across all sessions and devices.
-            </p>
-          </>
-        )}
       </motion.div>
     </div>
   );

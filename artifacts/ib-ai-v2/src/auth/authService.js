@@ -28,11 +28,11 @@ const IB_TOKEN_KEY = 'ib_token';
 const IB_USER_KEY = 'ib_cached_user';
 
 const RETRY_DELAY_MS = 800;
-// 503 startup retry — backend builds in ~1s (esbuild). Retry up to 4 times
-// at 1.5s intervals = ~6s total coverage. The health probe runs in parallel
-// and clears any stuck error messages as soon as the server responds.
-const STARTUP_503_DELAY_MS  = 1500;
-const STARTUP_503_MAX_RETRIES = 4;
+// 503 startup retry — one quick attempt at 500ms before surfacing connectionError
+// to the caller. The Login.jsx retry loop then handles the remaining ~10s window
+// with visible "Reconnecting..." UX. Keeping this at 1 avoids 6s of silent wait.
+const STARTUP_503_DELAY_MS  = 500;
+const STARTUP_503_MAX_RETRIES = 1;
 
 const BASE = (() => {
   try {
@@ -208,21 +208,21 @@ export async function signup(username, password) {
         await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
         continue;
       }
-      return { success: false, error: fetchErrorMessage(err) };
+      return { success: false, error: fetchErrorMessage(err), connectionError: true };
     }
 
     if (!res.ok) {
       // Hard validation / conflict — never retry
       if (res.status === 400 || res.status === 409) {
-        return { success: false, error: data.error || data.message || 'Registration failed' };
+        return { success: false, error: data.error || data.message || 'Registration failed', authError: true };
       }
-      // 503 from Vite proxy = backend still starting up — retry with delay
+      // 503 from Vite proxy = backend still starting up — one quick retry, then surface to caller
       if (res.status === 503 && startup503Count < STARTUP_503_MAX_RETRIES) {
         startup503Count++;
         await new Promise(r => setTimeout(r, STARTUP_503_DELAY_MS));
         continue;
       }
-      return { success: false, error: data.error || data.message || 'Service temporarily unavailable' };
+      return { success: false, error: data.error || data.message || 'Service temporarily unavailable', connectionError: true };
     }
 
     if (!data.token || !data.user) {
@@ -261,21 +261,21 @@ export async function login(username, password) {
         await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
         continue;
       }
-      return { success: false, error: fetchErrorMessage(err) };
+      return { success: false, error: fetchErrorMessage(err), connectionError: true };
     }
 
     if (!res.ok) {
-      // Hard auth failure — never retry
+      // Hard auth failure — never retry, never flag as connection error
       if (res.status === 401 || res.status === 400) {
-        return { success: false, error: data.error || data.message || 'Invalid username or password' };
+        return { success: false, error: data.error || data.message || 'Invalid username or password', authError: true };
       }
-      // 503 from Vite proxy = backend still starting up — retry with delay
+      // 503 from Vite proxy = backend still starting up — one quick retry, then surface to caller
       if (res.status === 503 && startup503Count < STARTUP_503_MAX_RETRIES) {
         startup503Count++;
         await new Promise(r => setTimeout(r, STARTUP_503_DELAY_MS));
         continue;
       }
-      return { success: false, error: data.error || data.message || 'Service temporarily unavailable' };
+      return { success: false, error: data.error || data.message || 'Service temporarily unavailable', connectionError: true };
     }
 
     if (!data.token || !data.user) {
