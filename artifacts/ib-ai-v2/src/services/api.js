@@ -70,6 +70,7 @@ export async function* streamChat(messages, options = {}) {
     if (response.status === 429) throw new Error('RATE_LIMITED');
     if (response.status === 400) throw new Error('STREAM_ERROR:invalid_request');
     if (response.status === 403) throw new Error('STREAM_ERROR:provider_not_configured');
+    if (response.status === 503) throw new Error('STREAM_ERROR:connection_error');
     if (response.status >= 500)  throw new Error('STREAM_ERROR:provider_unavailable');
     throw new Error('STREAM_ERROR:internal_error');
   }

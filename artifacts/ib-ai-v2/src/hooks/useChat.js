@@ -129,6 +129,33 @@ function classifyImageError(err) {
   return 'Image analysis failed. Please check your connection and try again.';
 }
 
+/**
+ * Returns true for connection-level errors that warrant the reconnect loop.
+ *
+ * Two cases:
+ *   TypeError       — fetch() threw before any response (port closed, offline)
+ *   connection_error — api.js threw for HTTP 503 from the Vite proxy, which
+ *                      happens when the backend is down/restarting and the proxy
+ *                      cannot reach port 8099.
+ *
+ * Intentionally excludes provider_unavailable (AI provider 5xx) and all
+ * other stream errors — those are real AI errors, not connection failures.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+function isConnectionLevelError(err) {
+  if (!err) return false;
+  if (err.name === 'TypeError') return true;
+  const msg = typeof err.message === 'string' ? err.message : '';
+  return (
+    msg === 'STREAM_ERROR:connection_error' ||
+    msg.includes('Failed to fetch') ||
+    msg.includes('NetworkError') ||
+    msg.includes('Load failed')
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -162,6 +189,14 @@ export function useChat(username, { onCreditExhausted } = {}) {
   // It is NEVER stored in chat history — it resets on the next send, on chat
   // switch/new, or when the user dismisses it.
   const [chatError, setChatError] = useState(null);
+
+  // connectionError: non-null when the last send failed due to a connection-level
+  // error (port closed, Vite proxy 503 during backend restart).
+  // Shape: { fallbackMsg: string } — the UI message to show if the backend
+  // turns out to already be up (AI provider error, not connection error).
+  // ChatApp watches this and runs a /api/system/ready reconnect loop.
+  const [connectionError, setConnectionError] = useState(null);
+
   const streamAbortRef = useRef(null);
   const userStopRef   = useRef(false); // true when user explicitly clicks Stop
   // sendingRef prevents a second concurrent send while a stream is in-flight.
@@ -243,9 +278,21 @@ export function useChat(username, { onCreditExhausted } = {}) {
 
   const clearChatError = useCallback(() => setChatError(null), []);
 
+  /**
+   * clearConnectionError — dismiss the connection error state.
+   *
+   * @param {string} [errorToShow] — if provided, set chatError to this string
+   *   (used when the backend turns out to be up and the error was AI provider).
+   */
+  const clearConnectionError = useCallback((errorToShow) => {
+    setConnectionError(null);
+    if (errorToShow) setChatError(errorToShow);
+  }, []);
+
   const switchChat = useCallback((chatId) => {
     if (!chatData || !chatData.chats[chatId]) return;
     setChatError(null);
+    setConnectionError(null);
     persist({ ...chatData, activeChatId: chatId });
   }, [chatData, persist]);
 
@@ -253,6 +300,7 @@ export function useChat(username, { onCreditExhausted } = {}) {
     if (!chatData) return;
     const id = `chat_${Date.now()}`;
     setChatError(null);
+    setConnectionError(null);
     persist({
       ...chatData,
       chats: {
@@ -370,6 +418,7 @@ export function useChat(username, { onCreditExhausted } = {}) {
 
     // Clear any leftover error from a previous attempt before starting a new stream.
     setChatError(null);
+    setConnectionError(null);
 
     let finalContent = '';
     // wasError: true when the stream fails with a genuine error (not a user abort).
@@ -397,10 +446,16 @@ export function useChat(username, { onCreditExhausted } = {}) {
       if (!wasAborted) {
         wasError = true;
         console.error('[IB AI Assistant] AI request failed:', err.message);
-        // CREDITS_EXHAUSTED triggers the upgrade modal (separate from error banner).
-        if (err?.message === 'CREDITS_EXHAUSTED') onCreditExhausted?.();
-        // Show transient banner — mapBackendErrorToUI via classifyStreamError.
-        setChatError(classifyStreamError(err));
+
+        if (isConnectionLevelError(err)) {
+          // Connection-level error — backend down or Vite proxy 503 during restart.
+          // ChatApp will run the reconnect loop; do NOT show a static error banner.
+          setConnectionError({ fallbackMsg: classifyStreamError(err) });
+        } else {
+          // AI/auth/rate-limit error — show immediately, never reconnect.
+          if (err?.message === 'CREDITS_EXHAUSTED') onCreditExhausted?.();
+          setChatError(classifyStreamError(err));
+        }
         // Roll back live streaming view (removes in-progress AI bubble).
         setChatData(withUserMsg);
       }
@@ -518,6 +573,7 @@ export function useChat(username, { onCreditExhausted } = {}) {
     let wasError           = false;
 
     setChatError(null);
+    setConnectionError(null);
 
     try {
       for await (const chunk of streamChat(contextMessages, {
@@ -536,8 +592,12 @@ export function useChat(username, { onCreditExhausted } = {}) {
       if (!wasAborted) {
         wasError = true;
         console.error('[IB AI Assistant] Regeneration failed:', err.message);
-        if (err?.message === 'CREDITS_EXHAUSTED') onCreditExhausted?.();
-        setChatError(classifyStreamError(err));
+        if (isConnectionLevelError(err)) {
+          setConnectionError({ fallbackMsg: classifyStreamError(err) });
+        } else {
+          if (err?.message === 'CREDITS_EXHAUSTED') onCreditExhausted?.();
+          setChatError(classifyStreamError(err));
+        }
         setChatData(withTrimmed);
       }
     } finally {
@@ -562,6 +622,119 @@ export function useChat(username, { onCreditExhausted } = {}) {
             });
           } catch (persistErr) {
             console.error('[IB AI Assistant] Failed to persist regenerated state:', persistErr);
+          }
+        }
+        setIsTyping(false);
+      }
+      sendingRef.current = false;
+    }
+  }, [chatData, activeChatId, persist, onCreditExhausted]);
+
+  // ── Retry last send (reconnect recovery) ──────────────────────────────────
+  //
+  // Called by ChatApp's reconnect loop after the backend comes back up.
+  // The user's message is ALREADY in chatData (persisted before the stream
+  // failed) — this function only streams the AI response for the existing
+  // conversation, without re-adding the user message.
+  //
+  // If the retry also fails with a connection error, setConnectionError is
+  // called again so the reconnect loop can restart.
+  const retrySend = useCallback(async () => {
+    if (!chatData || !activeChatId) return;
+    if (sendingRef.current) return;
+    sendingRef.current = true;
+
+    const currentMessages = chatData.chats[activeChatId]?.messages ?? [];
+    // Safety: only retry when the last message is from the user.
+    if (!currentMessages.length || currentMessages[currentMessages.length - 1]?.role !== 'user') {
+      sendingRef.current = false;
+      return;
+    }
+
+    const streamController = new AbortController();
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = streamController;
+    let wasAborted = false;
+    streamController.signal.addEventListener('abort', () => { wasAborted = true; }, { once: true });
+
+    const aiMsgId   = Date.now() + 1;
+    const timestamp = new Date().toISOString();
+    let finalContent = '';
+    let wasError = false;
+
+    const buildState = (content) => ({
+      ...chatData,
+      chats: {
+        ...chatData.chats,
+        [activeChatId]: {
+          ...chatData.chats[activeChatId],
+          messages: [
+            ...currentMessages,
+            { id: aiMsgId, role: 'assistant', content, timestamp },
+          ],
+        },
+      },
+    });
+
+    const contextMessages = currentMessages
+      .filter((m) => !m.type || m.type === 'text')
+      .slice(-20)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    const chatSessionId   = chatData.chats[activeChatId]?.sessionId;
+    let resolvedSessionId = chatSessionId;
+
+    setChatError(null);
+    setIsTyping(true);
+
+    try {
+      for await (const chunk of streamChat(contextMessages, {
+        sessionId:   chatSessionId,
+        onSessionId: (id) => { resolvedSessionId = id; },
+        signal:      streamController.signal,
+        onRateLimit: (limit, remaining, resetAt) => {
+          setRateLimitState({ limit, remaining, resetAt });
+        },
+      })) {
+        finalContent += chunk;
+        setChatData(buildState(finalContent));
+      }
+      if (!finalContent) throw new Error('Empty response from AI');
+    } catch (err) {
+      if (!wasAborted) {
+        wasError = true;
+        console.error('[IB AI Assistant] Retry send failed:', err.message);
+        if (isConnectionLevelError(err)) {
+          // Still can't reach the backend — re-enter reconnect state.
+          setConnectionError({ fallbackMsg: classifyStreamError(err) });
+        } else {
+          if (err?.message === 'CREDITS_EXHAUSTED') onCreditExhausted?.();
+          setChatError(classifyStreamError(err));
+        }
+        setChatData(chatData);
+      }
+    } finally {
+      const shouldCommit = !wasAborted || userStopRef.current;
+      userStopRef.current = false;
+      if (shouldCommit) {
+        if (!wasError && finalContent) {
+          try {
+            persist({
+              ...chatData,
+              chats: {
+                ...chatData.chats,
+                [activeChatId]: {
+                  ...chatData.chats[activeChatId],
+                  sessionId: resolvedSessionId,
+                  messages: [
+                    ...currentMessages,
+                    { id: aiMsgId, role: 'assistant', content: finalContent, timestamp },
+                  ],
+                },
+              },
+            });
+          } catch (persistErr) {
+            console.error('[IB AI Assistant] Failed to persist retry state:', persistErr);
           }
         }
         setIsTyping(false);
@@ -780,6 +953,7 @@ export function useChat(username, { onCreditExhausted } = {}) {
   const clearChat = useCallback(() => {
     if (!chatData || !activeChatId) return;
     setChatError(null);
+    setConnectionError(null);
     persist({
       ...chatData,
       chats: {
@@ -797,9 +971,12 @@ export function useChat(username, { onCreditExhausted } = {}) {
     rateLimitState,
     chatError,
     clearChatError,
+    connectionError,
+    clearConnectionError,
     sendMessage,
     stopGeneration,
     regenerateFrom,
+    retrySend,
     sendImageAnalysis,
     sendImageEdit,
     clearChat,

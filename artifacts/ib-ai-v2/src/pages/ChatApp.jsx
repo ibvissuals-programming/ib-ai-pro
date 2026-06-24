@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
-import { AlertCircle, Clock, WifiOff, X } from 'lucide-react';
+import { AlertCircle, Clock, WifiOff, X, RefreshCw } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation } from 'wouter';
 import { useAuth } from '../hooks/useAuth';
 import { useChat } from '../hooks/useChat';
@@ -10,9 +11,14 @@ import { InputBox } from '../components/InputBox';
 import { Sidebar, MobileSidebar } from '../components/Sidebar';
 import { UpgradeModal } from '../components/UpgradeModal';
 import { detectMode } from '../services/aiEngine';
+import { checkServerHealth } from '../utils/serverReadiness';
 
 const SWIPE_EDGE_PX = 24;   // touch must start within this many px from left edge
 const SWIPE_MIN_DX = 60;    // must swipe at least this far right to open
+
+// Reconnect loop constants — mirrors Login.jsx behaviour
+const RECONNECT_MAX_ATTEMPTS = 7;   // 7 × 1.5s ≈ 10.5s total window
+const RECONNECT_DELAY_MS     = 1_500;
 
 function RateLimitBadge({ remaining, resetAt }) {
   const secLeft = Math.max(0, Math.ceil((resetAt * 1000 - Date.now()) / 1000));
@@ -54,9 +60,12 @@ export default function ChatApp() {
     rateLimitState,
     chatError,
     clearChatError,
+    connectionError,
+    clearConnectionError,
     sendMessage,
     stopGeneration,
     regenerateFrom,
+    retrySend,
     sendImageAnalysis,
     sendImageEdit,
     clearChat,
@@ -101,7 +110,7 @@ export default function ChatApp() {
     refreshCredits();
   };
 
-  // ── Offline detection ──────────────────────────────────────────────────────
+  // ── Offline detection (navigator.onLine) ───────────────────────────────────
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   useEffect(() => {
     const goOnline  = () => setIsOffline(false);
@@ -112,6 +121,112 @@ export default function ChatApp() {
       window.removeEventListener('online',  goOnline);
       window.removeEventListener('offline', goOffline);
     };
+  }, []);
+
+  // ── Backend reconnect loop ─────────────────────────────────────────────────
+  //
+  // Triggered when useChat sets connectionError (backend down / Vite proxy 503).
+  // Polls /api/system/ready every RECONNECT_DELAY_MS until:
+  //
+  //   attempt 1, backend immediately ready:
+  //     This was an AI-provider error (not a true connection failure).
+  //     Clear the connection error and show the stored fallback message.
+  //
+  //   attempt N>1, backend ready:
+  //     Backend recovered from a restart.  Auto-retry the failed message.
+  //
+  //   attempt >= MAX_ATTEMPTS:
+  //     Show "Could not reconnect" message + manual Retry button.
+  //
+  // reconnectKey is incremented by handleReconnectRetry to force a new loop
+  // cycle even when connectionError hasn't changed (already non-null).
+
+  const [reconnecting,      setReconnecting]      = useState(false);
+  const [reconnectAttempt,  setReconnectAttempt]  = useState(0);
+  const [reconnectFailed,   setReconnectFailed]   = useState(false);
+  const [reconnectKey,      setReconnectKey]       = useState(0);
+
+  const reconnectTimerRef = useRef(null);
+  // retrySendRef — always points to the latest retrySend from useChat
+  // (avoids stale closure inside the effect).
+  const retrySendRef = useRef(retrySend);
+  retrySendRef.current = retrySend;
+
+  useEffect(() => {
+    if (!connectionError) {
+      // connectionError cleared — cancel any running loop and reset UI.
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      setReconnecting(false);
+      setReconnectAttempt(0);
+      setReconnectFailed(false);
+      return;
+    }
+
+    // New connection error (or manual Retry via reconnectKey) — start loop.
+    let cancelled = false;
+    setReconnecting(true);
+    setReconnectFailed(false);
+    setReconnectAttempt(0);
+
+    let attempt = 0;
+    const fallbackMsg = connectionError.fallbackMsg;
+
+    async function check() {
+      if (cancelled) return;
+      attempt++;
+      setReconnectAttempt(attempt);
+
+      const { ready } = await checkServerHealth();
+      if (cancelled) return;
+
+      if (ready) {
+        setReconnecting(false);
+        if (attempt === 1) {
+          // Backend was already up — this was an AI provider error, not a
+          // connection failure.  Show the stored fallback message; do NOT
+          // auto-retry (that would loop if the AI provider is still down).
+          clearConnectionError(fallbackMsg);
+        } else {
+          // Backend recovered from a restart — auto-retry the failed message.
+          clearConnectionError();
+          retrySendRef.current?.();
+        }
+        return;
+      }
+
+      if (attempt >= RECONNECT_MAX_ATTEMPTS) {
+        setReconnecting(false);
+        setReconnectFailed(true);
+        return;
+      }
+
+      await new Promise(resolve => {
+        reconnectTimerRef.current = setTimeout(resolve, RECONNECT_DELAY_MS);
+      });
+      reconnectTimerRef.current = null;
+      check();
+    }
+
+    check();
+
+    return () => {
+      cancelled = true;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectionError, reconnectKey]);
+
+  // Manual retry after reconnect exhaustion — increments key to re-trigger effect.
+  const handleReconnectRetry = useCallback(() => {
+    setReconnectFailed(false);
+    setReconnectAttempt(0);
+    setReconnectKey(k => k + 1);
   }, []);
 
   // ── Swipe-from-left-edge gesture (mobile sidebar) ─────────────────────────
@@ -155,6 +270,9 @@ export default function ChatApp() {
     />
   );
 
+  // Whether any reconnect-related UI is active (replaces the static error banner)
+  const showReconnectUI = !!(connectionError || reconnecting || reconnectFailed);
+
   return (
     <div className="flex h-screen bg-background overflow-hidden" data-testid="chat-app">
       {/* Desktop sidebar */}
@@ -183,12 +301,64 @@ export default function ChatApp() {
           messages={messages}
         />
 
-        {isOffline && (
+        {/* Network offline banner (navigator.onLine) */}
+        {isOffline && !showReconnectUI && (
           <div className="flex items-center gap-2 px-4 py-2 bg-yellow-500/10 border-b border-yellow-400/15 text-[11px] text-yellow-400 shrink-0">
             <WifiOff size={10} />
             Connection interrupted. Retrying…
           </div>
         )}
+
+        {/* Reconnecting banner — shown during active retry loop */}
+        <AnimatePresence>
+          {reconnecting && (
+            <motion.div
+              key="reconnecting"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.18 }}
+              className="overflow-hidden shrink-0"
+            >
+              <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-400/15 text-[11px] text-amber-400">
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                  className="w-3 h-3 border-2 border-amber-400/30 border-t-amber-400 rounded-full shrink-0"
+                />
+                Reconnecting to server… (attempt {reconnectAttempt} of {RECONNECT_MAX_ATTEMPTS})
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Reconnect-failed banner — shown after retry loop exhausts */}
+        <AnimatePresence>
+          {reconnectFailed && (
+            <motion.div
+              key="reconnect-failed"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.18 }}
+              className="overflow-hidden shrink-0"
+            >
+              <div className="flex items-center gap-2 px-4 py-2 bg-destructive/10 border-b border-destructive/20 text-[11px] text-destructive/90">
+                <WifiOff size={10} className="shrink-0" />
+                <span className="flex-1">
+                  Could not reach the server — it may still be restarting.
+                </span>
+                <button
+                  onClick={handleReconnectRetry}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-destructive/20 hover:bg-destructive/30 text-destructive transition-colors font-medium shrink-0"
+                >
+                  <RefreshCw size={9} />
+                  Retry
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <ChatWindow
           key={activeChatId ?? 'chat'}
@@ -199,8 +369,8 @@ export default function ChatApp() {
           showOnboarding={true}
         />
 
-        {/* Transient AI error banner — never stored in chat history */}
-        {chatError && (
+        {/* Transient AI error banner — never shown while reconnect loop is active */}
+        {chatError && !showReconnectUI && (
           <div className="mx-4 mb-1 px-3.5 py-2.5 rounded-xl bg-destructive/10 border border-destructive/20 flex items-center gap-2 shrink-0">
             <AlertCircle size={13} className="shrink-0 text-destructive/70" />
             <span className="flex-1 text-[13px] text-destructive/90">{chatError}</span>
@@ -224,7 +394,7 @@ export default function ChatApp() {
           onSendImageEdit={sendImageEdit}
           onClear={clearChat}
           onStop={stopGeneration}
-          disabled={isTyping}
+          disabled={isTyping || reconnecting}
         />
       </div>
 
