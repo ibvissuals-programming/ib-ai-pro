@@ -131,6 +131,8 @@ POST /api/chat
 | Prompt expansion | Gemini | `GEMINI_API_KEY` | None |
 | Cinematic analysis | Gemini | `GEMINI_API_KEY` | None |
 
+**Onboarding quick actions (frontend only, no extra secrets):** Create an Image · Improve a Prompt · Brainstorm an Idea · Ask Anything · **Generate Hooks** (5-angle hook generator — curiosity, shock, relatability, aspiration, controversy — routed through existing Groq chat).
+
 ---
 
 ## After Every Reimport from GitHub
