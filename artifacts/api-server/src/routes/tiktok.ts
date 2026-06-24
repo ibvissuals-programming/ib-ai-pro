@@ -1,17 +1,35 @@
 /**
  * POST /api/tiktok/transcribe
  *
- * ⚠️  BEST-EFFORT feature — depends on the unofficial tikwm.com download proxy.
- *     This endpoint WILL break without notice when tikwm.com changes its API.
- *     Every error path returns { success:false, code:"feature_unavailable" } so
- *     the caller can show a graceful "unavailable" message. This route MUST
- *     never crash or affect any other feature.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * ⚠️  FRAGILE / BEST-EFFORT — UNOFFICIAL THIRD-PARTY DEPENDENCY
+ * ─────────────────────────────────────────────────────────────────────────────
+ * This route depends on tikwm.com, an UNOFFICIAL, UNSUPPORTED scraping proxy
+ * for TikTok content.  It has NO SLA, NO support contract, and NO guarantee of
+ * continued availability.  Known failure modes observed in production:
  *
- * Flow:
- *   1. Validate TikTok URL.
- *   2. Call tikwm.com API → get direct audio/video download URL + metadata.
- *   3. Download audio (capped at 20 MB).
- *   4. Transcribe with Groq Whisper (whisper-large-v3-turbo, free tier).
+ *   • code: -1  "Url parsing is failed" — tikwm's scraper cannot reach or
+ *               parse the given TikTok URL.  Happens when TikTok changes its
+ *               internal URL structure, video is geo-restricted/private, or
+ *               tikwm's IP is rate-limited by TikTok.  Observed for ALL test
+ *               URLs during initial validation (June 2026).
+ *   • HTTP 5xx  tikwm.com service outage — no estimated resolution time.
+ *   • code:  0  Success — download URL returned, pipeline continues normally.
+ *
+ * This endpoint WILL silently break without warning whenever:
+ *   - TikTok changes its page structure / signature algorithm
+ *   - tikwm.com changes its API contract or goes offline
+ *   - The Replit egress IP is blocked by TikTok's bot-detection
+ *
+ * EVERY error path returns { success:false, code:"feature_unavailable" } and
+ * MUST NEVER throw, panic, or affect any other route.  This is non-negotiable.
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Flow (when tikwm.com cooperates):
+ *   1. Validate TikTok URL (regex).
+ *   2. POST tikwm.com/api/ → direct audio/video download URL + metadata.
+ *   3. Download audio buffer (capped at 20 MB, 35 s timeout).
+ *   4. POST Groq Whisper (whisper-large-v3-turbo, free tier, 60 s timeout).
  *   5. Return { transcript, meta: { title, author, url } }.
  *
  * Auth:   policyEngine (requireAuth + rate limit, 0 credit cost)

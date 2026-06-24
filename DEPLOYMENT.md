@@ -172,3 +172,36 @@ This is safe to run at any time — it will only push schema changes if tables a
 
 ### Pre-publish check fails on chat test
 The smoke test uses `CEO_PASSWORD` from the environment. Ensure it is set in Replit Secrets before running `pnpm run pre-publish`.
+
+---
+
+## Known Risks
+
+### TikTok Audio Transcription — Best-Effort Only
+
+**Route:** `POST /api/tiktok/transcribe`
+**Status:** ⚠️ Best-effort. Not guaranteed. Not supported long-term.
+
+This feature depends on **tikwm.com**, an unofficial, unsupported third-party scraping proxy for TikTok content. It has no SLA, no support contract, and no guarantee of continued availability.
+
+**This feature will silently break whenever:**
+- TikTok changes its internal page structure or video signature algorithm
+- tikwm.com changes its API contract, rotates endpoints, or goes offline
+- The Replit egress IP is blocked by TikTok's bot-detection layer
+- A video is private, geo-restricted, or a regional variant
+
+**Observed failure modes (June 2026 validation):**
+- `code: -1` — tikwm returns "URL parsing failed" for all tested public URLs, meaning tikwm's scraper is currently blocked by TikTok's bot-detection. The Groq Whisper transcription layer itself is functional; the bottleneck is the download proxy.
+- Graceful fallback fires correctly in all failure cases — users see a friendly "feature unavailable" message and are prompted to paste transcripts manually.
+
+**Guarantees this feature does provide:**
+- All failure paths return `{ success: false, code: "feature_unavailable" }` — the chat never crashes
+- The rest of the application is completely unaffected when this feature fails
+- No secrets or user data are sent to tikwm.com (only the public TikTok URL)
+
+**Not guaranteed:**
+- That any given TikTok URL will successfully transcribe
+- That the feature will be available at any particular time
+- Long-term maintenance of this integration
+
+**To disable this feature entirely:** remove the `tiktokRouter` import and `router.use(tiktokRouter)` line from `artifacts/api-server/src/routes/index.ts`. No other code is affected.
