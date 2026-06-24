@@ -3,7 +3,7 @@ import { getChats, saveChats, createDefaultChats } from '../utils/storage';
 import { streamChat } from '../services/api';
 import { analyzeImage } from '../services/imageApi';
 import { editImage, generateImage } from '../services/imageToolsApi';
-import { extractImagePrompt } from '../services/aiEngine';
+import { extractImagePrompt, detectMode } from '../services/aiEngine';
 import { fetchLatestSession } from '../services/chatHistoryApi';
 
 // ── UI error type system ──────────────────────────────────────────────────────
@@ -352,6 +352,81 @@ export function useChat(username, { onCreditExhausted } = {}) {
     // Prevents double-submit races that React state updates cannot catch.
     if (sendingRef.current) return;
     sendingRef.current = true;
+
+    // ── Image-generation intent intercept ──────────────────────────────────────
+    // Phrases like "generate an image of X", "create a picture of Y", "draw me Z"
+    // are detected by detectMode() and routed directly to /api/image/generate.
+    // The result is inserted as an image-edit-result bubble — reusing the same
+    // rendering path as the image-edit pipeline — instead of going through chat.
+    if (detectMode(text) === 'image_generation') {
+      const imagePrompt = extractImagePrompt(text);
+
+      const userMsg = {
+        id:        Date.now(),
+        role:      'user',
+        content:   text,
+        timestamp: new Date().toISOString(),
+      };
+      const currentMessages = chatData.chats[activeChatId]?.messages ?? [];
+      const updatedMessages  = [...currentMessages, userMsg];
+
+      const currentTitle = chatData.chats[activeChatId]?.title;
+      const autoTitle = currentTitle === 'New Chat'
+        ? text.slice(0, 36) + (text.length > 36 ? '...' : '')
+        : currentTitle;
+
+      const withUserMsg = {
+        ...chatData,
+        chats: {
+          ...chatData.chats,
+          [activeChatId]: {
+            ...chatData.chats[activeChatId],
+            title:    autoTitle,
+            messages: updatedMessages,
+          },
+        },
+      };
+      persist(withUserMsg);
+      setChatError(null);
+      setIsTyping(true);
+
+      try {
+        const result = await generateImage(imagePrompt);
+        const raw = result?.b64Image ?? result?.data?.b64Image ?? '';
+        const src = raw.startsWith('data:') ? raw : `data:image/jpeg;base64,${raw}`;
+        const aiMsgId = Date.now() + 1;
+        persist({
+          ...withUserMsg,
+          chats: {
+            ...withUserMsg.chats,
+            [activeChatId]: {
+              ...withUserMsg.chats[activeChatId],
+              messages: [
+                ...updatedMessages,
+                {
+                  id:        aiMsgId,
+                  role:      'assistant',
+                  type:      'image-edit-result',
+                  content:   src,
+                  timestamp: new Date().toISOString(),
+                },
+              ],
+            },
+          },
+        });
+      } catch (err) {
+        console.error('[IB AI] Image generation from chat failed:', err?.message);
+        if (err?.message === 'CREDITS_EXHAUSTED' || err?.code === 'CREDITS_EXHAUSTED') {
+          onCreditExhausted?.();
+        }
+        setChatError('Image generation failed. Please try again.');
+        setChatData(withUserMsg);
+      } finally {
+        setIsTyping(false);
+        sendingRef.current = false;
+      }
+      return;
+    }
 
     const streamController = new AbortController();
     streamAbortRef.current?.abort();

@@ -65,6 +65,9 @@ export async function cinematicGrade(imageDataUrl: string): Promise<string> {
   const { width, height } = img.bitmap;
   const data = img.bitmap.data as Buffer;
 
+  // Snapshot original pixel values before any transformation for post-process delta check
+  const originalData = Buffer.from(data);
+
   const total = width * height;
 
   // Step 1: Teal-orange grade
@@ -116,6 +119,33 @@ export async function cinematicGrade(imageDataUrl: string): Promise<string> {
       data[idx]     = clamp(data[idx]! * vig);
       data[idx + 1] = clamp(data[idx + 1]! * vig);
       data[idx + 2] = clamp(data[idx + 2]! * vig);
+    }
+  }
+
+  // ── Post-process pixel-delta check ───────────────────────────────────────
+  // Compute the average per-channel absolute difference between the original
+  // pixel data and the transformed pixel data (alpha channel excluded).
+  // A real cinematic grade (grain ±10, teal-orange LUT, S-curve, vignette)
+  // always produces an average delta well above 4.  If delta < 4 the
+  // transformation produced a no-op — reject with a tagged error so the
+  // route can return 422 instead of silently returning an unchanged image.
+  {
+    let totalDelta = 0;
+    let channelCount = 0;
+    for (let i = 0; i < data.length; i++) {
+      if (i % 4 === 3) continue; // skip alpha
+      totalDelta += Math.abs((data[i] as number) - (originalData[i] as number));
+      channelCount++;
+    }
+    const avgDelta = channelCount > 0 ? totalDelta / channelCount : 0;
+    logger.debug({ avgDelta: avgDelta.toFixed(2) }, "[imageEdit] cinematicGrade pixel delta");
+    if (avgDelta < 4) {
+      const err = new Error(
+        `CINEMATIC_NOOP: average per-channel pixel delta ${avgDelta.toFixed(2)} is below threshold 4 — ` +
+        "the image appears unchanged (may already be fully graded, near-solid color, or lack sufficient tonal range).",
+      );
+      (err as NodeJS.ErrnoException).code = "CINEMATIC_NOOP";
+      throw err;
     }
   }
 

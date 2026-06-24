@@ -298,6 +298,21 @@ router.post(
         });
       } catch (err) {
         logger.warn({ err, editType: parsed.data.editType }, "[imageEdit] direct edit failed");
+        // 422: cinematic grade produced no visible change — image is effectively unchanged
+        if (
+          err instanceof Error &&
+          (err.message.startsWith("CINEMATIC_NOOP") || (err as NodeJS.ErrnoException).code === "CINEMATIC_NOOP")
+        ) {
+          res.status(422).json({
+            success: false,
+            error:
+              "The cinematic enhancement produced no visible change on this image. " +
+              "This usually means the image is already fully graded, is a near-solid color, " +
+              "or lacks sufficient tonal range for the teal-orange grade to take effect. " +
+              "Try a different image.",
+          });
+          return;
+        }
         const msg = toRouteError(err, "edit");
         res.status(503).json(buildErrorResponse("image", msg));
       }
