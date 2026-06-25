@@ -5,6 +5,7 @@ import { analyzeImage } from '../services/imageApi';
 import { editImage, generateImage } from '../services/imageToolsApi';
 import { extractImagePrompt, detectMode } from '../services/aiEngine';
 import { fetchLatestSession } from '../services/chatHistoryApi';
+import { applyHookCorrections } from '../utils/hookValidator';
 
 // ── UI error type system ──────────────────────────────────────────────────────
 //
@@ -546,7 +547,11 @@ export function useChat(username, { onCreditExhausted } = {}) {
       userStopRef.current = false;
       if (shouldCommit) {
         if (!wasError && finalContent) {
-          // Success or user-stop with content: persist the AI message to history.
+          // Success or user-stop with content: apply hook corrections, then persist.
+          const { content: cleanContent, corrections } = applyHookCorrections(finalContent);
+          if (corrections.length > 0) {
+            console.debug('[IB AI] hookValidator corrections (sendMessage):', corrections);
+          }
           try {
             persist({
               ...withUserMsg,
@@ -557,7 +562,7 @@ export function useChat(username, { onCreditExhausted } = {}) {
                   sessionId: resolvedSessionId,
                   messages: [
                     ...updatedMessages,
-                    { id: aiMsgId, role: 'assistant', content: finalContent, timestamp },
+                    { id: aiMsgId, role: 'assistant', content: cleanContent, timestamp },
                   ],
                 },
               },
@@ -684,6 +689,10 @@ export function useChat(username, { onCreditExhausted } = {}) {
       userStopRef.current = false;
       if (shouldCommit) {
         if (!wasError && finalContent) {
+          const { content: cleanContent, corrections } = applyHookCorrections(finalContent);
+          if (corrections.length > 0) {
+            console.debug('[IB AI] hookValidator corrections (regenerateFrom):', corrections);
+          }
           try {
             persist({
               ...withTrimmed,
@@ -694,7 +703,7 @@ export function useChat(username, { onCreditExhausted } = {}) {
                   sessionId: resolvedSessionId,
                   messages: [
                     ...trimmedMessages,
-                    { id: aiMsgId, role: 'assistant', content: finalContent, timestamp },
+                    { id: aiMsgId, role: 'assistant', content: cleanContent, timestamp },
                   ],
                 },
               },
@@ -797,6 +806,10 @@ export function useChat(username, { onCreditExhausted } = {}) {
       userStopRef.current = false;
       if (shouldCommit) {
         if (!wasError && finalContent) {
+          const { content: cleanContent, corrections } = applyHookCorrections(finalContent);
+          if (corrections.length > 0) {
+            console.debug('[IB AI] hookValidator corrections (retrySend):', corrections);
+          }
           try {
             persist({
               ...chatData,
@@ -807,7 +820,7 @@ export function useChat(username, { onCreditExhausted } = {}) {
                   sessionId: resolvedSessionId,
                   messages: [
                     ...currentMessages,
-                    { id: aiMsgId, role: 'assistant', content: finalContent, timestamp },
+                    { id: aiMsgId, role: 'assistant', content: cleanContent, timestamp },
                   ],
                 },
               },
