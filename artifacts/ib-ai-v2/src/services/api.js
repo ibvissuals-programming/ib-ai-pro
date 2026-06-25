@@ -3,35 +3,6 @@ import { getAuthHeaders } from '../auth/authService';
 const BASE = (import.meta.env.BASE_URL ?? '').replace(/\/$/, '');
 const CHAT_URL = `${BASE}/api/chat`;
 
-/**
- * Transcribe a TikTok video via the backend /api/tiktok/transcribe endpoint.
- *
- * ⚠️ BEST-EFFORT — depends on unofficial tikwm.com download proxy.
- * Throws an error with { code: 'feature_unavailable' } when the proxy is down.
- *
- * @param {string} url  Full TikTok URL
- * @returns {Promise<{ success: true, transcript: string, meta: { title: string, author: string, url: string } }>}
- */
-export async function transcribeTikTok(url) {
-  const response = await fetch(`${BASE}/api/tiktok/transcribe`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-    body:    JSON.stringify({ url }),
-  });
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok || !data.success) {
-    const err = Object.assign(
-      new Error(data.error ?? 'TikTok transcription unavailable'),
-      { code: data.code ?? 'feature_unavailable' },
-    );
-    throw err;
-  }
-
-  return data;
-}
-
 // Total timeout covers both the initial TCP/TLS connection AND the full SSE
 // stream read. Keeping one timer for the whole lifecycle prevents a stalled
 // Gemini mid-stream from hanging the reader indefinitely.

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Copy, Check, Cpu, User, Square, CheckSquare, Image as ImageIcon, Download, Wand2, Pencil, X, Music, ExternalLink } from 'lucide-react';
+import { Copy, Check, Cpu, User, Square, CheckSquare, Image as ImageIcon, Download, Wand2, Pencil, X } from 'lucide-react';
 import { ImageAnalysisCard } from './ImageAnalysisCard';
 
 // ─── Reliable clipboard helper ────────────────────────────────────────────────
@@ -286,54 +286,6 @@ function MessageContent({ message }) {
     return <EditedImageCard src={message.content} />;
   }
 
-  // Assistant: TikTok transcript card from /api/tiktok/transcribe
-  // ⚠️ Best-effort feature — content may be unavailable after tikwm.com changes.
-  if (message.type === 'tiktok-transcript') {
-    const { title, author, url } = message.tiktokMeta ?? {};
-    const transcript = message.content ?? '';
-    const displayTitle  = title  || 'TikTok video';
-    const displayAuthor = author || null;
-
-    return (
-      <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden text-sm w-full max-w-[520px]">
-        {/* Header */}
-        <div className="flex items-center gap-2 px-3 py-2 bg-white/5 border-b border-white/10">
-          <Music size={13} className="text-pink-400 shrink-0" />
-          <span className="font-medium text-white/90 truncate flex-1">{displayTitle}</span>
-          {displayAuthor && (
-            <span className="text-[11px] text-white/50 shrink-0">@{displayAuthor}</span>
-          )}
-          {url && (
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 text-white/40 hover:text-white/70 transition-colors"
-              title="Open TikTok"
-            >
-              <ExternalLink size={12} />
-            </a>
-          )}
-        </div>
-        {/* Transcript body */}
-        <div className="px-3 py-2.5 max-h-52 overflow-y-auto">
-          <p className="text-[11px] text-white/40 mb-1.5 uppercase tracking-wide font-medium">
-            Transcript
-          </p>
-          <p className="text-white/80 leading-relaxed whitespace-pre-wrap text-[13px]">
-            {transcript || '(empty transcript)'}
-          </p>
-        </div>
-        {/* Footer badge */}
-        <div className="px-3 py-1.5 border-t border-white/10">
-          <span className="text-[10px] text-white/30 italic">
-            ⚠ Best-effort — may break without notice
-          </span>
-        </div>
-      </div>
-    );
-  }
-
   // Assistant: structured analysis JSON from /api/analyze-image
   if (message.type === 'image-analysis') {
     let data = null;
@@ -376,8 +328,6 @@ export function MessageBubble({
   const isImageMsg         = message.type === 'image';
   const isEditRequest      = message.type === 'image-edit-request';
   const isEditResult       = message.type === 'image-edit-result';
-  const isTikTokTranscript = message.type === 'tiktok-transcript';
-
   // Edit is available only for plain user text messages, not while streaming
   const canEdit = isUser && !selectionMode && !isStreaming && !!onEditMessage
     && !isImageMsg && !isEditRequest;
@@ -408,7 +358,7 @@ export function MessageBubble({
   }, [handleEditConfirm, handleEditCancel]);
 
   // Full-width for analysis cards and edit result images
-  const bubbleMaxWidth = (isAnalysis || isEditResult || isTikTokTranscript) ? 'max-w-full w-full' : 'max-w-[78%]';
+  const bubbleMaxWidth = (isAnalysis || isEditResult) ? 'max-w-full w-full' : 'max-w-[78%]';
 
   // ── Reliable copy handler ──────────────────────────────────────────────────
   const handleCopy = useCallback(async (e) => {

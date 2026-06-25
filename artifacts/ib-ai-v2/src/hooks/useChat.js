@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getChats, saveChats, createDefaultChats } from '../utils/storage';
-import { streamChat, transcribeTikTok } from '../services/api';
+import { streamChat } from '../services/api';
 import { analyzeImage } from '../services/imageApi';
 import { editImage, generateImage } from '../services/imageToolsApi';
-import { extractImagePrompt, detectMode, detectTikTokUrl } from '../services/aiEngine';
+import { extractImagePrompt, detectMode } from '../services/aiEngine';
 import { fetchLatestSession } from '../services/chatHistoryApi';
 
 // ── UI error type system ──────────────────────────────────────────────────────
@@ -352,130 +352,6 @@ export function useChat(username, { onCreditExhausted } = {}) {
     // Prevents double-submit races that React state updates cannot catch.
     if (sendingRef.current) return;
     sendingRef.current = true;
-
-    // ── TikTok URL intercept ────────────────────────────────────────────────────
-    // ⚠️ BEST-EFFORT feature — depends on unofficial tikwm.com download proxy.
-    //    This block MUST never throw or affect any other feature.
-    //    All error paths show a graceful "feature unavailable" message.
-    //
-    // Flow: detect URL → show user msg → transcribe → show transcript card
-    //       → auto-stream AI analysis of the transcript.
-    const tiktokUrl = detectTikTokUrl(text);
-    if (tiktokUrl) {
-      const userMsg = {
-        id:        Date.now(),
-        role:      'user',
-        content:   text,
-        timestamp: new Date().toISOString(),
-      };
-      const currentMessages = chatData.chats[activeChatId]?.messages ?? [];
-      const updatedMessages  = [...currentMessages, userMsg];
-
-      const currentTitle = chatData.chats[activeChatId]?.title;
-      const autoTitle    = currentTitle === 'New Chat'
-        ? text.slice(0, 36) + (text.length > 36 ? '...' : '') : currentTitle;
-
-      const buildTTState = (msgs) => ({
-        ...chatData,
-        chats: {
-          ...chatData.chats,
-          [activeChatId]: {
-            ...chatData.chats[activeChatId],
-            title: autoTitle,
-            messages: msgs,
-          },
-        },
-      });
-
-      persist(buildTTState(updatedMessages));
-      setChatError(null);
-      setIsTyping(true);
-
-      const transcriptMsgId = Date.now() + 1;
-      const analysisMsgId   = Date.now() + 2;
-      const timestamp       = new Date().toISOString();
-      let finalMessages     = updatedMessages;
-
-      try {
-        // Phase 1: fetch transcript
-        const result = await transcribeTikTok(tiktokUrl);
-        const { transcript, meta } = result;
-
-        // Show transcript card immediately
-        const transcriptMsg = {
-          id:         transcriptMsgId,
-          role:       'assistant',
-          type:       'tiktok-transcript',
-          content:    transcript,
-          tiktokMeta: { title: meta.title, author: meta.author, url: tiktokUrl },
-          timestamp,
-        };
-        finalMessages = [...updatedMessages, transcriptMsg];
-        persist(buildTTState(finalMessages));
-
-        // Phase 2: stream AI analysis using the transcript as context
-        const analysisPlaceholder = {
-          id:        analysisMsgId,
-          role:      'assistant',
-          content:   '',
-          timestamp: new Date().toISOString(),
-        };
-        finalMessages = [...finalMessages, analysisPlaceholder];
-        persist(buildTTState(finalMessages));
-
-        const analysisPrompt =
-          `TikTok video "${meta.title || 'untitled'}"${meta.author ? ` by @${meta.author}` : ''} — transcript:\n\n${transcript}\n\n` +
-          `Analyze this for: 1) the hook in the first 3 seconds, 2) the core message or value proposition, ` +
-          `3) content strategy elements that make it work, and 4) 3 actionable ideas to adapt for @i.b_visuals content.`;
-
-        const recentCtx = currentMessages
-          .slice(-6)
-          .filter((m) => m.type !== 'tiktok-transcript' && m.type !== 'image-edit-result')
-          .map((m) => ({ role: m.role, content: m.content ?? '' }));
-
-        const streamMessages = [...recentCtx, { role: 'user', content: analysisPrompt }];
-
-        const streamController = new AbortController();
-        streamAbortRef.current?.abort();
-        streamAbortRef.current = streamController;
-
-        let analysisContent = '';
-        for await (const chunk of streamChat(streamMessages, {
-          signal: streamController.signal,
-          onSessionId: () => {},
-        })) {
-          analysisContent += chunk;
-          finalMessages = finalMessages.map((m) =>
-            m.id === analysisMsgId ? { ...m, content: analysisContent } : m,
-          );
-          persist(buildTTState(finalMessages));
-        }
-
-        // Remove placeholder if analysis came back empty
-        if (!analysisContent) {
-          finalMessages = finalMessages.filter((m) => m.id !== analysisMsgId);
-        }
-      } catch (err) {
-        console.error('[IB AI] TikTok transcription failed:', err?.message);
-        if (err?.code === 'CREDITS_EXHAUSTED') onCreditExhausted?.();
-
-        const isUnavailable = !err?.code || err.code === 'feature_unavailable';
-        const errContent = isUnavailable
-          ? '⚠️ **TikTok transcription is currently unavailable.** This is a best-effort feature that depends on an unofficial download proxy and may stop working without notice.\n\nYou can paste the video transcript manually and I\'ll analyze it for hooks, strategy, and content ideas.'
-          : `TikTok transcription failed: ${err?.message ?? 'please try again.'}`;
-
-        finalMessages = [
-          ...updatedMessages,
-          { id: transcriptMsgId, role: 'assistant', content: errContent, timestamp },
-        ];
-      } finally {
-        setIsTyping(false);
-        sendingRef.current = false;
-      }
-
-      persist(buildTTState(finalMessages));
-      return;
-    }
 
     // ── Image-generation intent intercept ──────────────────────────────────────
     // Phrases like "generate an image of X", "create a picture of Y", "draw me Z"
