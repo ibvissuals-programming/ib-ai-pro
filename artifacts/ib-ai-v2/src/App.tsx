@@ -9,6 +9,7 @@ import Landing from "@/pages/Landing";
 import ImageTools from "@/pages/ImageTools";
 import VoiceStudio from "@/pages/VoiceStudio";
 import VideoStudio from "@/pages/VideoStudio";
+import Library from "@/pages/Library";
 import CeoDashboard from "@/pages/CeoDashboard";
 import NotFound from "@/pages/not-found";
 import { ProtectedRoute } from "@/auth/ProtectedRoute";
@@ -32,6 +33,11 @@ function Router() {
       <Route path="/image-tools">
         <ProtectedRoute>
           <ImageTools />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/library">
+        <ProtectedRoute>
+          <Library />
         </ProtectedRoute>
       </Route>
       <Route path="/voice">

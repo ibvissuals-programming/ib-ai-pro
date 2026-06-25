@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Copy, Check, Cpu, User, Square, CheckSquare, Image as ImageIcon, Download, Wand2, Pencil, X } from 'lucide-react';
+import { Copy, Check, Cpu, User, Square, CheckSquare, Image as ImageIcon, Download, Wand2, Pencil, X, Bookmark, BookmarkCheck } from 'lucide-react';
 import { ImageAnalysisCard } from './ImageAnalysisCard';
+import { saveLibraryItem } from '../services/libraryApi';
 
 // ─── Reliable clipboard helper ────────────────────────────────────────────────
 // Note: isSecureContext guard intentionally omitted — the Replit preview runs
@@ -316,6 +317,7 @@ export function MessageBubble({
   isStreaming = false,
 }) {
   const [copied, setCopied] = useState(false);
+  const [saved,  setSaved]  = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editText, setEditText] = useState('');
   const editRef = useRef(null);
@@ -359,6 +361,18 @@ export function MessageBubble({
 
   // Full-width for analysis cards and edit result images
   const bubbleMaxWidth = (isAnalysis || isEditResult) ? 'max-w-full w-full' : 'max-w-[78%]';
+
+  // ── Save to library handler ────────────────────────────────────────────────
+  const handleSave = useCallback(async (e) => {
+    e.stopPropagation();
+    try {
+      const type = isEditResult ? 'image' : 'text';
+      await saveLibraryItem({ type, content: message.content ?? '', metadata: {} });
+      setSaved(true);
+    } catch {
+      // silently ignore — save failures are non-critical
+    }
+  }, [isEditResult, message.content]);
 
   // ── Reliable copy handler ──────────────────────────────────────────────────
   const handleCopy = useCallback(async (e) => {
@@ -519,7 +533,7 @@ export function MessageBubble({
           )}
         </div>
 
-        {/* Per-message action bar: copy + edit */}
+        {/* Per-message action bar: copy + edit + save */}
         {!selectionMode && !isTyping && !editMode && !isImageMsg && !isEditRequest && !isEditResult && (
           <div className="flex items-center gap-0.5 self-end">
             {canEdit && (
@@ -551,6 +565,50 @@ export function MessageBubble({
             >
               {copied ? <Check size={11} /> : <Copy size={11} />}
               <span>{copied ? 'Copied!' : 'Copy'}</span>
+            </button>
+            {!isUser && !isAnalysis && (
+              <button
+                onClick={handleSave}
+                data-testid={`button-save-${message.id}`}
+                className={`
+                  flex items-center gap-1 text-xs px-1.5 py-0.5 rounded transition-all
+                  opacity-40 hover:opacity-100
+                  [@media(pointer:fine)]:opacity-0 [@media(pointer:fine)]:group-hover:opacity-100
+                  ${saved
+                    ? 'text-primary hover:text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                  }
+                `}
+                aria-label="Save to library"
+                disabled={saved}
+              >
+                {saved ? <BookmarkCheck size={11} /> : <Bookmark size={11} />}
+                <span>{saved ? 'Saved!' : 'Save'}</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Save button for generated / edited images */}
+        {!selectionMode && !isTyping && !editMode && isEditResult && (
+          <div className="flex items-center gap-0.5 self-end mt-1">
+            <button
+              onClick={handleSave}
+              data-testid={`button-save-img-${message.id}`}
+              className={`
+                flex items-center gap-1 text-xs px-1.5 py-0.5 rounded transition-all
+                opacity-40 hover:opacity-100
+                [@media(pointer:fine)]:opacity-0 [@media(pointer:fine)]:group-hover:opacity-100
+                ${saved
+                  ? 'text-primary hover:text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+                }
+              `}
+              aria-label="Save image to library"
+              disabled={saved}
+            >
+              {saved ? <BookmarkCheck size={11} /> : <Bookmark size={11} />}
+              <span>{saved ? 'Saved to Library!' : 'Save to Library'}</span>
             </button>
           </div>
         )}

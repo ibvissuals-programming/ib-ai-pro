@@ -29,6 +29,7 @@ import multimodalStatsRouter from "./multimodalStats";
 import creatorSessionsRouter from "./creatorSessions";
 import sessionsRouter        from "./sessions";
 import recoveryKeyRouter     from "./recoveryKey";
+import libraryRouter        from "./library";
 import { trackActivity }  from "../middleware/trackActivity";
 
 const router: IRouter = Router();
@@ -58,5 +59,6 @@ router.use(multimodalStatsRouter);
 router.use(creatorSessionsRouter);
 router.use(sessionsRouter);
 router.use(recoveryKeyRouter);
+router.use(libraryRouter);
 
 export default router;

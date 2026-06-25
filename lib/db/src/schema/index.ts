@@ -6,3 +6,4 @@ export * from "./chatMessages";
 export * from "./userMemory";
 export * from "./imageJobs";
 export * from "./usageAnalytics";
+export * from "./savedItems";
