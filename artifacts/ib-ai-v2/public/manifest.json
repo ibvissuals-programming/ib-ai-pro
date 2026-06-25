@@ -3,6 +3,7 @@
   "short_name": "IB AI",
   "description": "AI-powered creative studio — image generation, cinematic enhancement, and intelligent chat.",
   "start_url": "/",
+  "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0e1117",
   "theme_color": "#0e1117",
