@@ -20,7 +20,7 @@ import {
   ChevronRight, ChevronDown, Cpu, Shield,
   LayoutDashboard, UsersRound, Zap,
   MessageSquare, ChevronUp, User, Radio,
-  CheckCircle2, Server,
+  CheckCircle2, Server, Sparkles,
 } from 'lucide-react';
 import { logout, getAuthHeaders } from '../auth/authService';
 import { useAdminPolling } from '../hooks/useAdminPolling';
@@ -708,6 +708,15 @@ function DashboardHeader({ user }) {
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
+          <Link
+            href="/showcase"
+            className="flex items-center gap-1.5 text-xs text-primary/80 hover:text-primary px-2.5 py-1.5 rounded-lg border border-primary/20 hover:border-primary/40 bg-primary/5 hover:bg-primary/10 transition-colors font-medium"
+            title="Launch Showcase Mode"
+          >
+            <Sparkles size={12} />
+            <span className="hidden sm:block">Showcase</span>
+          </Link>
+          <div className="w-px h-4 bg-border/40 mx-0.5" />
           <button
             onClick={toggleTheme}
             title={theme === 'dark' ? 'Light mode' : 'Dark mode'}

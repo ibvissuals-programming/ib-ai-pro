@@ -54,7 +54,11 @@ function Router() {
           <CeoDashboard />
         </CeoRoute>
       </Route>
-      <Route path="/showcase" component={ShowcasePage} />
+      <Route path="/showcase">
+        <CeoRoute>
+          <ShowcasePage />
+        </CeoRoute>
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );
