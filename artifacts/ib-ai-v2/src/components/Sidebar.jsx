@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { Link, useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Trash2, MessageSquare, Check, X, PenLine, Search, ImageIcon, Bookmark } from 'lucide-react';
+import { Plus, Trash2, MessageSquare, Check, X, PenLine, Search, ImageIcon, Bookmark, Sparkles } from 'lucide-react';
 import { IbLogo } from './IbLogo';
 import { CreditMeter } from './CreditMeter';
 
@@ -268,6 +268,16 @@ export function Sidebar({ chats, activeChatId, onSwitch, onNew, onDelete, onRena
             <span className="font-medium">My Library</span>
           </a>
         </Link>
+        {user?.role === 'ceo' && (
+          <Link to="/showcase">
+            <a className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all border border-transparent hover:border-border/40 group">
+              <div className="w-5 h-5 rounded-md bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
+                <Sparkles size={11} className="text-primary/70 group-hover:text-primary transition-colors" />
+              </div>
+              <span className="font-medium">Showcase Mode</span>
+            </a>
+          </Link>
+        )}
       </div>
 
       {/* Credit Meter — above user footer */}
