@@ -31,6 +31,7 @@ export default function ShowcasePage() {
   const [dir, setDir]           = useState(1);     // 1=forward, -1=backward
   const [paused, setPaused]     = useState(false);
   const [progress, setProgress] = useState(0);
+  const [navVisible, setNavVisible] = useState(true);
 
   const timerRef    = useRef(null);
   const startRef    = useRef(null);
@@ -95,7 +96,8 @@ export default function ShowcasePage() {
       if (e.key === 'ArrowLeft'  || e.key === 'h') goPrev();
       if (e.key === ' ')                            { e.preventDefault(); setPaused(p => !p); }
       if (e.key === 'r')                            restart();
-      if (e.key === 'Escape')                       window.location.href = '/';
+      if (e.key === 'Escape')                       window.location.href = '/ceo/dashboard';
+      if (e.key === 'H')                            setNavVisible(v => !v);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -156,6 +158,7 @@ export default function ShowcasePage() {
         total={total}
         progress={progress}
         paused={paused}
+        visible={navVisible}
         onPrev={goPrev}
         onNext={goNext}
         onJump={(i) => goTo(i)}

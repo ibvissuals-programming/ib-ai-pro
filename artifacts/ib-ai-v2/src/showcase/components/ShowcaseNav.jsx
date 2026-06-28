@@ -9,12 +9,15 @@ export function ShowcaseNav({
   total,
   progress,
   paused,
+  visible = true,
   onPrev,
   onNext,
   onJump,
   onTogglePause,
   onRestart,
 }) {
+  if (!visible) return null;
+
   return (
     <>
       {/* Top progress bar */}
