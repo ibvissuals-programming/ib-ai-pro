@@ -16,6 +16,7 @@ import { ProtectedRoute } from "@/auth/ProtectedRoute";
 import { CeoRoute } from "@/auth/CeoRoute";
 import { isAuthenticated } from "@/auth/authService";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import ShowcasePage from "@/showcase/ShowcasePage";
 
 function Router() {
   return (
@@ -53,6 +54,7 @@ function Router() {
           <CeoDashboard />
         </CeoRoute>
       </Route>
+      <Route path="/showcase" component={ShowcasePage} />
       <Route component={NotFound} />
     </Switch>
   );
