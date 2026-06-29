@@ -74,7 +74,7 @@ const item = {
 
 export function SceneFeatures() {
   return (
-    <div className="flex flex-col min-h-screen overflow-auto py-14 px-6">
+    <div className="flex flex-col min-h-screen overflow-auto pt-14 px-6 pb-[110px]">
 
       {/* Header */}
       <motion.div

@@ -146,7 +146,7 @@ export default function ShowcasePage() {
           animate="center"
           exit="exit"
           transition={transition}
-          className="absolute inset-0 overflow-auto"
+          className="absolute inset-0 overflow-auto pb-[110px]"
         >
           <Component />
         </motion.div>

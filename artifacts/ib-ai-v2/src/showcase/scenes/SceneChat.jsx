@@ -207,7 +207,7 @@ export function SceneChat() {
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.4, delay: 0.2 }}
-          className="px-4 pb-4 shrink-0"
+          className="px-4 pb-[110px] shrink-0"
         >
           <div className="glass-input flex items-center gap-2 px-4 py-2.5">
             <span className="flex-1 text-sm text-muted-foreground/40">Ask anything…</span>
