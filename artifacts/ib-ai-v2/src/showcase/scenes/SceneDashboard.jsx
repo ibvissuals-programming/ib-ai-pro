@@ -71,7 +71,7 @@ export function SceneDashboard() {
       </motion.header>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto pt-4 px-4 pb-[110px]">
+      <div className="flex-1 overflow-auto p-4">
         <motion.div variants={container} initial="hidden" animate="show" className="flex flex-col gap-4">
 
           {/* Metric cards */}

@@ -40,37 +40,40 @@ export function ShowcaseNav({
         </Link>
       </div>
 
-      {/* Bottom controls */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-3">
-        {/* Scene dots */}
-        <div className="flex items-center gap-1.5">
-          {Array.from({ length: total }).map((_, i) => (
-            <button
-              key={i}
-              onClick={() => onJump(i)}
-              title={SCENE_LABELS[i] ?? `Scene ${i + 1}`}
-              className="transition-all duration-300 rounded-full focus:outline-none"
-              style={{
-                width: i === current ? 20 : 6,
-                height: 6,
-                background: i === current
-                  ? 'hsl(var(--primary))'
-                  : i < current
-                  ? 'rgba(255,255,255,0.35)'
-                  : 'rgba(255,255,255,0.12)',
-              }}
-            />
-          ))}
-        </div>
+      {/* Bottom-right compact pill */}
+      <div className="fixed bottom-[40px] right-[30px] z-50">
+        <div className="flex items-center gap-1 bg-black/50 border border-white/10 backdrop-blur-md rounded-full px-2 py-1.5">
 
-        {/* Controls */}
-        <div className="flex items-center gap-1 bg-black/40 border border-white/8 backdrop-blur-md rounded-full px-2 py-1.5">
+          {/* Scene dots */}
+          <div className="flex items-center gap-1 pl-1 pr-0.5">
+            {Array.from({ length: total }).map((_, i) => (
+              <button
+                key={i}
+                onClick={() => onJump(i)}
+                title={SCENE_LABELS[i] ?? `Scene ${i + 1}`}
+                className="transition-all duration-300 rounded-full focus:outline-none"
+                style={{
+                  width: i === current ? 14 : 5,
+                  height: 5,
+                  background: i === current
+                    ? 'hsl(var(--primary))'
+                    : i < current
+                    ? 'rgba(255,255,255,0.35)'
+                    : 'rgba(255,255,255,0.12)',
+                }}
+              />
+            ))}
+          </div>
+
+          <div className="w-px h-3.5 bg-white/10 mx-0.5" />
+
+          {/* Controls */}
           <button
             onClick={onRestart}
             className="p-1.5 rounded-full text-white/40 hover:text-white/80 hover:bg-white/8 transition-colors"
             title="Restart"
           >
-            <RotateCcw size={12} />
+            <RotateCcw size={11} />
           </button>
 
           <button
@@ -79,14 +82,14 @@ export function ShowcaseNav({
             className="p-1.5 rounded-full text-white/60 hover:text-white hover:bg-white/8 transition-colors disabled:opacity-25"
             title="Previous"
           >
-            <ChevronLeft size={14} />
+            <ChevronLeft size={13} />
           </button>
 
           <button
             onClick={onTogglePause}
-            className="px-3 py-1 rounded-full bg-primary/90 hover:bg-primary text-white text-[11px] font-medium transition-colors flex items-center gap-1.5"
+            className="px-2.5 py-1 rounded-full bg-primary/90 hover:bg-primary text-white text-[10px] font-medium transition-colors flex items-center gap-1"
           >
-            {paused ? <Play size={10} /> : <Pause size={10} />}
+            {paused ? <Play size={9} /> : <Pause size={9} />}
             {paused ? 'Play' : 'Pause'}
           </button>
 
@@ -96,26 +99,15 @@ export function ShowcaseNav({
             className="p-1.5 rounded-full text-white/60 hover:text-white hover:bg-white/8 transition-colors disabled:opacity-25"
             title="Next"
           >
-            <ChevronRight size={14} />
+            <ChevronRight size={13} />
           </button>
 
-          <div className="w-px h-4 bg-white/10 mx-0.5" />
+          <div className="w-px h-3.5 bg-white/10 mx-0.5" />
 
           <span className="text-[10px] text-white/30 pr-1 tabular-nums">
             {current + 1}/{total}
           </span>
         </div>
-
-        {/* Scene label */}
-        <motion.span
-          key={current}
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0 }}
-          className="text-[10px] text-white/30 tracking-widest uppercase"
-        >
-          {SCENE_LABELS[current] ?? `Scene ${current + 1}`}
-        </motion.span>
       </div>
     </>
   );

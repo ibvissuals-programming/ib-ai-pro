@@ -78,7 +78,7 @@ export function SceneImageTools() {
         </motion.aside>
 
         {/* Main workspace */}
-        <div className="flex-1 flex flex-col gap-5 pt-5 px-5 pb-[110px] overflow-hidden">
+        <div className="flex-1 flex flex-col gap-5 p-5 overflow-hidden">
 
           {/* Prompt input */}
           <motion.div
