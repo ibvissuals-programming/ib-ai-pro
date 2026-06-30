@@ -446,7 +446,7 @@ export function AiRoutingPanel({ data, loading, error, lastOk }) {
             <div className="relative shrink-0">
               <span className={`inline-block w-2.5 h-2.5 rounded-full ${styles.dot}`} />
               {state !== 'muted' && state !== 'loading' && (
-                <span className={`absolute inset-0 rounded-full ${styles.pulse} opacity-40 animate-ping`} />
+                <span className={`absolute inset-0 rounded-full ${styles.pulse} opacity-40 animate-pulse`} />
               )}
             </div>
             <div className="min-w-0">
